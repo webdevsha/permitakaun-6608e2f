@@ -10,6 +10,7 @@ import { AccountingModule } from "@/components/accounting-module"
 import { RentalModule } from "@/components/rental-module"
 import { SettingsModule } from "@/components/settings-module"
 import { LocationModule } from "@/components/location-module"
+import { OrganizerModule } from "@/components/organizer-module"
 import useSWR from "swr"
 import { useAuth } from "@/components/providers/auth-provider"
 import { createClient } from "@/utils/supabase/client"
@@ -108,12 +109,12 @@ export default function DashboardPage() {
   const [activeModule, setActiveModule] = useState<string | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   
-  const { data: dashData, isLoading: dataLoading } = useSWR(role === 'admin' || role === 'staff' ? 'dashboard_data' : null, fetchDashboardData)
+  const { data: dashData, isLoading: dataLoading } = useSWR(role === 'admin' || role === 'staff' || role === 'organizer' ? 'dashboard_data' : null, fetchDashboardData)
 
   useEffect(() => {
     if (authLoading) return
     
-    if (role === 'admin' || role === 'staff') {
+    if (role === 'admin' || role === 'staff' || role === 'organizer') {
       setActiveModule("overview")
     } else {
       setActiveModule("rentals")
@@ -128,7 +129,7 @@ export default function DashboardPage() {
     )
   }
 
-  const displayRole = role === "admin" ? "Admin" : role === "staff" ? "Staff" : "Peniaga"
+  const displayRole = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Peniaga"
 
   const transactions = dashData?.transactions || []
   const tenants = dashData?.tenants || []
@@ -293,6 +294,7 @@ export default function DashboardPage() {
             {activeModule === "locations" && <LocationModule />}
             {activeModule === "rentals" && <RentalModule />}
             {activeModule === "settings" && <SettingsModule />}
+            {activeModule === "organizers" && <OrganizerModule />}
             
             <Footer />
           </div>
