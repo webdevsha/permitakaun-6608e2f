@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { Shield, User, Users, CheckCircle, AlertTriangle, Building } from "lucide-react"
+import { Shield, User, Users, CheckCircle, AlertTriangle, Building, Wrench } from "lucide-react"
 
 export default function SetupPage() {
   const [loading, setLoading] = useState(false)
@@ -21,6 +21,43 @@ export default function SetupPage() {
     { email: "siti@permit.com", pass: "pass1234", role: "tenant", name: "Siti Aminah", isTenant: true, business: "Siti Hijab Collection", phone: "0123456789" },
     { email: "ahmad@permit.com", pass: "pass1234", role: "tenant", name: "Ahmad Albab", isTenant: true, business: "Ahmad Burger", phone: "0198765432" },
   ]
+
+  const forceFixOrganizer = async () => {
+    setLoading(true)
+    addLog("🔧 Attempting to force fix Organizer Role...")
+    
+    try {
+      // 1. Try RPC method first (Best method)
+      const { error: rpcError } = await supabase.rpc('set_user_role', {
+        target_email: 'organizer@permit.com',
+        new_role: 'organizer'
+      })
+      
+      if (!rpcError) {
+        addLog("✅ RPC Update Success!")
+      } else {
+        addLog(`⚠️ RPC Failed: ${rpcError.message}. Trying direct update...`)
+        
+        // 2. Try Direct Update (Only works if RLS allows or user is self)
+        // We need the user ID first
+        const { data: userData } = await supabase.from('profiles').select('id').eq('email', 'organizer@permit.com').single()
+        
+        if (userData) {
+           const { error: updateError } = await supabase.from('profiles').update({ role: 'organizer' }).eq('id', userData.id)
+           if (updateError) addLog(`❌ Direct Update Failed: ${updateError.message}`)
+           else addLog("✅ Direct Update Success!")
+        } else {
+           addLog("❌ Profile not found")
+        }
+      }
+      
+      toast.success("Fix attempted. Please check logs.")
+    } catch (e: any) {
+      addLog(`❌ Error: ${e.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const runSetup = async () => {
     setLoading(true)
@@ -61,11 +98,18 @@ export default function SetupPage() {
 
              // 2. Set Role
              if (u.role !== 'tenant') {
-                 await supabase.rpc('set_user_role', {
+                 const { error: rpcError } = await supabase.rpc('set_user_role', {
                    target_email: u.email,
                    new_role: u.role
                  })
-                 addLog(`   Updated role to ${u.role}`)
+                 
+                 if (rpcError) {
+                    addLog(`   ⚠️ Failed to set role via RPC: ${rpcError.message}`)
+                    // Fallback: Try direct update (likely fail due to RLS but worth a try in dev)
+                    await supabase.from('profiles').update({ role: u.role }).eq('id', userId)
+                 } else {
+                    addLog(`   Updated role to ${u.role}`)
+                 }
              }
 
              // 3. Special: Create Organizer Record
@@ -152,28 +196,6 @@ export default function SetupPage() {
                      if (tenantError) addLog(`   ❌ Tenant Error: ${tenantError.message}`)
                      else addLog(`   ✨ Created Tenant record`)
                  }
-                 
-                 // Create Dummy Transaction (Income)
-                 if (u.email === 'siti@permit.com') {
-                     const { data: tData } = await supabase.from('tenants').select('id').eq('email', u.email).single()
-                     if (tData) {
-                         const { count } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('tenant_id', tData.id)
-                         if (count === 0) {
-                             const date45DaysAgo = new Date()
-                             date45DaysAgo.setDate(date45DaysAgo.getDate() - 45)
-                             await supabase.from('transactions').insert({
-                                 tenant_id: tData.id,
-                                 amount: 50.00,
-                                 type: 'income',
-                                 category: 'Servis',
-                                 status: 'approved',
-                                 date: date45DaysAgo.toISOString().split('T')[0],
-                                 description: 'Bayaran Sewa Bulan Lepas'
-                             })
-                             addLog(`   📅 Created OLD transaction`)
-                         }
-                     }
-                 }
              }
         }
       }
@@ -211,8 +233,7 @@ export default function SetupPage() {
                <p className="font-bold mb-1">Instructions:</p>
                <ol className="list-decimal pl-4 space-y-1">
                  <li>Ensure you have disabled "Confirm Email" in Supabase Auth settings.</li>
-                 <li>Click the button below to generate users, organizers, and locations.</li>
-                 <li>If users already exist, this script attempts to link them correctly.</li>
+                 <li>If Organizer Role is incorrect, run the SQL script in <code>supabase/fix_roles.sql</code></li>
                </ol>
              </div>
           </div>
@@ -248,14 +269,25 @@ export default function SetupPage() {
             </div>
           </div>
 
-          <Button 
-            onClick={runSetup} 
-            disabled={loading}
-            size="lg" 
-            className="w-full text-lg font-bold h-14 shadow-lg shadow-primary/20"
-          >
-            {loading ? "Processing..." : "Run Setup & Seed Data"}
-          </Button>
+          <div className="flex flex-col gap-3">
+            <Button 
+                onClick={runSetup} 
+                disabled={loading}
+                size="lg" 
+                className="w-full text-lg font-bold h-14 shadow-lg shadow-primary/20"
+            >
+                {loading ? "Processing..." : "Run Full Setup & Seed Data"}
+            </Button>
+
+            <Button 
+                onClick={forceFixOrganizer}
+                variant="outline"
+                disabled={loading}
+                className="w-full border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+            >
+                <Wrench className="w-4 h-4 mr-2" /> Force Fix "organizer@permit.com" Role
+            </Button>
+          </div>
 
         </CardContent>
       </Card>
