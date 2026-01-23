@@ -13,7 +13,8 @@ import {
   Bell,
   PanelLeftClose,
   PanelLeft,
-  ChevronRight
+  ChevronRight,
+  Building
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -33,27 +34,40 @@ export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCo
   
   const userRole = role || "tenant"
 
-  const navItems =
-    userRole === "admin"
-      ? [
-          { id: "overview", label: "Utama", icon: LayoutDashboard },
-          { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-          { id: "accounting", label: "Akaun", icon: Receipt },
-          { id: "locations", label: "Lokasi", icon: MapPin },
-          { id: "settings", label: "Tetapan", icon: Settings },
-        ]
-      : userRole === "staff"
-        ? [
-            { id: "overview", label: "Utama", icon: LayoutDashboard },
-            { id: "tenants", label: "Pendaftaran", icon: Users },
-            { id: "accounting", label: "Kewangan", icon: Receipt },
-            { id: "settings", label: "Tetapan", icon: Settings },
-          ]
-        : [
-            { id: "rentals", label: "Sewa Saya", icon: Home },
-            { id: "accounting", label: "Akaun", icon: Receipt },
-            { id: "settings", label: "Tetapan", icon: Settings },
-          ]
+  let navItems = []
+
+  if (userRole === 'admin') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "organizers", label: "Penganjur", icon: Building }, // New Item
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "locations", label: "Lokasi", icon: MapPin },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else if (userRole === 'organizer') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "locations", label: "Lokasi Saya", icon: MapPin },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else if (userRole === 'staff') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "tenants", label: "Pendaftaran", icon: Users },
+      { id: "accounting", label: "Kewangan", icon: Receipt },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else {
+    // Tenant
+    navItems = [
+      { id: "rentals", label: "Sewa Saya", icon: Home },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  }
 
   return (
     <aside
@@ -175,27 +189,39 @@ export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
   const [open, setOpen] = React.useState(false)
   const userRole = role || "tenant"
 
-  const navItems =
-    userRole === "admin"
-      ? [
-          { id: "overview", label: "Utama", icon: LayoutDashboard },
-          { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-          { id: "accounting", label: "Akaun", icon: Receipt },
-          { id: "locations", label: "Lokasi", icon: MapPin },
-          { id: "settings", label: "Tetapan", icon: Settings },
-        ]
-      : userRole === "staff"
-        ? [
-            { id: "overview", label: "Utama", icon: LayoutDashboard },
-            { id: "tenants", label: "Pendaftaran", icon: Users },
-            { id: "accounting", label: "Kewangan", icon: Receipt },
-            { id: "settings", label: "Tetapan", icon: Settings },
-          ]
-        : [
-            { id: "rentals", label: "Sewa Saya", icon: Home },
-            { id: "accounting", label: "Akaun", icon: Receipt },
-            { id: "settings", label: "Tetapan", icon: Settings },
-          ]
+  let navItems = []
+
+  if (userRole === 'admin') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "organizers", label: "Penganjur", icon: Building },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "locations", label: "Lokasi", icon: MapPin },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else if (userRole === 'organizer') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "locations", label: "Lokasi Saya", icon: MapPin },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else if (userRole === 'staff') {
+    navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "tenants", label: "Pendaftaran", icon: Users },
+      { id: "accounting", label: "Kewangan", icon: Receipt },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  } else {
+    navItems = [
+      { id: "rentals", label: "Sewa Saya", icon: Home },
+      { id: "accounting", label: "Akaun", icon: Receipt },
+      { id: "settings", label: "Tetapan", icon: Settings },
+    ]
+  }
 
   const handleNavClick = (id: string) => {
     setActiveModule(id)
