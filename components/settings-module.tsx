@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -70,13 +70,15 @@ export function SettingsModule() {
   const [files, setFiles] = useState<{
     profile?: File,
     ssm?: File,
-    ic?: File
+    food?: File,
+    other?: File
   }>({})
   
   const [urls, setUrls] = useState({
     profile: "",
     ssm: "",
-    ic: ""
+    food: "",
+    other: ""
   })
 
   // Backup State
@@ -107,7 +109,8 @@ export function SettingsModule() {
         setUrls({
           profile: data.profile_image_url || "",
           ssm: data.ssm_file_url || "",
-          ic: data.ic_file_url || ""
+          food: data.food_handling_cert_url || "",
+          other: data.other_docs_url || ""
         })
       }
       setLoading(false)
@@ -208,10 +211,10 @@ export function SettingsModule() {
       // Upload files if new ones selected
       if (files.profile) newUrls.profile = await handleFileUpload(files.profile, 'profile')
       if (files.ssm) newUrls.ssm = await handleFileUpload(files.ssm, 'ssm')
-      if (files.ic) newUrls.ic = await handleFileUpload(files.ic, 'ic')
+      if (files.food) newUrls.food = await handleFileUpload(files.food, 'food')
+      if (files.other) newUrls.other = await handleFileUpload(files.other, 'other')
       
       // Update Profiles Table (Primary source for Full Name)
-      // We do this separately to ensure at least the basic profile is updated
       if (formData.fullName) {
         await supabase
           .from('profiles')
@@ -229,7 +232,8 @@ export function SettingsModule() {
         address: formData.address || null,
         profile_image_url: newUrls.profile || null,
         ssm_file_url: newUrls.ssm || null,
-        ic_file_url: newUrls.ic || null
+        food_handling_cert_url: newUrls.food || null,
+        other_docs_url: newUrls.other || null
       }
       
       let error;
@@ -243,7 +247,6 @@ export function SettingsModule() {
         error = updateError
       } else {
         // Create new record
-        // We do NOT set 'status' here to avoid RLS violation (defaults to pending usually)
         const { data: newTenant, error: insertError } = await supabase
             .from('tenants')
             .insert({
@@ -261,8 +264,6 @@ export function SettingsModule() {
       }
         
       if (error) {
-        // If we hit RLS on insert, it might be because we can't create tenants manually.
-        // But we already updated the profile above, so we can consider it a partial success if it was just full_name
         console.error("Tenant update error:", error)
         if (error.code === '42501') {
            throw new Error("Anda tiada kebenaran untuk mencipta profil perniagaan. Sila hubungi Admin.")
@@ -401,6 +402,8 @@ export function SettingsModule() {
                   <CardTitle className="text-primary font-serif text-lg">Dokumen Sokongan</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  
+                  {/* SSM */}
                   <div className="space-y-2">
                     <Label className="text-xs">Sijil SSM (PDF/Gambar)</Label>
                     <div className="flex gap-2 items-center">
@@ -409,7 +412,7 @@ export function SettingsModule() {
                             type="file"
                             accept=".pdf,image/*"
                             onChange={(e) => e.target.files && setFiles({...files, ssm: e.target.files[0]})}
-                            className="text-xs h-9"
+                            className="text-xs h-9 bg-white"
                           />
                         ) : (
                           <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
@@ -424,29 +427,57 @@ export function SettingsModule() {
                         )}
                     </div>
                   </div>
+
+                  {/* Food Handling */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Salinan Kad Pengenalan</Label>
+                    <Label className="text-xs flex items-center gap-1"><Utensils size={12}/> Sijil Pengendalian Makanan</Label>
                     <div className="flex gap-2 items-center">
                         {isEditing ? (
-                          <Input 
+                           <Input 
                             type="file"
                             accept=".pdf,image/*"
-                            onChange={(e) => e.target.files && setFiles({...files, ic: e.target.files[0]})}
-                            className="text-xs h-9"
+                            onChange={(e) => e.target.files && setFiles({...files, food: e.target.files[0]})}
+                            className="text-xs h-9 bg-white"
                           />
                         ) : (
                           <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
-                             {urls.ic ? "Fail dimuat naik" : "Tiada fail"}
+                             {urls.food ? "Fail dimuat naik" : "Tiada fail"}
                           </div>
                         )}
                         
-                        {urls.ic && (
-                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.ic, '_blank')}>
+                        {urls.food && (
+                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.food, '_blank')}>
                               <FileText size={14} />
                           </Button>
                         )}
                     </div>
                   </div>
+
+                   {/* Other Docs */}
+                   <div className="space-y-2">
+                    <Label className="text-xs flex items-center gap-1"><FolderOpen size={12}/> Dokumen Sokongan Lain</Label>
+                    <div className="flex gap-2 items-center">
+                        {isEditing ? (
+                           <Input 
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={(e) => e.target.files && setFiles({...files, other: e.target.files[0]})}
+                            className="text-xs h-9 bg-white"
+                          />
+                        ) : (
+                          <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
+                             {urls.other ? "Fail dimuat naik" : "Tiada fail"}
+                          </div>
+                        )}
+                        
+                        {urls.other && (
+                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.other, '_blank')}>
+                              <FileText size={14} />
+                          </Button>
+                        )}
+                    </div>
+                  </div>
+
                 </CardContent>
               </Card>
             </div>
