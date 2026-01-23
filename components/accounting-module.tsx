@@ -29,7 +29,9 @@ import {
   Briefcase,
   ArrowDownRight,
   ArrowUpRight,
-  DollarSign
+  DollarSign,
+  Filter,
+  ChevronDown
 } from "lucide-react"
 import {
   Dialog,
@@ -81,6 +83,12 @@ export function AccountingModule() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   
+  // Filtering & Pagination State
+  const [filterMonth, setFilterMonth] = useState<string>("all")
+  const [filterType, setFilterType] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [displayLimit, setDisplayLimit] = useState<number>(5)
+  
   const [newTransaction, setNewTransaction] = useState({
     description: "",
     category: "",
@@ -98,6 +106,11 @@ export function AccountingModule() {
        setUserRole(storedRole)
     }
   }, [role])
+
+  // Reset limit when filters change
+  useEffect(() => {
+    setDisplayLimit(5)
+  }, [filterMonth, filterType, filterStatus])
 
   // --- RESTRICTED VIEW FOR TENANTS ---
   if (userRole === 'tenant') {
@@ -188,6 +201,33 @@ export function AccountingModule() {
       tag: "Safety Net"
     },
   ]
+
+  // Filter Logic
+  const months = [
+    { value: "1", label: "Januari" },
+    { value: "2", label: "Februari" },
+    { value: "3", label: "Mac" },
+    { value: "4", label: "April" },
+    { value: "5", label: "Mei" },
+    { value: "6", label: "Jun" },
+    { value: "7", label: "Julai" },
+    { value: "8", label: "Ogos" },
+    { value: "9", label: "September" },
+    { value: "10", label: "Oktober" },
+    { value: "11", label: "November" },
+    { value: "12", label: "Disember" },
+  ]
+
+  const filteredTransactions = transactions?.filter((t: any) => {
+    const date = new Date(t.date)
+    const monthMatch = filterMonth === "all" || (date.getMonth() + 1).toString() === filterMonth
+    const typeMatch = filterType === "all" || t.type === filterType
+    const statusMatch = filterStatus === "all" || t.status === filterStatus
+    return monthMatch && typeMatch && statusMatch
+  }) || []
+
+  const displayedTransactions = filteredTransactions.slice(0, displayLimit)
+  const hasMore = filteredTransactions.length > displayLimit
 
   const handleSaveTransaction = async () => {
     if (!newTransaction.description || !newTransaction.amount) {
@@ -521,12 +561,53 @@ export function AccountingModule() {
           </div>
 
           <Card className="bg-white rounded-[2.5rem] border border-border/50 shadow-sm overflow-hidden">
-            <CardHeader className="p-10 border-b border-border/30">
-              <div>
-                <CardTitle className="text-3xl font-serif">Senarai Transaksi</CardTitle>
-                <CardDescription className="text-muted-foreground text-lg mt-1 font-medium">
-                  Rekod keluar masuk kewangan berpusat
-                </CardDescription>
+            <CardHeader className="p-6 md:p-10 border-b border-border/30">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-3xl font-serif">Senarai Transaksi</CardTitle>
+                  <CardDescription className="text-muted-foreground text-lg mt-1 font-medium">
+                    Rekod keluar masuk kewangan berpusat
+                  </CardDescription>
+                </div>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                   <div className="flex items-center gap-2 bg-secondary/30 p-1.5 rounded-xl border border-border/30">
+                      <Filter className="w-4 h-4 text-muted-foreground ml-2 hidden sm:block" />
+                      
+                      <Select value={filterMonth} onValueChange={setFilterMonth}>
+                         <SelectTrigger className="w-[100px] h-9 bg-white border-none text-xs rounded-lg shadow-sm font-medium">
+                            <SelectValue placeholder="Bulan" />
+                         </SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="all">Semua Bulan</SelectItem>
+                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                         </SelectContent>
+                      </Select>
+
+                      <Select value={filterType} onValueChange={setFilterType}>
+                         <SelectTrigger className="w-[90px] h-9 bg-white border-none text-xs rounded-lg shadow-sm font-medium">
+                            <SelectValue placeholder="Jenis" />
+                         </SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="all">Semua Jenis</SelectItem>
+                            <SelectItem value="income">Masuk (+)</SelectItem>
+                            <SelectItem value="expense">Keluar (-)</SelectItem>
+                         </SelectContent>
+                      </Select>
+
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                         <SelectTrigger className="w-[100px] h-9 bg-white border-none text-xs rounded-lg shadow-sm font-medium">
+                            <SelectValue placeholder="Status" />
+                         </SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="all">Semua Status</SelectItem>
+                            <SelectItem value="approved">Lulus</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                         </SelectContent>
+                      </Select>
+                   </div>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -548,7 +629,7 @@ export function AccountingModule() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions?.map((transaction: any) => {
+                    {displayedTransactions?.map((transaction: any) => {
                       const receipt = transaction.receipt_url
                       return (
                         <TableRow
@@ -627,16 +708,28 @@ export function AccountingModule() {
                         </TableRow>
                       )
                     })}
-                    {(!transactions || transactions.length === 0) && (
+                    {(!displayedTransactions || displayedTransactions.length === 0) && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                           <p>Tiada transaksi direkodkan.</p>
-                          <p className="text-xs opacity-50 mt-2">Sila tambah transaksi baru atau semak database.</p>
+                          <p className="text-xs opacity-50 mt-2">Sila tambah transaksi baru atau semak filter anda.</p>
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
+
+                {hasMore && (
+                  <div className="p-4 border-t border-border/10 flex justify-center bg-slate-50/30">
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => setDisplayLimit(prev => prev + 5)} 
+                      className="rounded-xl text-xs text-muted-foreground hover:text-primary h-10 px-6 font-medium"
+                    >
+                      Lihat Lagi ({filteredTransactions.length - displayLimit} lagi) <ChevronDown className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                )}
               </div>
               )}
             </CardContent>
