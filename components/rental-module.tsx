@@ -273,6 +273,11 @@ export function RentalModule() {
       let receiptUrl = null
       let billRef = ""
       
+      // Fee Calculation
+      const baseAmount = parseFloat(paymentAmount)
+      const fee = paymentMethod === 'billplz' ? 2.00 : 0
+      const finalAmount = baseAmount + fee
+      
       if (paymentMethod === 'manual') {
         if (receiptFile) {
           const fileExt = receiptFile.name.split('.').pop()
@@ -289,8 +294,8 @@ export function RentalModule() {
             action: 'create_bill',
             email: tenant.email,
             name: tenant.full_name,
-            amount: paymentAmount,
-            description: `Sewa ${selectedLoc?.location_name}`,
+            amount: finalAmount.toString(), // Send full amount including fee
+            description: `Sewa ${selectedLoc?.location_name} (Inc. Fee)`,
             redirect_url: `${window.location.origin}/dashboard?module=rentals`
           }
         })
@@ -301,10 +306,10 @@ export function RentalModule() {
 
       const { error: rpcError } = await supabase.rpc('process_rental_payment', {
         p_tenant_id: tenant.id,
-        p_amount: parseFloat(paymentAmount),
+        p_amount: finalAmount, // Record full paid amount
         p_date: payDate,
         p_receipt_url: receiptUrl || "",
-        p_description: `Sewa - ${selectedLoc?.location_name}`,
+        p_description: `Sewa - ${selectedLoc?.location_name} ${fee > 0 ? `(+RM${fee} Fee)` : ''}`,
         p_category: 'Servis',
         p_remarks: billRef
       })
@@ -501,6 +506,12 @@ export function RentalModule() {
                   <div className="space-y-2">
                     <Label>Jumlah Bayaran (RM)</Label>
                     <Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="h-12 text-lg font-bold rounded-xl" />
+                    {paymentMethod === 'billplz' && (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            + RM 2.00 Caj Transaksi (Billplz). Jumlah: <span className="font-bold text-primary">RM {(parseFloat(paymentAmount || '0') + 2).toFixed(2)}</span>
+                        </p>
+                    )}
                   </div>
                   
                   {paymentMethod === 'manual' && (
@@ -561,7 +572,7 @@ export function RentalModule() {
                           <TableCell className="text-center">
                              {pay.receipt_url ? (
                                <a href={pay.receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-primary">
-                                  <ExternalLink size={14} />
+                                  <FileText size={16} />
                                </a>
                              ) : (
                                <span className="text-xs text-muted-foreground">-</span>
