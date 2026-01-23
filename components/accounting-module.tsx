@@ -31,7 +31,8 @@ import {
   ArrowUpRight,
   DollarSign,
   Filter,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from "lucide-react"
 import {
   Dialog,
@@ -115,6 +116,24 @@ export function AccountingModule() {
   // --- RESTRICTED VIEW FOR TENANTS ---
   if (userRole === 'tenant') {
     return <SubscriptionPlans />
+  }
+
+  // --- ORGANIZER VIEW (NOT ACTIVATED) ---
+  if (userRole === 'organizer') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] text-center space-y-4 animate-in fade-in slide-in-from-bottom-4">
+        <div className="p-6 bg-secondary/30 rounded-full mb-2">
+           <Lock className="w-12 h-12 text-muted-foreground/60" />
+        </div>
+        <h2 className="text-3xl font-serif font-bold text-foreground">Modul Akaun Tidak Diaktifkan</h2>
+        <p className="text-muted-foreground max-w-md text-lg leading-relaxed">
+          Modul perakaunan untuk penganjur belum diaktifkan atau memerlukan langganan tambahan. Sila hubungi Admin untuk maklumat lanjut.
+        </p>
+        <Button variant="outline" className="mt-4" onClick={() => toast.info("Sila hubungi 012-3456789 (Admin)")}>
+           Hubungi Admin
+        </Button>
+      </div>
+    )
   }
 
   // ------------------------------------------------------------------
