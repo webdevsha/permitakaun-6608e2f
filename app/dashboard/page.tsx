@@ -263,9 +263,6 @@ export default function DashboardPage() {
                                    <div>
                                      <div className="flex items-center gap-2">
                                        <p className="font-bold text-sm text-foreground">{t.full_name}</p>
-                                       <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded-full font-bold">
-                                         -{t.overdueText}
-                                       </span>
                                      </div>
                                      <p className="text-xs text-muted-foreground">{t.business_name} • {t.locationName}</p>
                                      <p className="text-xs text-red-600 font-bold mt-1">
