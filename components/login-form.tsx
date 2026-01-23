@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Database } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -124,10 +124,16 @@ export function LoginForm() {
           )}
         </Button>
         
-        <div className="text-center pt-2">
+        <div className="text-center pt-2 space-y-4">
           <p className="text-sm text-muted-foreground">
             Belum ada akaun? <Link href="/signup" className="text-primary font-bold hover:underline">Daftar Sekarang</Link>
           </p>
+          
+          <div className="border-t pt-4">
+            <Link href="/setup" className="inline-flex items-center text-xs text-muted-foreground hover:text-primary transition-colors">
+               <Database className="w-3 h-3 mr-1" /> Run First-Time Setup
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>
