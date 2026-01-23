@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store } from "lucide-react"
+import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store, Pencil, Save, Building } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog"
 import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
-import { Location } from "@/types/supabase-types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -29,11 +28,10 @@ import { useAuth } from "@/components/providers/auth-provider"
 const fetcher = async () => {
   const supabase = createClient()
   
-  // Logic: 
-  // If Admin: Fetch All.
-  // If Organizer: Fetch Only Yours (RLS handles this mostly, but we can be explicit).
-  
-  const { data: locations, error } = await supabase.from('locations').select('*').order('created_at', { ascending: true })
+  const { data: locations, error } = await supabase
+    .from('locations')
+    .select('*, organizers(name)')
+    .order('created_at', { ascending: true })
   
   if (error) throw error
   
@@ -51,72 +49,115 @@ const fetcher = async () => {
 }
 
 export function LocationModule() {
-  const { role, user } = useAuth()
-  const { data: locations, error, isLoading, mutate } = useSWR('locations_list_v3', fetcher)
+  const { role } = useAuth()
+  const { data: locations, mutate, isLoading } = useSWR('locations_list_v4', fetcher)
   const [selectedLocation, setSelectedLocation] = useState<any>(null)
   const [locationTenants, setLocationTenants] = useState<any[]>([])
   const [loadingTenants, setLoadingTenants] = useState(false)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
   const supabase = createClient()
 
-  // New Location State
-  const [newLocation, setNewLocation] = useState({
+  // Location Form State
+  const [formData, setFormData] = useState({
+    id: 0,
     name: "",
-    type: "daily" as "daily" | "monthly",
-    operating_days: "Setiap Hari",
+    program_name: "",
+    type: "daily" as "daily" | "monthly", // daily = mingguan now in UI
+    operating_days: "Sabtu & Ahad",
+    days_per_week: "2",
     total_lots: "50",
     rate_khemah: "0",
     rate_cbs: "0",
     rate_monthly: "0"
   })
 
-  const handleAddLocation = async () => {
-    if (!newLocation.name) {
+  const resetForm = () => {
+    setFormData({
+      id: 0,
+      name: "",
+      program_name: "",
+      type: "daily",
+      operating_days: "Sabtu & Ahad",
+      days_per_week: "2",
+      total_lots: "50",
+      rate_khemah: "0",
+      rate_cbs: "0",
+      rate_monthly: "0"
+    })
+    setIsEditMode(false)
+  }
+
+  const handleOpenAdd = () => {
+    resetForm()
+    setIsEditMode(false)
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEdit = (loc: any) => {
+    setFormData({
+      id: loc.id,
+      name: loc.name || "",
+      program_name: loc.program_name || "",
+      type: loc.type || "daily",
+      operating_days: loc.operating_days || "",
+      days_per_week: loc.days_per_week?.toString() || "1",
+      total_lots: loc.total_lots?.toString() || "0",
+      rate_khemah: loc.rate_khemah?.toString() || "0",
+      rate_cbs: loc.rate_cbs?.toString() || "0",
+      rate_monthly: loc.rate_monthly?.toString() || "0"
+    })
+    setIsEditMode(true)
+    setIsDialogOpen(true)
+  }
+
+  const handleSaveLocation = async () => {
+    if (!formData.name) {
       toast.error("Sila masukkan nama lokasi")
       return
     }
 
     setIsSaving(true)
     try {
-      let organizerId = null;
-      
-      // If user is organizer, get their ID
-      if (role === 'organizer') {
-        const { data } = await supabase.rpc('get_my_organizer_id')
-        organizerId = data
+      const payload = {
+        name: formData.name,
+        program_name: formData.program_name,
+        type: formData.type,
+        operating_days: formData.operating_days,
+        days_per_week: parseInt(formData.days_per_week) || 1,
+        total_lots: parseInt(formData.total_lots) || 0,
+        rate_khemah: parseFloat(formData.rate_khemah) || 0,
+        rate_cbs: parseFloat(formData.rate_cbs) || 0,
+        rate_monthly: parseFloat(formData.rate_monthly) || 0,
       }
 
-      const { error } = await supabase.from('locations').insert({
-        name: newLocation.name,
-        type: newLocation.type,
-        operating_days: newLocation.operating_days,
-        total_lots: parseInt(newLocation.total_lots) || 0,
-        rate_khemah: parseFloat(newLocation.rate_khemah) || 0,
-        rate_cbs: parseFloat(newLocation.rate_cbs) || 0,
-        rate_monthly: parseFloat(newLocation.rate_monthly) || 0,
-        organizer_id: organizerId // Associate with organizer if applicable
-      })
+      if (isEditMode && formData.id) {
+         const { error } = await supabase.from('locations').update(payload).eq('id', formData.id)
+         if (error) throw error
+         toast.success("Lokasi berjaya dikemaskini")
+      } else {
+         let organizerId = null;
+         // If user is organizer, get their ID
+         if (role === 'organizer') {
+           const { data } = await supabase.rpc('get_my_organizer_id')
+           organizerId = data
+         }
 
-      if (error) throw error
+         const { error } = await supabase.from('locations').insert({
+           ...payload,
+           organizer_id: organizerId
+         })
+         if (error) throw error
+         toast.success("Lokasi baru berjaya ditambah")
+      }
 
-      toast.success("Lokasi baru berjaya ditambah")
-      setIsAddDialogOpen(false)
+      setIsDialogOpen(false)
       mutate() // Refresh list
-      
-      // Reset form
-      setNewLocation({
-        name: "",
-        type: "daily",
-        operating_days: "Setiap Hari",
-        total_lots: "50",
-        rate_khemah: "0",
-        rate_cbs: "0",
-        rate_monthly: "0"
-      })
+      resetForm()
 
     } catch (e: any) {
-      toast.error("Gagal menambah lokasi: " + e.message)
+      toast.error("Gagal simpan: " + e.message)
     } finally {
       setIsSaving(false)
     }
@@ -178,43 +219,56 @@ export function LocationModule() {
           <h2 className="text-3xl font-serif font-bold text-foreground">Pengurusan Lokasi</h2>
           <p className="text-muted-foreground">{role === 'organizer' ? 'Urus tapak pasar anda' : 'Urus semua lokasi sistem'}</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-2xl h-12 px-6">
+            <Button onClick={handleOpenAdd} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-2xl h-12 px-6">
               <Plus className="mr-2 h-5 w-5" />
               Tambah Lokasi
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-white border-border rounded-3xl sm:max-w-[500px]">
+          <DialogContent className="bg-white border-border rounded-3xl sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Lokasi Baru</DialogTitle>
-              <DialogDescription>Konfigurasi tapak pasar baru</DialogDescription>
+              <DialogTitle className="font-serif text-2xl">{isEditMode ? "Kemaskini Lokasi" : "Lokasi Baru"}</DialogTitle>
+              <DialogDescription>{isEditMode ? "Ubah butiran lokasi sedia ada" : "Konfigurasi tapak pasar baru"}</DialogDescription>
             </DialogHeader>
             
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Nama Lokasi</Label>
-                <Input 
-                  id="name" 
-                  value={newLocation.name}
-                  onChange={(e) => setNewLocation({...newLocation, name: e.target.value})}
-                  placeholder="Contoh: Uptown Danau Kota" 
-                  className="rounded-xl"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="grid gap-2">
+                    <Label htmlFor="program_name">Nama Program</Label>
+                    <Input 
+                      id="program_name" 
+                      value={formData.program_name}
+                      onChange={(e) => setFormData({...formData, program_name: e.target.value})}
+                      placeholder="Contoh: Karnival Mega" 
+                      className="rounded-xl"
+                    />
+                 </div>
+                 <div className="grid gap-2">
+                    <Label htmlFor="name">Nama Lokasi/Jalan</Label>
+                    <Input 
+                      id="name" 
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      placeholder="Contoh: Jalan Tun Razak" 
+                      className="rounded-xl"
+                    />
+                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                  <div className="grid gap-2">
                   <Label>Jenis Operasi</Label>
                   <Select 
-                    value={newLocation.type} 
-                    onValueChange={(v: "daily" | "monthly") => setNewLocation({...newLocation, type: v})}
+                    value={formData.type} 
+                    onValueChange={(v: "daily" | "monthly") => setFormData({...formData, type: v})}
                   >
                     <SelectTrigger className="rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">Harian (Pasar Malam/Pagi)</SelectItem>
+                      <SelectItem value="daily">Mingguan (Pasar Malam/Pagi)</SelectItem>
                       <SelectItem value="monthly">Bulanan (Kiosk/Uptown)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -223,53 +277,75 @@ export function LocationModule() {
                   <Label>Jumlah Lot/Tapak</Label>
                   <Input 
                     type="number"
-                    value={newLocation.total_lots}
-                    onChange={(e) => setNewLocation({...newLocation, total_lots: e.target.value})}
+                    value={formData.total_lots}
+                    onChange={(e) => setFormData({...formData, total_lots: e.target.value})}
                     className="rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label>Hari/Waktu Operasi</Label>
-                <Input 
-                  value={newLocation.operating_days}
-                  onChange={(e) => setNewLocation({...newLocation, operating_days: e.target.value})}
-                  placeholder="Contoh: Sabtu & Ahad (8am - 2pm)" 
-                  className="rounded-xl"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                   <Label>Hari/Waktu Operasi</Label>
+                   <Input 
+                     value={formData.operating_days}
+                     onChange={(e) => setFormData({...formData, operating_days: e.target.value})}
+                     placeholder="Contoh: Sabtu & Ahad" 
+                     className="rounded-xl"
+                   />
+                </div>
+                <div className="grid gap-2">
+                   <Label>Bil. Hari Seminggu</Label>
+                   <Input 
+                     type="number"
+                     min="1"
+                     max="7"
+                     value={formData.days_per_week}
+                     onChange={(e) => setFormData({...formData, days_per_week: e.target.value})}
+                     className="rounded-xl"
+                   />
+                </div>
               </div>
 
               <div className="bg-secondary/20 p-4 rounded-xl space-y-3">
                 <Label className="font-bold text-primary">Tetapan Kadar Sewa (RM)</Label>
-                {newLocation.type === 'daily' ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs">Kadar Tapak (Khemah)</Label>
-                      <Input 
-                        type="number" 
-                        value={newLocation.rate_khemah}
-                        onChange={(e) => setNewLocation({...newLocation, rate_khemah: e.target.value})}
-                        className="h-9 bg-white" 
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Kadar CBS (Lori)</Label>
-                      <Input 
-                        type="number" 
-                        value={newLocation.rate_cbs}
-                        onChange={(e) => setNewLocation({...newLocation, rate_cbs: e.target.value})}
-                        className="h-9 bg-white" 
-                      />
-                    </div>
+                {formData.type === 'daily' ? (
+                  <div className="space-y-4">
+                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                           <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
+                           <Input 
+                              type="number" 
+                              value={formData.rate_khemah}
+                              onChange={(e) => setFormData({...formData, rate_khemah: e.target.value})}
+                              className="h-9 bg-white" 
+                           />
+                        </div>
+                        <div>
+                           <Label className="text-xs">Kadar Seminggu (CBS/Lori)</Label>
+                           <Input 
+                              type="number" 
+                              value={formData.rate_cbs}
+                              onChange={(e) => setFormData({...formData, rate_cbs: e.target.value})}
+                              className="h-9 bg-white" 
+                           />
+                        </div>
+                     </div>
+                     <div className="p-3 bg-white/50 rounded-lg text-xs text-muted-foreground border border-dashed">
+                        <p className="font-bold mb-1">Anggaran Bulanan (4 Minggu):</p>
+                        <div className="flex justify-between">
+                           <span>Khemah: RM {(parseFloat(formData.rate_khemah || '0') * 4).toFixed(2)}</span>
+                           <span>CBS: RM {(parseFloat(formData.rate_cbs || '0') * 4).toFixed(2)}</span>
+                        </div>
+                     </div>
                   </div>
                 ) : (
                   <div>
                     <Label className="text-xs">Kadar Sewa Bulanan</Label>
                     <Input 
                       type="number" 
-                      value={newLocation.rate_monthly}
-                      onChange={(e) => setNewLocation({...newLocation, rate_monthly: e.target.value})}
+                      value={formData.rate_monthly}
+                      onChange={(e) => setFormData({...formData, rate_monthly: e.target.value})}
                       className="bg-white" 
                     />
                   </div>
@@ -278,8 +354,8 @@ export function LocationModule() {
             </div>
 
             <DialogFooter>
-              <Button onClick={handleAddLocation} disabled={isSaving} className="w-full rounded-xl h-11 bg-primary text-white">
-                {isSaving ? <Loader2 className="animate-spin" /> : "Simpan Lokasi"}
+              <Button onClick={handleSaveLocation} disabled={isSaving} className="w-full rounded-xl h-11 bg-primary text-white">
+                {isSaving ? <Loader2 className="animate-spin" /> : (isEditMode ? "Simpan Perubahan" : "Simpan Lokasi")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -288,63 +364,68 @@ export function LocationModule() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {locations?.map((loc: any) => {
-          const occupancy = Math.round((loc.tenant_count / (loc.total_lots || 1)) * 100)
-          
           return (
-          <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all">
+          <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
+            <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+               <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm" onClick={() => handleOpenEdit(loc)}>
+                  <Pencil className="w-4 h-4 text-primary" />
+               </Button>
+            </div>
+
             <CardHeader className="bg-secondary/10 border-b border-border/30 pb-4">
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-white rounded-xl shadow-sm text-primary">
-                    <Store size={20} />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{loc.name}</CardTitle>
-                    <CardDescription className="flex items-center gap-1 mt-1">
-                       <Calendar className="w-3 h-3" /> {loc.operating_days || "Setiap Hari"}
-                    </CardDescription>
-                  </div>
-                </div>
-                <Badge variant={loc.type === 'daily' ? 'default' : 'secondary'} className="capitalize">
-                  {loc.type}
-                </Badge>
+              <div className="flex flex-col gap-1">
+                 {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
+                 <CardTitle className="text-xl font-serif">{loc.name}</CardTitle>
+                 {loc.organizers?.name && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                       <Building className="w-3 h-3" />
+                       <span className="font-medium">{loc.organizers.name}</span>
+                    </div>
+                 )}
               </div>
             </CardHeader>
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="pt-6 space-y-5">
               
-              {/* Capacity Bar */}
-              <div className="space-y-2">
-                 <div className="flex justify-between text-sm font-medium">
-                   <span className="text-muted-foreground">Kapasiti Peniaga</span>
-                   <span className={occupancy > 90 ? "text-red-600" : "text-primary"}>
-                     {loc.tenant_count} / {loc.total_lots}
-                   </span>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                 <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground block">Jenis</span>
+                    <Badge variant="outline" className="capitalize bg-white">
+                       {loc.type === 'daily' ? 'Mingguan' : 'Bulanan'}
+                    </Badge>
                  </div>
-                 <div className="h-2 w-full bg-secondary/50 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-500 ${occupancy > 90 ? 'bg-red-500' : 'bg-primary'}`} 
-                      style={{ width: `${Math.min(occupancy, 100)}%` }} 
-                    />
+                 <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground block">Operasi</span>
+                    <span className="font-medium text-xs flex items-center gap-1">
+                       <Calendar className="w-3 h-3" /> {loc.days_per_week || 1} Hari/Minggu
+                    </span>
                  </div>
               </div>
 
               {/* Rates */}
-              <div className="bg-muted/30 p-3 rounded-xl space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase">Kadar Sewa Semasa</p>
+              <div className="bg-muted/30 p-4 rounded-xl space-y-3">
+                <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
+                   <Store className="w-3 h-3" /> Kadar Sewa
+                </p>
                 {loc.type === 'daily' ? (
-                  <div className="flex justify-between items-center text-sm">
-                    <div>
-                      <span className="block text-xs text-muted-foreground">Khemah</span>
-                      <span className="font-bold">RM {loc.rate_khemah}</span>
-                    </div>
-                    <div className="h-8 w-px bg-border/50" />
-                    <div>
-                      <span className="block text-xs text-muted-foreground">CBS (Lori)</span>
-                      <span className="font-bold">RM {loc.rate_cbs}</span>
-                    </div>
+                  <div className="space-y-2">
+                     <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground text-xs">Khemah</span>
+                        <div className="text-right">
+                           <span className="font-bold block">RM {loc.rate_khemah} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
+                           <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_khemah * 4).toFixed(0)} /bulan</span>
+                        </div>
+                     </div>
+                     <div className="h-px bg-border/50" />
+                     <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground text-xs">CBS (Lori)</span>
+                        <div className="text-right">
+                           <span className="font-bold block">RM {loc.rate_cbs} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
+                           <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_cbs * 4).toFixed(0)} /bulan</span>
+                        </div>
+                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between items-center text-sm pt-1">
                     <span className="text-muted-foreground">Bulanan</span>
                     <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
                   </div>
@@ -361,7 +442,9 @@ export function LocationModule() {
                   <DialogContent className="max-w-4xl bg-white rounded-3xl">
                     <DialogHeader>
                       <DialogTitle className="text-2xl font-serif">Peniaga di {loc.name}</DialogTitle>
-                      <DialogDescription>Senarai penyewa yang berdaftar di lokasi ini</DialogDescription>
+                      <DialogDescription>
+                         Penganjur: <span className="font-bold text-primary">{loc.organizers?.name || "-"}</span>
+                      </DialogDescription>
                     </DialogHeader>
                     
                     <div className="mt-4 max-h-[400px] overflow-y-auto">
