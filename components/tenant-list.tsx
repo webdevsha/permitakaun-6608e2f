@@ -7,7 +7,7 @@ import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
-import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save } from "lucide-react"
+import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -58,7 +58,7 @@ const fetchTenants = async () => {
 }
 
 export function TenantList() {
-  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v9', fetchTenants)
+  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v10', fetchTenants)
   const [selectedTenant, setSelectedTenant] = useState<any>(null)
   
   // Dialog Data States
@@ -240,12 +240,40 @@ export function TenantList() {
                                        <p className="font-mono">{selectedTenant.phone_number}</p>
                                     </div>
                                     <div>
-                                       <p className="text-xs text-muted-foreground font-bold uppercase">Dokumen</p>
-                                       <div className="flex gap-2 mt-1">
-                                          {selectedTenant.ssm_file_url && <Badge variant="outline" className="cursor-pointer" onClick={() => window.open(selectedTenant.ssm_file_url)}>SSM</Badge>}
-                                          {selectedTenant.ic_file_url && <Badge variant="outline" className="cursor-pointer" onClick={() => window.open(selectedTenant.ic_file_url)}>IC</Badge>}
-                                       </div>
+                                       <p className="text-xs text-muted-foreground font-bold uppercase">No. SSM</p>
+                                       <p className="font-mono">{selectedTenant.ssm_number || "-"}</p>
                                     </div>
+                                    <div className="col-span-2">
+                                       <p className="text-xs text-muted-foreground font-bold uppercase">Alamat</p>
+                                       <p className="text-sm">{selectedTenant.address || "-"}</p>
+                                    </div>
+                                 </div>
+                              </div>
+                              
+                              {/* Document Attachments */}
+                              <div>
+                                 <h3 className="font-bold text-foreground mb-3 flex items-center gap-2 text-sm">
+                                    <FileText className="w-4 h-4 text-primary" /> Dokumen Lampiran
+                                 </h3>
+                                 <div className="flex gap-2 flex-wrap">
+                                    {selectedTenant.ssm_file_url && (
+                                      <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.ssm_file_url)}>
+                                        <Building size={14} /> Sijil SSM
+                                      </Badge>
+                                    )}
+                                    {selectedTenant.food_handling_cert_url && (
+                                      <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.food_handling_cert_url)}>
+                                        <Utensils size={14} /> Sijil Makanan
+                                      </Badge>
+                                    )}
+                                    {selectedTenant.other_docs_url && (
+                                      <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.other_docs_url)}>
+                                        <FolderOpen size={14} /> Dokumen Lain
+                                      </Badge>
+                                    )}
+                                    {!selectedTenant.ssm_file_url && !selectedTenant.food_handling_cert_url && !selectedTenant.other_docs_url && (
+                                      <p className="text-xs text-muted-foreground italic">Tiada dokumen dilampirkan.</p>
+                                    )}
                                  </div>
                               </div>
 
