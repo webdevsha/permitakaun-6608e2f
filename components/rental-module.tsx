@@ -119,12 +119,30 @@ export function RentalModule() {
              }
           }
 
-          // 3. Get All System Locations (for new application)
-          const { data: allLocs } = await supabase
-            .from('locations')
-            .select('*')
-            .order('name')
-          setAvailableLocations(allLocs || [])
+          // 3. Get Available Locations (Filtered by Organizer)
+          if (currentTenant.organizer_code) {
+             const { data: orgData } = await supabase
+               .from('organizers')
+               .select('id')
+               .eq('organizer_code', currentTenant.organizer_code)
+               .maybeSingle()
+             
+             if (orgData) {
+               const { data: filteredLocs } = await supabase
+                 .from('locations')
+                 .select('*')
+                 .eq('organizer_id', orgData.id)
+                 .order('name')
+               
+               setAvailableLocations(filteredLocs || [])
+             } else {
+               setAvailableLocations([])
+             }
+          } else {
+             // If no organizer code, show nothing or maybe show public ones (if any)
+             // For now, strict: no code, no locations
+             setAvailableLocations([])
+          }
 
           // 4. Get History
           await fetchHistory(currentTenant.id)
@@ -366,9 +384,14 @@ export function RentalModule() {
                 <DialogContent className="bg-white rounded-3xl">
                    <DialogHeader>
                       <DialogTitle>Permohonan Sewa Tapak</DialogTitle>
-                      <DialogDescription>Pilih lokasi pasar untuk disewa. No. Petak akan ditentukan oleh Admin.</DialogDescription>
+                      <DialogDescription>
+                         Penganjur Anda: <span className="font-bold text-primary">{tenant.organizer_code}</span>.
+                         Hanya lokasi penganjur ini dipaparkan.
+                      </DialogDescription>
                    </DialogHeader>
                    <div className="space-y-4 py-4">
+                      {availableLocations.length > 0 ? (
+                      <>
                       <div className="space-y-2">
                          <Label>Lokasi Pasar</Label>
                          <Select value={applyLocationId} onValueChange={setApplyLocationId}>
@@ -392,8 +415,8 @@ export function RentalModule() {
                             </SelectTrigger>
                             <SelectContent>
                                <SelectItem value="monthly">Bulanan</SelectItem>
-                               <SelectItem value="khemah">Harian (Khemah)</SelectItem>
-                               <SelectItem value="cbs">Harian (CBS/Lori)</SelectItem>
+                               <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
+                               <SelectItem value="cbs">Mingguan (CBS/Lori)</SelectItem>
                             </SelectContent>
                          </Select>
                       </div>
@@ -401,9 +424,16 @@ export function RentalModule() {
                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                          <p>Status permohonan akan menjadi "Pending" sehingga diluluskan oleh Admin. No. Petak akan diberikan selepas kelulusan.</p>
                       </div>
+                      </>
+                      ) : (
+                         <div className="p-4 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-500 text-sm">
+                            <p className="mb-2">Tiada lokasi tersedia untuk Kod Penganjur anda.</p>
+                            <p className="text-xs">Sila pastikan anda mempunyai Kod Penganjur yang sah di Profil anda.</p>
+                         </div>
+                      )}
                    </div>
                    <DialogFooter>
-                      <Button onClick={handleApplyRental} disabled={isApplying || !applyLocationId} className="w-full rounded-xl">
+                      <Button onClick={handleApplyRental} disabled={isApplying || !applyLocationId || availableLocations.length === 0} className="w-full rounded-xl">
                          {isApplying ? <Loader2 className="animate-spin" /> : "Hantar Permohonan"}
                       </Button>
                    </DialogFooter>
@@ -435,7 +465,7 @@ export function RentalModule() {
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center text-sm mb-2">
                     <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
-                    <Badge variant="outline" className="capitalize">{rental.rate_type}</Badge>
+                    <Badge variant="outline" className="capitalize">{rental.rate_type === 'khemah' || rental.rate_type === 'cbs' ? 'Mingguan (' + rental.rate_type + ')' : 'Bulanan'}</Badge>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground font-medium">Kadar Semasa:</span>
