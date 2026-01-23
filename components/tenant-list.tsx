@@ -7,7 +7,12 @@ import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
+<<<<<<< HEAD
+import { Label } from "@/components/ui/label"
+import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen, Plus } from "lucide-react"
+=======
 import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen } from "lucide-react"
+>>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
 import {
   Dialog,
   DialogContent,
@@ -15,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter
 } from "@/components/ui/dialog"
 import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
@@ -58,7 +64,11 @@ const fetchTenants = async () => {
 }
 
 export function TenantList() {
+<<<<<<< HEAD
+  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v11', fetchTenants)
+=======
   const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v10', fetchTenants)
+>>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
   const [selectedTenant, setSelectedTenant] = useState<any>(null)
   
   // Dialog Data States
@@ -68,6 +78,44 @@ export function TenantList() {
   
   const [isUpdating, setIsUpdating] = useState(false)
   const supabase = createClient()
+
+  // Add Tenant State
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [newTenant, setNewTenant] = useState({
+     name: '',
+     business: '',
+     phone: '',
+     email: ''
+  })
+  const [addingTenant, setAddingTenant] = useState(false)
+
+  const handleAddTenant = async () => {
+     if (!newTenant.name || !newTenant.business) {
+        toast.error("Nama dan Nama Perniagaan wajib diisi")
+        return
+     }
+     
+     setAddingTenant(true)
+     try {
+        const { error } = await supabase.from('tenants').insert({
+           full_name: newTenant.name,
+           business_name: newTenant.business,
+           phone_number: newTenant.phone,
+           email: newTenant.email,
+           status: 'active'
+        })
+        
+        if (error) throw error
+        toast.success("Peniaga berjaya didaftarkan")
+        setNewTenant({ name: '', business: '', phone: '', email: '' })
+        setIsAddOpen(false)
+        mutate()
+     } catch (e: any) {
+        toast.error("Gagal: " + e.message)
+     } finally {
+        setAddingTenant(false)
+     }
+  }
 
   const handleViewTenant = async (tenant: any) => {
     setSelectedTenant(tenant)
@@ -148,7 +196,40 @@ export function TenantList() {
              <CardTitle className="font-serif text-2xl text-foreground">Pengurusan Peniaga & Sewa</CardTitle>
              <CardDescription>Senarai peniaga aktif dan status pembayaran sewa terkini</CardDescription>
           </div>
-          <Button className="bg-primary text-white">Tambah Peniaga</Button>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+             <DialogTrigger asChild>
+                <Button className="bg-primary text-white shadow-md rounded-xl"><Plus className="mr-2 w-4 h-4"/> Tambah Peniaga</Button>
+             </DialogTrigger>
+             <DialogContent>
+                <DialogHeader>
+                   <DialogTitle>Daftar Peniaga Manual</DialogTitle>
+                   <DialogDescription>Pendaftaran pantas untuk peniaga baru</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                   <div className="space-y-2">
+                      <Label>Nama Penuh</Label>
+                      <Input value={newTenant.name} onChange={e => setNewTenant({...newTenant, name: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                      <Label>Nama Perniagaan</Label>
+                      <Input value={newTenant.business} onChange={e => setNewTenant({...newTenant, business: e.target.value})} />
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <Label>No. Telefon</Label>
+                         <Input value={newTenant.phone} onChange={e => setNewTenant({...newTenant, phone: e.target.value})} placeholder="012..." />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>Emel (Pilihan)</Label>
+                         <Input value={newTenant.email} onChange={e => setNewTenant({...newTenant, email: e.target.value})} />
+                      </div>
+                   </div>
+                </div>
+                <DialogFooter>
+                   <Button onClick={handleAddTenant} disabled={addingTenant}>Simpan</Button>
+                </DialogFooter>
+             </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
       <CardContent>
