@@ -7,12 +7,8 @@ import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
-<<<<<<< HEAD
 import { Label } from "@/components/ui/label"
 import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen, Plus } from "lucide-react"
-=======
-import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen } from "lucide-react"
->>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
 import {
   Dialog,
   DialogContent,
@@ -64,11 +60,7 @@ const fetchTenants = async () => {
 }
 
 export function TenantList() {
-<<<<<<< HEAD
   const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v11', fetchTenants)
-=======
-  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v10', fetchTenants)
->>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
   const [selectedTenant, setSelectedTenant] = useState<any>(null)
   
   // Dialog Data States
