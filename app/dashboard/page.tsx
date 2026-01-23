@@ -20,16 +20,53 @@ import { Button } from "@/components/ui/button"
 const fetchDashboardData = async () => {
   const supabase = createClient()
   
-  // 1. Fetch Transactions
-  const { data: transactions } = await supabase
-    .from('transactions')
-    .select('*')
-    .order('date', { ascending: false })
-    
-  // 2. Fetch Tenants with their Locations to know rates
-  const { data: tenants } = await supabase
-    .from('tenants')
-    .select('*, tenant_locations(*, locations(*))')
+  // Get User Role Context
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { transactions: [], tenants: [], overdueTenants: [] }
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const role = profile?.role || 'tenant'
+  
+  let tenants = []
+  let transactions = []
+
+  // --- ADMIN & STAFF: Fetch ALL ---
+  if (role === 'admin' || role === 'staff') {
+      const { data: t } = await supabase
+        .from('tenants')
+        .select('*, tenant_locations(*, locations(*))')
+      tenants = t || []
+
+      const { data: tx } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false })
+      transactions = tx || []
+
+  // --- ORGANIZER: Fetch Linked Data Only ---
+  } else if (role === 'organizer') {
+      const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
+      
+      if (org && org.organizer_code) {
+         // Fetch Tenants for this organizer
+         const { data: t } = await supabase
+           .from('tenants')
+           .select('*, tenant_locations(*, locations(*))')
+           .eq('organizer_code', org.organizer_code)
+         tenants = t || []
+         
+         // Fetch Transactions for these tenants only
+         if (tenants.length > 0) {
+            const tenantIds = tenants.map((t: any) => t.id)
+            const { data: tx } = await supabase
+              .from('transactions')
+              .select('*')
+              .in('tenant_id', tenantIds)
+              .order('date', { ascending: false })
+            transactions = tx || []
+         }
+      }
+  }
   
   // 3. Logic: Calculate Overdue based on Rate Type
   const overdueTenants = []
@@ -38,7 +75,7 @@ const fetchDashboardData = async () => {
      for (const t of tenants) {
        // Find last approved income
        const lastTx = transactions.find(
-         tx => tx.tenant_id === t.id && tx.type === 'income' && tx.status === 'approved'
+         (tx: any) => tx.tenant_id === t.id && tx.type === 'income' && tx.status === 'approved'
        )
        
        // Determine primary rate type from assigned locations (take first for simplicity)
@@ -136,10 +173,10 @@ export default function DashboardPage() {
   const overdueTenants = dashData?.overdueTenants || []
   
   const totalIncome = transactions
-    .filter(t => t.type === 'income' && t.status === 'approved')
-    .reduce((sum, t) => sum + Number(t.amount), 0)
+    .filter((t: any) => t.type === 'income' && t.status === 'approved')
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
 
-  const activeTenantsCount = tenants.filter(t => t.status === 'active').length
+  const activeTenantsCount = tenants.filter((t: any) => t.status === 'active').length
   
   return (
     <div className="flex h-screen bg-background font-sans overflow-hidden">
@@ -166,7 +203,7 @@ export default function DashboardPage() {
                   Hai, <span className="text-primary italic">{displayRole}</span>
                 </h1>
                 <p className="text-muted-foreground text-lg md:text-xl font-medium tracking-tight opacity-70">
-                  {role === "admin"
+                  {role === "admin" || role === "organizer"
                     ? "Ringkasan operasi dan kewangan semasa."
                     : "Urus tapak dan bayaran dengan mudah."}
                 </p>
@@ -197,7 +234,7 @@ export default function DashboardPage() {
                     <CardContent>
                       <div className="flex items-center gap-2 text-xs bg-primary-foreground/10 w-fit px-3 py-1 rounded-full">
                         <TrendingUp size={14} />
-                        <span>{transactions.filter(t => t.type === 'income').length} Transaksi</span>
+                        <span>{transactions.filter((t: any) => t.type === 'income').length} Transaksi</span>
                       </div>
                     </CardContent>
                   </Card>
