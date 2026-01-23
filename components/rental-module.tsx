@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink } from "lucide-react"
+import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink, Building } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -54,6 +54,10 @@ export function RentalModule() {
   const [applyLocationId, setApplyLocationId] = useState("")
   const [applyRateType, setApplyRateType] = useState("monthly")
   const [isApplying, setIsApplying] = useState(false)
+  
+  // Organizer Code Management
+  const [organizerCodeInput, setOrganizerCodeInput] = useState("")
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false)
 
   // Sync tab with URL param
   useEffect(() => {
@@ -252,6 +256,42 @@ export function RentalModule() {
     }
   }
 
+  const handleUpdateOrganizer = async () => {
+    if (!organizerCodeInput || !tenant) return
+    setIsVerifyingCode(true)
+    try {
+        // 1. Check if code exists
+        const { data: org, error: orgError } = await supabase
+            .from('organizers')
+            .select('id, name')
+            .eq('organizer_code', organizerCodeInput.toUpperCase())
+            .maybeSingle()
+        
+        if (orgError || !org) {
+            toast.error("Kod Penganjur tidak sah atau tidak dijumpai.")
+            setIsVerifyingCode(false)
+            return
+        }
+
+        // 2. Update Tenant Record
+        const { error: updateError } = await supabase
+            .from('tenants')
+            .update({ organizer_code: organizerCodeInput.toUpperCase() })
+            .eq('id', tenant.id)
+        
+        if (updateError) throw updateError
+
+        toast.success(`Berjaya dipautkan ke ${org.name}`)
+        
+        // 3. Refresh Page to reload data completely
+        window.location.reload()
+        
+    } catch (e: any) {
+        toast.error(e.message)
+        setIsVerifyingCode(false)
+    }
+  }
+
   const handleApplyRental = async () => {
     if (!tenant || !applyLocationId) return
 
@@ -385,11 +425,37 @@ export function RentalModule() {
                    <DialogHeader>
                       <DialogTitle>Permohonan Sewa Tapak</DialogTitle>
                       <DialogDescription>
-                         Penganjur Anda: <span className="font-bold text-primary">{tenant.organizer_code}</span>.
-                         Hanya lokasi penganjur ini dipaparkan.
+                         Pilih lokasi penganjur dan jenis sewaan.
                       </DialogDescription>
                    </DialogHeader>
-                   <div className="space-y-4 py-4">
+                   <div className="space-y-6 py-4">
+                      {/* Organizer Code Section */}
+                      <div className="p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/20 space-y-3">
+                          <Label className="text-xs font-bold text-brand-blue uppercase flex items-center gap-2">
+                             <Building className="w-3 h-3" /> Kod Penganjur
+                          </Label>
+                          <div className="flex gap-2">
+                               <Input 
+                                  value={organizerCodeInput}
+                                  onChange={(e) => setOrganizerCodeInput(e.target.value.toUpperCase())}
+                                  placeholder={tenant.organizer_code || "Masukkan Kod (Cth: ORG001)"}
+                                  className="bg-white uppercase font-mono"
+                               />
+                               <Button size="sm" onClick={handleUpdateOrganizer} disabled={isVerifyingCode} className="shrink-0 bg-brand-blue hover:bg-brand-blue/90 text-white">
+                                  {isVerifyingCode ? <Loader2 className="animate-spin" /> : (tenant.organizer_code ? "Tukar" : "Simpan")}
+                               </Button>
+                          </div>
+                          {tenant.organizer_code ? (
+                              <p className="text-[10px] text-green-600 flex items-center gap-1 font-medium">
+                                 <CheckCircle2 className="w-3 h-3" /> Penganjur aktif: {tenant.organizer_code}
+                              </p>
+                          ) : (
+                              <p className="text-[10px] text-muted-foreground">
+                                 Masukkan kod penganjur anda untuk melihat lokasi yang tersedia.
+                              </p>
+                          )}
+                      </div>
+
                       {availableLocations.length > 0 ? (
                       <>
                       <div className="space-y-2">
@@ -427,8 +493,8 @@ export function RentalModule() {
                       </>
                       ) : (
                          <div className="p-4 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-500 text-sm">
-                            <p className="mb-2">Tiada lokasi tersedia untuk Kod Penganjur anda.</p>
-                            <p className="text-xs">Sila pastikan anda mempunyai Kod Penganjur yang sah di Profil anda.</p>
+                            <p className="mb-2 font-medium">Tiada lokasi tersedia.</p>
+                            <p className="text-xs">Sila pastikan anda telah memasukkan <strong>Kod Penganjur</strong> yang betul di atas.</p>
                          </div>
                       )}
                    </div>
