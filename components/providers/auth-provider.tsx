@@ -32,64 +32,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [role, setRole] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  
+  // Create the client once and reuse it (Singleton-like behavior for the provider)
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
+    let mounted = true
+
+    const fetchProfile = async (userId: string) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
+        
+        if (mounted && !error && data) {
+          setProfile(data)
+          setRole(data.role ?? 'tenant')
+        }
+      } catch (error) {
+        console.error("Profile fetch error:", error)
+      }
+    }
+
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        setSession(session)
-        setUser(session?.user ?? null)
+        // Check for active session
+        const { data: { session: initialSession } } = await supabase.auth.getSession()
         
-        if (session?.user) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-          
-          setProfile(data)
-          setRole(data?.role ?? 'tenant')
+        if (mounted) {
+          if (initialSession) {
+            setSession(initialSession)
+            setUser(initialSession.user)
+            await fetchProfile(initialSession.user.id)
+          }
+          // If no session, user is null (default), we just stop loading
         }
       } catch (error) {
         console.error("Auth init error:", error)
       } finally {
-        setIsLoading(false)
+        if (mounted) setIsLoading(false)
       }
     }
 
     initAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        // Only fetch profile if we don't have it or if the user changed
-        if (!profile || profile.id !== session.user.id) {
-           const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-          
-          setProfile(data)
-          setRole(data?.role ?? 'tenant')
-        }
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (!mounted) return
+
+      setSession(currentSession)
+      setUser(currentSession?.user ?? null)
+
+      if (currentSession?.user) {
+        // Fetch profile on sign-in or token refresh to ensure role is up to date
+        await fetchProfile(currentSession.user.id)
       } else {
         setProfile(null)
         setRole(null)
       }
-      
+
       setIsLoading(false)
-      
+
       if (event === 'SIGNED_OUT') {
+        router.refresh()
         router.push('/')
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [supabase, router])
 
   const signOut = async () => {
