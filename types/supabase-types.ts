@@ -2,7 +2,19 @@ export type Profile = {
   id: string
   email: string | null
   full_name: string | null
-  role: 'tenant' | 'staff' | 'admin'
+  role: 'tenant' | 'staff' | 'admin' | 'organizer'
+  organizer_code?: string | null
+  created_at: string
+}
+
+export type Organizer = {
+  id: string
+  profile_id?: string | null
+  name: string
+  email?: string | null
+  phone?: string | null
+  organizer_code: string
+  status: string
   created_at: string
 }
 
@@ -17,6 +29,7 @@ export type Location = {
   operating_days: string | null
   total_lots: number
   created_at: string
+  organizer_id?: string | null
 }
 
 export type Tenant = {
@@ -36,6 +49,10 @@ export type Tenant = {
   ic_file_url?: string | null
   food_handling_cert_url?: string | null
   other_docs_url?: string | null
+<<<<<<< HEAD
+  organizer_code?: string | null
+=======
+>>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
 }
 
 export type TenantLocation = {
