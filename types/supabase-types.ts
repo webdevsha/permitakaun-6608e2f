@@ -49,10 +49,7 @@ export type Tenant = {
   ic_file_url?: string | null
   food_handling_cert_url?: string | null
   other_docs_url?: string | null
-<<<<<<< HEAD
   organizer_code?: string | null
-=======
->>>>>>> 1af3eff70456780b35e56da2bff48ba63b366795
 }
 
 export type TenantLocation = {
