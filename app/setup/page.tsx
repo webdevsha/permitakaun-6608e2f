@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { Shield, User, Users, CheckCircle, AlertTriangle } from "lucide-react"
+import { Shield, User, Users, CheckCircle, AlertTriangle, Building } from "lucide-react"
 
 export default function SetupPage() {
   const [loading, setLoading] = useState(false)
@@ -17,6 +17,7 @@ export default function SetupPage() {
   const users = [
     { email: "admin@permit.com", pass: "pass1234", role: "admin", name: "Super Admin", isTenant: false },
     { email: "staff@permit.com", pass: "pass1234", role: "staff", name: "Staff Member", isTenant: false },
+    { email: "organizer@permit.com", pass: "pass1234", role: "organizer", name: "Ketua Penganjur", isTenant: false, orgCode: "ORG001", orgName: "Persatuan Peniaga Gombak" },
     { email: "siti@permit.com", pass: "pass1234", role: "tenant", name: "Siti Aminah", isTenant: true, business: "Siti Hijab Collection", phone: "0123456789" },
     { email: "ahmad@permit.com", pass: "pass1234", role: "tenant", name: "Ahmad Albab", isTenant: true, business: "Ahmad Burger", phone: "0198765432" },
   ]
@@ -46,17 +47,17 @@ export default function SetupPage() {
         // Wait a bit for trigger to run
         await new Promise(r => setTimeout(r, 1000))
 
-        // Get the user ID (whether new or existing)
-        // We can't get it easily if signUp failed due to existing, so we try to signIn or just query profile if possible (RLS might block)
-        // For setup script, we assume clean slate or we just skip if exists. 
-        // BUT, we need the ID to create the Tenant record.
+        // Try to get User ID (either from sign up or sign in if exists)
+        let userId = data.user?.id
+        if (!userId) {
+           // If user existed, we can't get ID easily without login. 
+           // For this script, we assume clean slate OR we try to fetch profile if RLS allows (public read)
+           const { data: pData } = await supabase.from('profiles').select('id').eq('email', u.email).single()
+           userId = pData?.id
+        }
         
-        // If we can't get the ID easily from client-side without logging in, we'll try to insert tenant blindly? No, we need profile_id.
-        // Let's assume the user was created or we proceed. 
-        
-        if (data.user) {
-             const userId = data.user.id
-             addLog(`✅ User ID: ${userId.slice(0, 6)}...`)
+        if (userId) {
+             addLog(`✅ User ID found`)
 
              // 2. Set Role
              if (u.role !== 'tenant') {
@@ -67,9 +68,68 @@ export default function SetupPage() {
                  addLog(`   Updated role to ${u.role}`)
              }
 
-             // 3. Create Tenant Record if needed
+             // 3. Special: Create Organizer Record
+             if (u.role === 'organizer' && u.orgCode && u.orgName) {
+                 const { data: existingOrg } = await supabase.from('organizers').select('id').eq('organizer_code', u.orgCode).maybeSingle()
+                 let orgId = existingOrg?.id
+                 
+                 if (!orgId) {
+                     const { data: newOrg, error: orgError } = await supabase.from('organizers').insert({
+                         name: u.orgName,
+                         organizer_code: u.orgCode,
+                         status: 'active',
+                         email: u.email,
+                         profile_id: userId
+                     }).select('id').single()
+                     
+                     if (orgError) addLog(`   ❌ Org Error: ${orgError.message}`)
+                     else {
+                         orgId = newOrg.id
+                         addLog(`   🏢 Created Organizer: ${u.orgName}`)
+                     }
+                 } else {
+                     // Link existing org to this user
+                     await supabase.from('organizers').update({ profile_id: userId }).eq('id', orgId)
+                     addLog(`   Linked Organizer to User`)
+                 }
+
+                 // Seed Locations for this Organizer
+                 if (orgId) {
+                     const { count } = await supabase.from('locations').select('*', { count: 'exact', head: true }).eq('organizer_id', orgId)
+                     if (count === 0) {
+                         await supabase.from('locations').insert([
+                             {
+                                 organizer_id: orgId,
+                                 name: "Pasar Malam Gombak",
+                                 type: "daily",
+                                 operating_days: "Sabtu",
+                                 days_per_week: 1,
+                                 total_lots: 100,
+                                 rate_khemah: 15,
+                                 rate_cbs: 20,
+                                 rate_monthly: 0,
+                                 program_name: "Niaga Malam Minggu"
+                             },
+                             {
+                                 organizer_id: orgId,
+                                 name: "Uptown Danau Kota",
+                                 type: "monthly",
+                                 operating_days: "Selasa - Ahad",
+                                 days_per_week: 6,
+                                 total_lots: 200,
+                                 rate_khemah: 0,
+                                 rate_cbs: 0,
+                                 rate_monthly: 450,
+                                 program_name: "Uptown DK"
+                             }
+                         ])
+                         addLog(`   📍 Created Seed Locations for Organizer`)
+                     }
+                 }
+             }
+
+             // 4. Create Tenant Record if needed
              if (u.isTenant) {
-                 // Check if tenant exists
                  const { data: existingTenant } = await supabase
                     .from('tenants')
                     .select('id')
@@ -85,37 +145,32 @@ export default function SetupPage() {
                             business_name: u.business,
                             phone_number: u.phone,
                             email: u.email,
-                            status: 'active'
+                            status: 'active',
+                            organizer_code: 'ORG001' // Assign them to our seeded organizer
                         })
                      
                      if (tenantError) addLog(`   ❌ Tenant Error: ${tenantError.message}`)
                      else addLog(`   ✨ Created Tenant record`)
-                 } else {
-                     addLog(`   Tenant record already exists`)
                  }
                  
-                 // 4. Create Dummy Transaction for Siti (Overdue)
+                 // Create Dummy Transaction (Income)
                  if (u.email === 'siti@permit.com') {
-                     // Get Tenant ID
                      const { data: tData } = await supabase.from('tenants').select('id').eq('email', u.email).single()
                      if (tData) {
-                         // Check if transaction exists
                          const { count } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('tenant_id', tData.id)
-                         
                          if (count === 0) {
                              const date45DaysAgo = new Date()
                              date45DaysAgo.setDate(date45DaysAgo.getDate() - 45)
-                             
                              await supabase.from('transactions').insert({
                                  tenant_id: tData.id,
                                  amount: 50.00,
                                  type: 'income',
-                                 category: 'Servis', // Changed from 'Sewa Bulanan' to align with new categories
+                                 category: 'Servis',
                                  status: 'approved',
                                  date: date45DaysAgo.toISOString().split('T')[0],
                                  description: 'Bayaran Sewa Bulan Lepas'
                              })
-                             addLog(`   📅 Created OLD transaction (Overdue test)`)
+                             addLog(`   📅 Created OLD transaction`)
                          }
                      }
                  }
@@ -156,8 +211,8 @@ export default function SetupPage() {
                <p className="font-bold mb-1">Instructions:</p>
                <ol className="list-decimal pl-4 space-y-1">
                  <li>Ensure you have disabled "Confirm Email" in Supabase Auth settings.</li>
-                 <li>Click the button below to generate users and data.</li>
-                 <li><strong>Siti Aminah</strong> will be created with an overdue payment.</li>
+                 <li>Click the button below to generate users, organizers, and locations.</li>
+                 <li>If users already exist, this script attempts to link them correctly.</li>
                </ol>
              </div>
           </div>
@@ -166,11 +221,12 @@ export default function SetupPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Accounts</h3>
+              <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Accounts to Create</h3>
               {users.map((u, i) => (
                 <div key={i} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
                    <div className="flex items-center gap-3">
                      {u.role === 'admin' ? <Shield size={16} className="text-red-500" /> : 
+                      u.role === 'organizer' ? <Building size={16} className="text-purple-500" /> :
                       u.role === 'staff' ? <User size={16} className="text-blue-500" /> : 
                       <Users size={16} className="text-green-500" />}
                      <div>
