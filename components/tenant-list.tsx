@@ -24,18 +24,35 @@ import Image from "next/image"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-// Fetcher remains the same
+// Enhanced Fetcher for Role-based Access
 const fetchTenants = async () => {
   const supabase = createClient()
-  const { data: tenants, error } = await supabase.from('tenants').select('*').order('created_at', { ascending: false })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const role = profile?.role
+  
+  let query = supabase.from('tenants').select('*').order('created_at', { ascending: false })
+
+  // --- ORGANIZER FILTER ---
+  if (role === 'organizer') {
+     const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).single()
+     if (org && org.organizer_code) {
+        query = query.eq('organizer_code', org.organizer_code)
+     } else {
+        return [] // No Tenants for unlinked organizer
+     }
+  }
+
+  const { data: tenants, error } = await query
   if (error) throw error
   if (!tenants) return []
 
-  const enrichedTenants = await Promise.all(tenants.map(async (tenant) => {
+  const enrichedTenants = await Promise.all(tenants.map(async (tenant: any) => {
     const { data: locs } = await supabase.from('tenant_locations').select('*, locations(*)').eq('tenant_id', tenant.id)
     const { data: payments } = await supabase.from('tenant_payments').select('*').eq('tenant_id', tenant.id).eq('status', 'approved').order('payment_date', { ascending: false }).limit(1)
     
-    // ... logic same as before ...
     const lastPayment = payments?.[0]
     let paymentStatus = 'active'
     let overdueLabel = ''
@@ -43,7 +60,6 @@ const fetchTenants = async () => {
       ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
       : "Tiada Rekod"
       
-    // Simplified status logic for brevity in this update
     if (!lastPayment) paymentStatus = 'new'
     else paymentStatus = 'paid'
 
@@ -60,7 +76,7 @@ const fetchTenants = async () => {
 }
 
 export function TenantList() {
-  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v11', fetchTenants)
+  const { data: tenants, isLoading, mutate } = useSWR('enriched_tenants_v12', fetchTenants)
   const [selectedTenant, setSelectedTenant] = useState<any>(null)
   
   // Dialog Data States
@@ -237,7 +253,7 @@ export function TenantList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tenants?.map((tenant) => (
+              {tenants?.map((tenant: any) => (
                 <TableRow key={tenant.id} className="border-border/30 hover:bg-secondary/10 transition-colors">
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -443,6 +459,13 @@ export function TenantList() {
                   </TableCell>
                 </TableRow>
               ))}
+              {tenants?.length === 0 && (
+                 <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                       Tiada peniaga dijumpai.
+                    </TableCell>
+                 </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
