@@ -28,15 +28,32 @@ import { useAuth } from "@/components/providers/auth-provider"
 const fetcher = async () => {
   const supabase = createClient()
   
-  const { data: locations, error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const role = profile?.role
+  
+  let query = supabase
     .from('locations')
     .select('*, organizers(name)')
     .order('created_at', { ascending: true })
+
+  // --- ORGANIZER FILTER ---
+  if (role === 'organizer') {
+     const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
+     if (org) {
+        query = query.eq('organizer_id', org.id)
+     } else {
+        return [] // Organizer has no profile linked
+     }
+  }
   
+  const { data: locations, error } = await query
   if (error) throw error
   
   // Fetch tenant counts for each location
-  const locationsWithCounts = await Promise.all(locations.map(async (loc) => {
+  const locationsWithCounts = await Promise.all(locations.map(async (loc: any) => {
     const { count } = await supabase
       .from('tenant_locations')
       .select('*', { count: 'exact', head: true })
@@ -50,7 +67,7 @@ const fetcher = async () => {
 
 export function LocationModule() {
   const { role } = useAuth()
-  const { data: locations, mutate, isLoading } = useSWR('locations_list_v4', fetcher)
+  const { data: locations, mutate, isLoading } = useSWR('locations_list_v5', fetcher)
   const [selectedLocation, setSelectedLocation] = useState<any>(null)
   const [locationTenants, setLocationTenants] = useState<any[]>([])
   const [loadingTenants, setLoadingTenants] = useState(false)
@@ -140,8 +157,8 @@ export function LocationModule() {
          let organizerId = null;
          // If user is organizer, get their ID
          if (role === 'organizer') {
-           const { data } = await supabase.rpc('get_my_organizer_id')
-           organizerId = data
+           const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+           organizerId = orgData?.id
          }
 
          const { error } = await supabase.from('locations').insert({
@@ -509,6 +526,13 @@ export function LocationModule() {
           </Card>
           )
         })}
+        {locations?.length === 0 && (
+          <div className="col-span-full py-20 text-center text-muted-foreground bg-secondary/10 rounded-3xl border border-dashed border-border">
+             <MapPin className="w-12 h-12 mx-auto mb-4 opacity-20" />
+             <p className="text-lg font-bold">Tiada lokasi dijumpai.</p>
+             <p className="text-sm">Klik "Tambah Lokasi" untuk mula mendaftar tapak perniagaan.</p>
+          </div>
+        )}
       </div>
     </div>
   )
