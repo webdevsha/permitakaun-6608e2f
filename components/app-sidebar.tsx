@@ -48,9 +48,9 @@ export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCo
   } else if (userRole === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "locations", label: "Lokasi", icon: MapPin },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users },
       { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "locations", label: "Lokasi Saya", icon: MapPin },
       { id: "settings", label: "Tetapan", icon: Settings },
     ]
   } else if (userRole === 'staff') {
@@ -203,9 +203,9 @@ export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
   } else if (userRole === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard },
+      { id: "locations", label: "Lokasi", icon: MapPin },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users },
       { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "locations", label: "Lokasi Saya", icon: MapPin },
       { id: "settings", label: "Tetapan", icon: Settings },
     ]
   } else if (userRole === 'staff') {
