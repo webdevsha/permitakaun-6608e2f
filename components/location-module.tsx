@@ -24,10 +24,15 @@ import { createClient } from "@/utils/supabase/client"
 import { Location } from "@/types/supabase-types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/providers/auth-provider"
 
 const fetcher = async () => {
   const supabase = createClient()
-  // Fetch locations
+  
+  // Logic: 
+  // If Admin: Fetch All.
+  // If Organizer: Fetch Only Yours (RLS handles this mostly, but we can be explicit).
+  
   const { data: locations, error } = await supabase.from('locations').select('*').order('created_at', { ascending: true })
   
   if (error) throw error
@@ -46,7 +51,8 @@ const fetcher = async () => {
 }
 
 export function LocationModule() {
-  const { data: locations, error, isLoading, mutate } = useSWR('locations_list_v2', fetcher)
+  const { role, user } = useAuth()
+  const { data: locations, error, isLoading, mutate } = useSWR('locations_list_v3', fetcher)
   const [selectedLocation, setSelectedLocation] = useState<any>(null)
   const [locationTenants, setLocationTenants] = useState<any[]>([])
   const [loadingTenants, setLoadingTenants] = useState(false)
@@ -73,6 +79,14 @@ export function LocationModule() {
 
     setIsSaving(true)
     try {
+      let organizerId = null;
+      
+      // If user is organizer, get their ID
+      if (role === 'organizer') {
+        const { data } = await supabase.rpc('get_my_organizer_id')
+        organizerId = data
+      }
+
       const { error } = await supabase.from('locations').insert({
         name: newLocation.name,
         type: newLocation.type,
@@ -80,7 +94,8 @@ export function LocationModule() {
         total_lots: parseInt(newLocation.total_lots) || 0,
         rate_khemah: parseFloat(newLocation.rate_khemah) || 0,
         rate_cbs: parseFloat(newLocation.rate_cbs) || 0,
-        rate_monthly: parseFloat(newLocation.rate_monthly) || 0
+        rate_monthly: parseFloat(newLocation.rate_monthly) || 0,
+        organizer_id: organizerId // Associate with organizer if applicable
       })
 
       if (error) throw error
@@ -161,7 +176,7 @@ export function LocationModule() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-serif font-bold text-foreground">Pengurusan Lokasi</h2>
-          <p className="text-muted-foreground">Urus tapak pasar, kapasiti dan jadual operasi</p>
+          <p className="text-muted-foreground">{role === 'organizer' ? 'Urus tapak pasar anda' : 'Urus semua lokasi sistem'}</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
