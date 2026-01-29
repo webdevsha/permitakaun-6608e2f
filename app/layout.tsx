@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ms">
-      <body className={`${_geist.variable} ${_geistMono.variable} ${_playfair.variable} antialiased`}>
+      <body className={`${_geist.variable} ${_geistMono.variable} ${_playfair.variable} antialiased`} suppressHydrationWarning>
         <AuthProvider>
           {children}
           <Toaster />
