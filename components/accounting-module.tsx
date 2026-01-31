@@ -32,7 +32,8 @@ import {
   DollarSign,
   Filter,
   ChevronDown,
-  Lock
+  Lock,
+  Settings
 } from "lucide-react"
 import {
   Dialog,
