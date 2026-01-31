@@ -20,6 +20,10 @@ interface DashboardClientProps {
         transactions: any[]
         tenants: any[]
         overdueTenants: any[]
+        organizers: any[]
+        myLocations: any[]
+        availableLocations: any[]
+        userProfile: any
     }
     serverRole: string | null
 }
@@ -59,6 +63,10 @@ export default function DashboardClient({ initialData, serverRole }: DashboardCl
     const transactions = initialData?.transactions || []
     const tenants = initialData?.tenants || []
     const overdueTenants = initialData?.overdueTenants || []
+    const organizers = initialData?.organizers || []
+    const myLocations = initialData?.myLocations || []
+    const availableLocations = initialData?.availableLocations || []
+    const userProfile = initialData?.userProfile
 
     const totalIncome = transactions
         .filter((t: any) => t.type === 'income' && t.status === 'approved')
@@ -223,12 +231,19 @@ export default function DashboardClient({ initialData, serverRole }: DashboardCl
                             </div>
                         )}
 
-                        {activeModule === "tenants" && <TenantList />}
-                        {activeModule === "accounting" && <AccountingModule />}
+                        {activeModule === "tenants" && <TenantList initialTenants={tenants} />}
+                        {activeModule === "accounting" && <AccountingModule initialTransactions={transactions} />}
                         {activeModule === "locations" && <LocationModule />}
-                        {activeModule === "rentals" && <RentalModule />}
+                        {activeModule === "rentals" &&
+                            <RentalModule
+                                initialTenant={userProfile}
+                                initialLocations={myLocations}
+                                initialHistory={transactions}
+                                initialAvailable={availableLocations}
+                            />
+                        }
                         {activeModule === "settings" && <SettingsModule />}
-                        {activeModule === "organizers" && <OrganizerModule />}
+                        {activeModule === "organizers" && <OrganizerModule initialOrganizers={organizers} />}
 
                         <Footer />
                     </div>
