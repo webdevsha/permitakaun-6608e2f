@@ -48,23 +48,25 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   } else if (userRole === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
-      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'staff') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
-      { id: "tenants", label: "Pendaftaran", icon: Users, href: "/dashboard/tenants" },
-      { id: "accounting", label: "Kewangan", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {
     // Tenant
     navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
-      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   }
@@ -213,22 +215,24 @@ export function MobileNav() {
   } else if (userRole === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
-      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'staff') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
-      { id: "tenants", label: "Pendaftaran", icon: Users, href: "/dashboard/tenants" },
-      { id: "accounting", label: "Kewangan", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {
     navItems = [
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
-      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   }

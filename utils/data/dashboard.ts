@@ -8,7 +8,17 @@ export async function fetchDashboardData() {
     if (!user) return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    const role = profile?.role || 'tenant'
+
+    // Fallback: Force admin for specific email if profile missing
+    let role = profile?.role
+    if (!role && user.email === 'admin@permit.com') {
+        role = 'admin'
+    } else if (!role && user.email === 'organizer@permit.com') {
+        role = 'organizer'
+    } else if (!role && user.email === 'staff@permit.com') {
+        role = 'staff'
+    }
+    role = role || 'tenant'
 
     let tenants: any[] = []
     let transactions: any[] = []
@@ -305,7 +315,7 @@ export async function fetchLocations() {
 }
 
 export async function fetchSettingsData() {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { profile: null, backups: [] }
 
