@@ -76,7 +76,14 @@ const fetchTenants = async () => {
 }
 
 export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
-   const tenants = initialTenants || []
+   const tenants = (initialTenants || []).sort((a: any, b: any) => {
+      // 1. Sort by Status (Active first)
+      if (a.status === 'active' && b.status !== 'active') return -1
+      if (a.status !== 'active' && b.status === 'active') return 1
+
+      // 2. Sort by Name (Alphabetical)
+      return (a.full_name || "").localeCompare(b.full_name || "")
+   })
    // const isLoading = false // Data now comes from server
    const mutate = () => window.location.reload() // Simple reload for updates
 

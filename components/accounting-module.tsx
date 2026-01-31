@@ -102,6 +102,18 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
     date: new Date().toISOString().split('T')[0]
   })
 
+  // 7-Tabung Config State
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [percentages, setPercentages] = useState({
+    operating: 60,
+    tax: 10,
+    zakat: 2.5,
+    investment: 10,
+    dividend: 10,
+    savings: 4,
+    emergency: 3.5
+  })
+
   useEffect(() => {
     if (role) {
       setUserRole(role)
@@ -165,59 +177,60 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
   const cashBalance = (totalCapital + operatingRevenue) - totalExpenses
 
   // 7-TABUNG ALLOCATION (Based on Operating Revenue)
+  // 7-TABUNG ALLOCATION (Based on Operating Revenue)
   const accounts = [
     {
       name: "Operating Account",
-      percent: "60%",
-      amount: operatingRevenue * 0.60,
+      percent: `${percentages.operating}%`,
+      amount: operatingRevenue * (percentages.operating / 100),
       color: "bg-brand-blue/10 text-brand-blue border-brand-blue/20",
       icon: Wallet,
       tag: "Actionable"
     },
     {
       name: "Tax",
-      percent: "10%",
-      amount: operatingRevenue * 0.10,
+      percent: `${percentages.tax}%`,
+      amount: operatingRevenue * (percentages.tax / 100),
       color: "bg-orange-50 text-orange-600 border-orange-100",
       icon: Building,
       tag: "Liability"
     },
     {
       name: "Zakat",
-      percent: "2.5%",
-      amount: operatingRevenue * 0.025,
+      percent: `${percentages.zakat}%`,
+      amount: operatingRevenue * (percentages.zakat / 100),
       color: "bg-brand-green/10 text-brand-green border-brand-green/20",
       icon: Heart,
       tag: "Do Not Touch"
     },
     {
       name: "Investment",
-      percent: "10%",
-      amount: operatingRevenue * 0.10,
+      percent: `${percentages.investment}%`,
+      amount: operatingRevenue * (percentages.investment / 100),
       color: "bg-blue-50 text-blue-600 border-blue-100",
       icon: TrendingUp,
       tag: "Growth"
     },
     {
       name: "Dividend",
-      percent: "10%",
-      amount: operatingRevenue * 0.10,
+      percent: `${percentages.dividend}%`,
+      amount: operatingRevenue * (percentages.dividend / 100),
       color: "bg-indigo-50 text-indigo-600 border-indigo-100",
       icon: Landmark,
       tag: "Growth"
     },
     {
       name: "Savings",
-      percent: "4%",
-      amount: operatingRevenue * 0.04,
+      percent: `${percentages.savings}%`,
+      amount: operatingRevenue * (percentages.savings / 100),
       color: "bg-purple-50 text-purple-600 border-purple-100",
       icon: PiggyBank,
       tag: "Growth"
     },
     {
       name: "Emergency",
-      percent: "3.5%",
-      amount: operatingRevenue * 0.035,
+      percent: `${percentages.emergency}%`,
+      amount: operatingRevenue * (percentages.emergency / 100),
       color: "bg-yellow-50 text-yellow-600 border-yellow-100",
       icon: ShieldAlert,
       tag: "Safety Net"
@@ -481,6 +494,14 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
                     onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
                     className="h-10 pt-1.5 rounded-xl bg-secondary/20 cursor-pointer text-xs"
                   />
+                  {receiptFile && (
+                    <div className="flex items-center justify-between text-[10px] mt-1">
+                      <span className={receiptFile.size > 10 * 1024 * 1024 ? "text-red-500 font-bold" : "text-muted-foreground"}>
+                        Saiz: {(receiptFile.size / (1024 * 1024)).toFixed(2)} MB
+                        {receiptFile.size > 10 * 1024 * 1024 && " (Fail besar, mungkin mengambil masa)"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
@@ -530,6 +551,56 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
                   <Badge className="bg-brand-green/10 text-brand-green border-none px-4 py-1 rounded-full font-bold">
                     100% DIAGIH
                   </Badge>
+                  <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="ml-2 h-8 w-8 text-muted-foreground hover:text-primary">
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Konfigurasi 7-Tabung</DialogTitle>
+                        <DialogDescription>Tetapkan peratusan agihan untuk setiap tabung.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Operating (%)</Label>
+                          <Input type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Tax (%)</Label>
+                          <Input type="number" value={percentages.tax} onChange={(e) => setPercentages({ ...percentages, tax: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Zakat (%)</Label>
+                          <Input type="number" value={percentages.zakat} onChange={(e) => setPercentages({ ...percentages, zakat: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Investment (%)</Label>
+                          <Input type="number" value={percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Dividend (%)</Label>
+                          <Input type="number" value={percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Savings (%)</Label>
+                          <Input type="number" value={percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Emergency (%)</Label>
+                          <Input type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
+                        </div>
+                        <div className="flex justify-end pt-2">
+                          <p className={cn("text-xs font-bold",
+                            (percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency) === 100 ? "text-green-600" : "text-red-600"
+                          )}>
+                            Jumlah: {(percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency).toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
               <CardContent className="p-10 bg-white">
