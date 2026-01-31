@@ -21,52 +21,59 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "@/components/ui/sheet"
 import { useAuth } from "@/components/providers/auth-provider"
 import Image from "next/image"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 interface SidebarProps {
-  activeModule: string
-  setActiveModule: (module: string) => void
   isCollapsed: boolean
   setIsCollapsed: (collapsed: boolean) => void
 }
 
-export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCollapsed }: SidebarProps) {
+export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { role, signOut, user } = useAuth()
-
+  const pathname = usePathname()
   const userRole = role || "tenant"
 
   let navItems = []
 
   if (userRole === 'admin') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "organizers", label: "Penganjur", icon: Building }, // New Item
-      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "locations", label: "Lokasi", icon: MapPin },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'organizer') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "locations", label: "Lokasi", icon: MapPin },
-      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'staff') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "tenants", label: "Pendaftaran", icon: Users },
-      { id: "accounting", label: "Kewangan", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "tenants", label: "Pendaftaran", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Kewangan", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {
     // Tenant
     navItems = [
-      { id: "rentals", label: "Sewa Saya", icon: Home },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
+  }
+
+  const isActive = (href: string) => {
+    if (href === "/dashboard") {
+      return pathname === "/dashboard"
+    }
+    return pathname.startsWith(href)
   }
 
   return (
@@ -95,7 +102,7 @@ export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCo
               alt="PA"
               fill
               className="object-cover object-left"
-              style={{ objectPosition: '0 50%' }} // Crops to just the icon
+              style={{ objectPosition: '0 50%' }}
             />
           </div>
         )}
@@ -123,27 +130,29 @@ export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCo
       )}
 
       <div className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto">
-        {navItems.map((item) => (
-          <Button
-            key={item.id}
-            variant="ghost"
-            onClick={() => setActiveModule(item.id)}
-            className={cn(
-              "w-full justify-start h-12 rounded-xl transition-all",
-              activeModule === item.id
-                ? "bg-primary text-primary-foreground font-bold shadow-md shadow-primary/20 hover:bg-primary/90"
-                : "text-muted-foreground hover:bg-secondary hover:text-primary",
-              isCollapsed ? "justify-center px-0" : "px-4"
-            )}
-            title={isCollapsed ? item.label : undefined}
-          >
-            <item.icon className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
-            {!isCollapsed && <span className="text-sm">{item.label}</span>}
-            {!isCollapsed && activeModule === item.id && (
-              <ChevronRight className="ml-auto h-4 w-4 opacity-50" />
-            )}
-          </Button>
-        ))}
+        {navItems.map((item) => {
+          const active = isActive(item.href)
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              className={cn(
+                "flex items-center w-full justify-start h-12 rounded-xl transition-all",
+                active
+                  ? "bg-primary text-primary-foreground font-bold shadow-md shadow-primary/20 hover:bg-primary/90"
+                  : "text-muted-foreground hover:bg-secondary hover:text-primary",
+                isCollapsed ? "justify-center px-0" : "px-4"
+              )}
+              title={isCollapsed ? item.label : undefined}
+            >
+              <item.icon className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+              {!isCollapsed && <span className="text-sm">{item.label}</span>}
+              {!isCollapsed && active && (
+                <ChevronRight className="ml-auto h-4 w-4 opacity-50" />
+              )}
+            </Link>
+          )
+        })}
       </div>
 
       <div className="p-4 border-t border-border/50">
@@ -179,15 +188,11 @@ export function AppSidebar({ activeModule, setActiveModule, isCollapsed, setIsCo
   )
 }
 
-interface MobileNavProps {
-  activeModule: string
-  setActiveModule: (module: string) => void
-}
-
-export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
+export function MobileNav() {
   const { role, signOut, user } = useAuth()
+  const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
-  const [isMounted, setIsMounted] = React.useState(false) // Fix hydration mismatch
+  const [isMounted, setIsMounted] = React.useState(false)
   const userRole = role || "tenant"
 
   React.useEffect(() => {
@@ -198,42 +203,47 @@ export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
 
   if (userRole === 'admin') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "organizers", label: "Penganjur", icon: Building },
-      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "locations", label: "Lokasi", icon: MapPin },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'organizer') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "locations", label: "Lokasi", icon: MapPin },
-      { id: "tenants", label: "Peniaga & Sewa", icon: Users },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'staff') {
     navItems = [
-      { id: "overview", label: "Utama", icon: LayoutDashboard },
-      { id: "tenants", label: "Pendaftaran", icon: Users },
-      { id: "accounting", label: "Kewangan", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "tenants", label: "Pendaftaran", icon: Users, href: "/dashboard/tenants" },
+      { id: "accounting", label: "Kewangan", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {
     navItems = [
-      { id: "rentals", label: "Sewa Saya", icon: Home },
-      { id: "accounting", label: "Akaun", icon: Receipt },
-      { id: "settings", label: "Tetapan", icon: Settings },
+      { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
+      { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   }
 
-  const handleNavClick = (id: string) => {
-    setActiveModule(id)
+  const isActive = (href: string) => {
+    if (href === "/dashboard") {
+      return pathname === "/dashboard"
+    }
+    return pathname.startsWith(href)
+  }
+
+  const handleNavClick = () => {
     setOpen(false)
   }
 
-  // Fallback for SSR to prevent hydration mismatch
   if (!isMounted) {
     return (
       <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-border/50 sticky top-0 z-40 shadow-sm">
@@ -251,11 +261,8 @@ export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <Bell className="h-5 w-5 text-muted-foreground" />
-          </Button>
           <div className="h-8 w-8 bg-secondary rounded-full flex items-center justify-center text-xs font-bold text-primary">
-            {user?.email?.charAt(0).toUpperCase()}
+            U
           </div>
         </div>
       </div>
@@ -287,22 +294,25 @@ export function MobileNav({ activeModule, setActiveModule }: MobileNavProps) {
             </SheetHeader>
             <div className="flex flex-col h-full pb-20">
               <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
-                {navItems.map((item) => (
-                  <Button
-                    key={item.id}
-                    variant="ghost"
-                    onClick={() => handleNavClick(item.id)}
-                    className={cn(
-                      "w-full justify-start h-14 rounded-xl text-base",
-                      activeModule === item.id
-                        ? "bg-primary text-primary-foreground font-bold shadow-md shadow-primary/20"
-                        : "text-muted-foreground hover:bg-secondary hover:text-primary"
-                    )}
-                  >
-                    <item.icon className="h-5 w-5 mr-4" />
-                    {item.label}
-                  </Button>
-                ))}
+                {navItems.map((item) => {
+                  const active = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      onClick={handleNavClick}
+                      className={cn(
+                        "flex items-center w-full justify-start h-14 rounded-xl text-base",
+                        active
+                          ? "bg-primary text-primary-foreground font-bold shadow-md shadow-primary/20"
+                          : "text-muted-foreground hover:bg-secondary hover:text-primary"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5 mr-4" />
+                      {item.label}
+                    </Link>
+                  )
+                })}
               </div>
               <div className="p-4 border-t border-border/50">
                 <div className="flex items-center gap-3 px-4 mb-4">

@@ -270,3 +270,55 @@ export async function fetchDashboardData() {
         role
     }
 }
+
+export async function fetchLocations() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const role = profile?.role
+
+    let query = supabase
+        .from('locations')
+        .select('*, organizers(name)')
+        .order('created_at', { ascending: true })
+
+    if (role === 'organizer') {
+        const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
+        if (org) {
+            query = query.eq('organizer_id', org.id)
+        } else {
+            return []
+        }
+    }
+
+    const { data: locations } = await query
+    if (!locations) return []
+
+    const locationsWithCounts = await Promise.all(locations.map(async (loc: any) => {
+        const { count } = await supabase.from('tenant_locations').select('*', { count: 'exact', head: true }).eq('location_id', loc.id)
+        return { ...loc, tenant_count: count || 0 }
+    }))
+
+    return locationsWithCounts
+}
+
+export async function fetchSettingsData() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { profile: null, backups: [] }
+
+    const { data: profile } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
+
+    // Check if admin for backups
+    const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+
+    let backups: any[] = []
+    if (userProfile?.role === 'admin') {
+        const { data: b } = await supabase.storage.from('backups').list('', { sortBy: { column: 'created_at', order: 'desc' } })
+        if (b) backups = b
+    }
+
+    return { profile, backups, role: userProfile?.role }
+}
