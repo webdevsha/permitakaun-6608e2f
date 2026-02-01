@@ -163,14 +163,14 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
             if (currentRole === 'tenant') {
               const { data: tenant, error } = await supabase
                 .from('tenants')
-                .select('status')
+                .select('accounting_status')
                 .eq('profile_id', user.id)
                 .maybeSingle()
 
               if (error) console.error("Tenant status fetch error:", error)
 
               // If not active, show Subscription
-              if (!tenant || tenant.status !== 'active') {
+              if (!tenant || tenant.accounting_status !== 'active') {
                 accessGranted = false
                 denyReason = 'trial_expired'
               }

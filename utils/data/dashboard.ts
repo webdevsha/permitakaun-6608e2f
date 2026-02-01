@@ -37,7 +37,8 @@ export async function fetchDashboardData() {
         // Fetch Tenants with Locations
         const { data: t } = await supabase
             .from('tenants')
-            .select('*, tenant_locations(*, locations(*))')
+            .select('*, tenant_locations(*, locations(*)), profiles!inner(role)')
+            .eq('profiles.role', 'tenant')
             .order('created_at', { ascending: false })
 
         // Enrich Tenants with Payment Status (Server-side simulation of client logic)
