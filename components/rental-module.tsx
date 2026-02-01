@@ -110,9 +110,39 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         remarks: tx.description,
         amount: tx.amount,
         status: tx.status,
-        receipt_url: tx.receipt_url
+        status: tx.status,
+        receipt_url: tx.receipt_url,
+        category: tx.category,
+        type: tx.type
       }))
       setHistory(mappedHistory)
+    }
+  }
+
+  // Helper to determine display color and sign for Tenant
+  const getTransactionDisplay = (tx: any) => {
+    // If it's a payment (Income for Admin), it's Expense for Tenant
+    // categories: 'Sewa', 'Deposit', 'Lain-lain' (if paid to admin)
+
+    // Default: use DB type. 
+    // BUT for 'Sewa' (Rent), it is usually recorded as Income by Admin.
+    // So for Tenant, if category is 'Sewa', it should be Negative.
+
+    const isExpenseForTenant = tx.category === 'Sewa' || tx.category === 'Deposit' || tx.category === 'Caj Lewat' // Add more categories if needed
+
+    if (isExpenseForTenant) {
+      return {
+        amountPrefix: "-",
+        amountClass: "text-red-500",
+        amountValue: tx.amount
+      }
+    }
+
+    // Valid "Income" for tenant? Maybe refunds?
+    return {
+      amountPrefix: "+",
+      amountClass: "text-brand-green",
+      amountValue: tx.amount
     }
   }
 
@@ -589,7 +619,14 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                         {new Date(pay.payment_date).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </TableCell>
                       <TableCell>{pay.remarks || "Bayaran Sewa"}</TableCell>
-                      <TableCell className="text-right font-bold text-brand-green">RM {Number(pay.amount).toFixed(2)}</TableCell>
+                      {(() => {
+                        const display = getTransactionDisplay(pay)
+                        return (
+                          <TableCell className={cn("text-right font-bold", display.amountClass)}>
+                            {display.amountPrefix} RM {Number(pay.amount).toFixed(2)}
+                          </TableCell>
+                        )
+                      })()}
                       <TableCell className="text-center">
                         <Badge
                           variant="outline"
@@ -620,6 +657,6 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </div >
   )
 }

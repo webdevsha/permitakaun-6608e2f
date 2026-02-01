@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PaymentSettings } from "@/components/settings-toggle"
@@ -146,6 +146,35 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       toast.error("Gagal backup: " + e.message)
     } finally {
       setCreatingBackup(false)
+    }
+  }
+
+
+
+  // Password Update State
+  const [passwordForm, setPasswordForm] = useState({ new: "", confirm: "" })
+  const [updatingPassword, setUpdatingPassword] = useState(false)
+
+  const handleUpdatePassword = async () => {
+    if (passwordForm.new !== passwordForm.confirm) {
+      toast.error("Kata laluan baru dan pengesahan tidak sepadan")
+      return
+    }
+    if (passwordForm.new.length < 6) {
+      toast.error("Kata laluan mesti sekurang-kurangnya 6 aksara")
+      return
+    }
+
+    setUpdatingPassword(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new })
+      if (error) throw error
+      toast.success("Kata laluan berjaya ditukar")
+      setPasswordForm({ new: "", confirm: "" })
+    } catch (e: any) {
+      toast.error("Gagal menukar kata laluan: " + e.message)
+    } finally {
+      setUpdatingPassword(false)
     }
   }
 
@@ -437,6 +466,52 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
                   <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Change Password Card */}
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-primary font-serif flex items-center gap-2">
+                  <Lock className="w-5 h-5" /> Keselamatan Akaun
+                </CardTitle>
+                <CardDescription>Tukar kata laluan akaun anda</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">Kata Laluan Baru</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      value={passwordForm.new}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
+                      placeholder="••••••"
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Sahkan Kata Laluan</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
+                      placeholder="••••••"
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    onClick={handleUpdatePassword}
+                    disabled={updatingPassword || !passwordForm.new}
+                    className="bg-slate-800 text-white hover:bg-slate-700 rounded-xl"
+                  >
+                    {updatingPassword ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Shield className="mr-2 h-4 w-4" />}
+                    Tukar Kata Laluan
+                  </Button>
                 </div>
               </CardContent>
             </Card>
