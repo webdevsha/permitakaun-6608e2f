@@ -145,15 +145,17 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         const loc = item.locations
 
         // Try to get price based on rate_type
-        if (item.rate_type === 'khemah' && loc.rate_khemah) {
+        if (item.rate_type === 'khemah' && loc.rate_khemah > 0) {
           price = loc.rate_khemah
-        } else if (item.rate_type === 'cbs' && loc.rate_cbs) {
+        } else if (item.rate_type === 'cbs' && loc.rate_cbs > 0) {
           price = loc.rate_cbs
-        } else if (item.rate_type === 'monthly' && loc.rate_monthly) {
+        } else if (item.rate_type === 'monthly' && loc.rate_monthly > 0) {
           price = loc.rate_monthly
         } else {
           // Fallback: Use any available rate (prefer monthly > khemah > cbs)
-          price = loc.rate_monthly || loc.rate_khemah || loc.rate_cbs || 0
+          price = (loc.rate_monthly > 0 ? loc.rate_monthly : 0) ||
+            (loc.rate_khemah > 0 ? loc.rate_khemah : 0) ||
+            (loc.rate_cbs > 0 ? loc.rate_cbs : 0) || 0
         }
 
         return {

@@ -55,7 +55,7 @@ export async function fetchDashboardData() {
         let tQuery = supabase
             .from('tenants')
             .select('*, tenant_locations(*, locations(*)), profiles!inner(role)')
-            .in('profiles.role', ['tenant', 'organizer'])
+            .eq('profiles.role', 'tenant') // Only show actual tenants, not organizers
             .order('created_at', { ascending: false })
 
         if (!isDeveloperAdmin) {
@@ -118,31 +118,41 @@ export async function fetchDashboardData() {
     } else if (role === 'organizer' || (role === 'staff' && organizerCode)) {
         // For staff, use their organizer_code; for organizer, fetch from organizers table
         let orgCode = organizerCode
+        let orgId = null
 
         if (role === 'organizer') {
             // Organizer table uses 'id' as the FK to profiles (same UUID)
             const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('id', user.id).single()
             orgCode = org?.organizer_code
+            orgId = org?.id
 
             if (org) {
                 organizers = [org] // Populate for UI Header
             }
+        } else if (role === 'staff' && orgCode) {
+            // Staff: Find the organizer by code to get their ID
+            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('organizer_code', orgCode).single()
+            orgId = org?.id
 
-            // Fetch My Locations (Organizer's Locations)
             if (org) {
-                const { data: locs } = await supabase
-                    .from('locations')
-                    .select('*')
-                    .eq('organizer_id', org.id)
-                    .order('name')
+                organizers = [org] // Populate for UI Header
+            }
+        }
 
-                if (locs) {
-                    myLocations = locs.map((l: any) => ({
-                        location_name: l.name,
-                        display_price: l.rate_monthly || l.rate_khemah || 0, // Fallback price for display
-                        ...l
-                    }))
-                }
+        // Fetch Locations (for both Organizer and Staff)
+        if (orgId) {
+            const { data: locs } = await supabase
+                .from('locations')
+                .select('*')
+                .eq('organizer_id', orgId)
+                .order('name')
+
+            if (locs) {
+                myLocations = locs.map((l: any) => ({
+                    location_name: l.name,
+                    display_price: l.rate_monthly || l.rate_khemah || 0, // Fallback price for display
+                    ...l
+                }))
             }
         }
 
@@ -297,15 +307,17 @@ export async function fetchDashboardData() {
                     const loc = item.locations
 
                     // Try to get price based on rate_type
-                    if (item.rate_type === 'khemah' && loc.rate_khemah) {
+                    if (item.rate_type === 'khemah' && loc.rate_khemah > 0) {
                         price = loc.rate_khemah
-                    } else if (item.rate_type === 'cbs' && loc.rate_cbs) {
+                    } else if (item.rate_type === 'cbs' && loc.rate_cbs > 0) {
                         price = loc.rate_cbs
-                    } else if (item.rate_type === 'monthly' && loc.rate_monthly) {
+                    } else if (item.rate_type === 'monthly' && loc.rate_monthly > 0) {
                         price = loc.rate_monthly
                     } else {
                         // Fallback: Use any available rate (prefer monthly > khemah > cbs)
-                        price = loc.rate_monthly || loc.rate_khemah || loc.rate_cbs || 0
+                        price = (loc.rate_monthly > 0 ? loc.rate_monthly : 0) ||
+                            (loc.rate_khemah > 0 ? loc.rate_khemah : 0) ||
+                            (loc.rate_cbs > 0 ? loc.rate_cbs : 0) || 0
                     }
 
                     return {

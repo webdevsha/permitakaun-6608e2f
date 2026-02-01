@@ -13,12 +13,30 @@ export default async function AdminDashboardPage() {
     const { role: currentUserRole } = data
     const supabase = await createClient()
 
-    // Fetch Staff List
-    const { data: staffList } = await supabase
+    // Get current user to determine their organization
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // Determine the organizer code for the current admin
+    let adminOrgCode = null
+    if (user?.email === 'admin@permit.com') {
+        adminOrgCode = 'ORG001'
+    } else if (user?.email === 'admin@kumim.my') {
+        adminOrgCode = 'ORG002'
+    }
+
+    // Fetch Staff List - only staff belonging to this admin's organization
+    let staffQuery = supabase
         .from('profiles')
         .select('*')
         .eq('role', 'staff')
         .order('created_at', { ascending: false })
+
+    // Filter by organizer_code if admin has an organization
+    if (adminOrgCode) {
+        staffQuery = staffQuery.eq('organizer_code', adminOrgCode)
+    }
+
+    const { data: staffList } = await staffQuery
 
     const { tenants, organizers } = data
 

@@ -32,9 +32,9 @@ interface SidebarProps {
 export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { role, signOut, user, profile, isLoading } = useAuth()
   const pathname = usePathname()
-  const userRole = role || "tenant"
+  const [isSigningOut, setIsSigningOut] = React.useState(false)
 
-  if (isLoading) {
+  if (isLoading || !role) {
     // Return a skeleton sidebar matching the collapsed state to prevent layout shift
     return (
       <aside className={cn(
@@ -55,7 +55,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   let navItems = []
 
-  if (userRole === 'admin' || userRole === 'superadmin') {
+  if (role === 'admin' || role === 'superadmin') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
@@ -64,7 +64,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
-  } else if (userRole === 'organizer') {
+  } else if (role === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
@@ -72,7 +72,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
-  } else if (userRole === 'staff') {
+  } else if (role === 'staff') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
@@ -188,22 +188,31 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-bold truncate text-foreground">{profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
-              <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{userRole}</p>
+              <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{role}</p>
             </div>
           )}
         </div>
 
         <Button
           variant="ghost"
-          onClick={() => signOut()}
+          onClick={async () => {
+            setIsSigningOut(true)
+            try {
+              await signOut()
+            } catch (error) {
+              console.error('Logout error:', error)
+              setIsSigningOut(false)
+            }
+          }}
+          disabled={isSigningOut}
           className={cn(
             "w-full mt-2 text-muted-foreground hover:text-destructive hover:text-destructive/90 hover:bg-destructive/10",
             isCollapsed ? "h-10 w-10 p-0 justify-center mx-auto" : "justify-start px-4"
           )}
           title="Log Keluar"
         >
-          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
-          {!isCollapsed && "Log Keluar"}
+          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3", isSigningOut && "animate-spin")} />
+          {!isCollapsed && (isSigningOut ? "Logging out..." : "Log Keluar")}
         </Button>
       </div>
     </aside>
