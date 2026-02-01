@@ -96,7 +96,8 @@ export async function initiatePayment(params: {
                     status: 'pending',
                     payment_method: 'billplz',
                     billplz_id: result.id, // Store Billplz ID for verification
-                    receipt_url: result.url // Store payment link
+                    receipt_url: result.url, // Store payment link
+                    is_sandbox: mode === 'sandbox' // Mark as Test/Sandbox
                 })
 
                 if (txError) {

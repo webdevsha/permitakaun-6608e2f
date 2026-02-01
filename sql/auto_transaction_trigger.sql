@@ -12,17 +12,18 @@ BEGIN
       status,
       date,
       description,
-      receipt_url  -- Added field
+      receipt_url,
+      is_sandbox
     ) VALUES (
       NEW.tenant_id,
       NEW.amount,
-      NEW.amount,
-      'expense', -- Corrected: Rent payment is an EXPENSE for the tenant
-      'Sewa', -- Default category for payments
+      'expense', -- Rent is an EXPENSE for the tenant
+      'Sewa',    -- Category
       'approved',
       COALESCE(NEW.payment_date, CURRENT_DATE),
       'Bayaran Sewa/Permit (Auto-Generated)',
-      NEW.receipt_url -- Copy receipt URL from payment record
+      NEW.receipt_url,
+      NEW.is_sandbox
     );
   END IF;
   RETURN NEW;
