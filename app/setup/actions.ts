@@ -97,3 +97,109 @@ export async function clearAllSetupData() {
     }
 }
 
+
+export async function cleanHazmanData() {
+    try {
+        let supabase;
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (serviceRoleKey) {
+            supabase = createAdminClient()
+        } else {
+            console.warn("SUPABASE_SERVICE_ROLE_KEY is not defined. Falling back to authenticated user client.")
+            supabase = await createClient()
+        }
+
+        // 1. Get ORG002 ID
+        const { data: org, error: orgError } = await supabase
+            .from('organizers')
+            .select('id')
+            .eq('organizer_code', 'ORG002')
+            .maybeSingle()
+
+        if (!org) {
+            return { success: true, message: "ORG002 not found (already clean)" }
+        }
+
+        const orgId = org.id
+
+        // 2. Delete dependent data
+
+        // Transactions (linked to Tenants of ORG002)
+        // Need to find tenant IDs first because transactions don't have organizer_code directly?
+        // Actually tenants table has organizer_code now.
+        const { data: tenants } = await supabase.from('tenants').select('id').eq('organizer_code', 'ORG002')
+        if (tenants && tenants.length > 0) {
+            const tenantIds = tenants.map(t => t.id)
+            await supabase.from('transactions').delete().in('tenant_id', tenantIds)
+            await supabase.from('tenant_locations').delete().in('tenant_id', tenantIds)
+        }
+
+        // Tenant Locations (linked to Locations of ORG002)
+        const { data: locs } = await supabase.from('locations').select('id').eq('organizer_id', orgId)
+        if (locs && locs.length > 0) {
+            const locIds = locs.map(l => l.id)
+            await supabase.from('tenant_locations').delete().in('location_id', locIds)
+        }
+
+        // 3. Delete Core Data
+        await supabase.from('tenants').delete().eq('organizer_code', 'ORG002')
+        await supabase.from('locations').delete().eq('organizer_id', orgId)
+
+        // Optionally delete the organizer itself? User said "clean slate", usually implies existing account but empty data.
+        // But if they re-run setup, they want it to re-create.
+        // The previous SQL script deleted the organizer too. Let's stick to that consistency.
+        // Wait, if I delete the organizer, the Setup page needs to re-create it.
+        // The user's goal is "Hazman's page dont have seed data".
+        // If I delete the Organizer record, the user might lose access until they run "Setup" again.
+        // But the user is supposed to click "Run Setup" after cleaning.
+        // So deleting Organizer record IS correct.
+        await supabase.from('organizers').delete().eq('id', orgId)
+
+        revalidatePath('/dashboard')
+        revalidatePath('/admin')
+        revalidatePath('/setup')
+
+        return { success: true, message: "Successfully cleaned Hazman (ORG002) data" }
+    } catch (error: any) {
+        console.error("Clean Hazman Error:", error)
+        return { success: false, error: error.message }
+    }
+}
+
+export async function wipeSystemData() {
+    try {
+        let supabase;
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (serviceRoleKey) {
+            supabase = createAdminClient()
+        } else {
+            // This is dangerous without service role, but for dev it might work if RLS allows
+            supabase = await createClient()
+        }
+
+        // Delete all operational data
+        // Transactions
+        await supabase.from('transactions').delete().neq('id', 0)
+        // Tenant Locations
+        await supabase.from('tenant_locations').delete().neq('id', 0)
+        // Tenants
+        await supabase.from('tenants').delete().neq('id', 0)
+        // Locations
+        await supabase.from('locations').delete().neq('id', 0)
+        // Organizers (Optional, but user said "delete all data")
+        // We usually keep the "Organizers" table for auth links, but "Clean Slate" usually means empty data.
+        // Let's delete organizers too. The Setup script re-creates them.
+        await supabase.from('organizers').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        revalidatePath('/dashboard')
+        revalidatePath('/admin')
+        revalidatePath('/setup')
+
+        return { success: true, message: "All system data wiped." }
+    } catch (error: any) {
+        console.error("Wipe Error:", error)
+        return { success: false, error: error.message }
+    }
+}

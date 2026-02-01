@@ -11,13 +11,26 @@ export default async function OrganizerDashboardPage() {
     const dashboardData = await fetchDashboardData()
     const locations = await fetchLocations()
 
-    const { tenants, overdueTenants, userProfile, role, user } = dashboardData
+    const { tenants, overdueTenants, userProfile, role, user, organizers } = dashboardData
 
     // Check Access
     const access = await checkAkaunAccess(user, role)
 
+    // Filter Data for "My View" (Personalized Dashboard)
+    // Even if Admin/Hybrid, show MY stats on dashboard to avoid clutter
+    const myOrg = organizers.find((o: any) => o.profile_id === user?.id)
+    const myOrgId = myOrg?.id
+    const myOrgCode = myOrg?.organizer_code
+
+    // If I have an organizer profile, filter. Otherwise show all (e.g. Superadmin)
+    const displayLocations = myOrgId ? locations.filter((l: any) => l.organizer_id === myOrgId) : locations
+
+    // For tenants, using organizer_code
+    const displayTenants = myOrgCode ? tenants.filter((t: any) => t.organizer_code === myOrgCode) : tenants
+    const displayOverdue = myOrgCode ? overdueTenants.filter((t: any) => t.organizer_code === myOrgCode) : overdueTenants
+
     const displayRole = "Penganjur"
-    const activeTenantsCount = tenants.filter((t: any) => t.status === 'active').length
+    const activeTenantsCount = displayTenants.filter((t: any) => t.status === 'active').length
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -58,7 +71,7 @@ export default async function OrganizerDashboardPage() {
                         Hai, <span className="text-primary italic">{userProfile?.full_name || "Penganjur"}</span>
                     </h1>
                     <p className="text-muted-foreground text-lg font-medium">
-                        Pantau lokasi dan penyewa di bawah seliaan anda.
+                        Selamat kembali ke papan pemuka anda.
                     </p>
                 </div>
                 <div className="hidden md:flex bg-white px-6 py-3 rounded-2xl text-primary font-bold border border-border/50 shadow-sm items-center gap-3 text-sm">
@@ -72,7 +85,7 @@ export default async function OrganizerDashboardPage() {
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary-foreground/80 font-medium text-xs uppercase tracking-wider">Lokasi Seliaan</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold">
-                            {locations.length}
+                            {displayLocations.length}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -88,7 +101,7 @@ export default async function OrganizerDashboardPage() {
                     <CardHeader className="pb-2">
                         <CardDescription className="font-medium text-xs uppercase tracking-wider">Peniaga Berdaftar</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold text-foreground">
-                            {tenants.length}
+                            {displayTenants.length}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -103,7 +116,7 @@ export default async function OrganizerDashboardPage() {
                     <CardHeader className="pb-2">
                         <CardDescription className="text-orange-800/70 font-medium text-xs uppercase tracking-wider">Tunggakan Peniaga</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold text-orange-700">
-                            {overdueTenants.length}
+                            {displayOverdue.length}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -125,9 +138,9 @@ export default async function OrganizerDashboardPage() {
                         </Link>
                     </div>
 
-                    {locations.length > 0 ? (
+                    {displayLocations.length > 0 ? (
                         <div className="grid grid-cols-1 gap-4">
-                            {locations.slice(0, 3).map((loc: any) => (
+                            {displayLocations.slice(0, 3).map((loc: any) => (
                                 <Card key={loc.id} className="bg-white border-border/50 shadow-sm hover:shadow-md transition-shadow">
                                     <CardContent className="p-4 flex justify-between items-center">
                                         <div>
@@ -159,9 +172,9 @@ export default async function OrganizerDashboardPage() {
                         </Link>
                     </div>
 
-                    {tenants.length > 0 ? (
+                    {displayTenants.length > 0 ? (
                         <div className="space-y-4">
-                            {tenants.slice(0, 4).map((t: any) => (
+                            {displayTenants.slice(0, 4).map((t: any) => (
                                 <div key={t.id} className="bg-white p-4 rounded-2xl border border-border/40 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
                                         <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
