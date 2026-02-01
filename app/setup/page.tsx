@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { Shield, User, Users, CheckCircle, AlertTriangle, Building, Wrench } from "lucide-react"
+import { clearAllSetupData } from "./actions"
+import { cn } from "@/lib/utils"
 
 export default function SetupPage() {
   const [loading, setLoading] = useState(false)
@@ -25,7 +27,9 @@ export default function SetupPage() {
     { email: "ahmad@permit.com", pass: "pass1234", role: "tenant", name: "Ahmad Albab", isTenant: true, business: "Ahmad Burger", phone: "0198765432" },
   ]
 
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(users.map(u => u.email))
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(
+    users.filter(u => u.role === 'admin' || u.role === 'staff').map(u => u.email)
+  )
 
   const toggleUser = (email: string) => {
     setSelectedUsers(prev =>
@@ -37,23 +41,16 @@ export default function SetupPage() {
     if (!confirm("⚠️ AMARAN: Ini akan memadam SEMUA data (Lokasi, Peniaga, Penganjur) kecuali Akaun Pengguna. Adakah anda pasti?")) return;
 
     setLoading(true);
-    addLog("🗑️ Clearing data...");
+    addLog("🗑️ Clearing data (Admin Mode)...");
     try {
-      // Delete dependent data first
-      const { error: e1 } = await supabase.from('tenant_locations').delete().neq('id', 0)
-      if (e1) addLog(`Error deleting rentals: ${e1.message}`)
-
-      const { error: e2 } = await supabase.from('tenants').delete().neq('id', 0)
-      if (e2) addLog(`Error deleting tenants: ${e2.message}`)
-
-      const { error: e3 } = await supabase.from('locations').delete().neq('id', 0)
-      if (e3) addLog(`Error deleting locations: ${e3.message}`)
-
-      const { error: e4 } = await supabase.from('organizers').delete().neq('id', 0)
-      if (e4) addLog(`Error deleting organizers: ${e4.message}`)
-
-      addLog("✅ Data Cleared (Blank Slate).");
-      toast.success("Data cleared successfully.");
+      const res = await clearAllSetupData()
+      if (res.success) {
+        addLog("✅ Data Cleared (Blank Slate).");
+        toast.success("Data cleared successfully.");
+      } else {
+        addLog(`❌ Error clearing: ${res.error}`);
+        toast.error(`Error: ${res.error}`)
+      }
     } catch (e: any) {
       addLog(`❌ Error clearing: ${e.message}`);
     } finally {
@@ -61,41 +58,7 @@ export default function SetupPage() {
     }
   }
 
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(users.map(u => u.email))
 
-  const toggleUser = (email: string) => {
-    setSelectedUsers(prev =>
-      prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
-    )
-  }
-
-  const clearData = async () => {
-    if (!confirm("⚠️ AMARAN: Ini akan memadam SEMUA data (Lokasi, Peniaga, Penganjur) kecuali Akaun Pengguna. Adakah anda pasti?")) return;
-
-    setLoading(true);
-    addLog("🗑️ Clearing data...");
-    try {
-      // Delete dependent data first
-      const { error: e1 } = await supabase.from('tenant_locations').delete().neq('id', 0)
-      if (e1) addLog(`Error deleting rentals: ${e1.message}`)
-
-      const { error: e2 } = await supabase.from('tenants').delete().neq('id', 0)
-      if (e2) addLog(`Error deleting tenants: ${e2.message}`)
-
-      const { error: e3 } = await supabase.from('locations').delete().neq('id', 0)
-      if (e3) addLog(`Error deleting locations: ${e3.message}`)
-
-      const { error: e4 } = await supabase.from('organizers').delete().neq('id', 0)
-      if (e4) addLog(`Error deleting organizers: ${e4.message}`)
-
-      addLog("✅ Data Cleared (Blank Slate).");
-      toast.success("Data cleared successfully.");
-    } catch (e: any) {
-      addLog(`❌ Error clearing: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const forceFixOrganizer = async () => {
     setLoading(true)
@@ -133,52 +96,6 @@ export default function SetupPage() {
       setLoading(false)
     }
   }
-
-  const runSetup = async () => {
-    setLoading(true)
-    setLogs([])
-    addLog("Starting setup...")
-
-    const targetUsers = users.filter(u => selectedUsers.includes(u.email))
-    if (targetUsers.length === 0) {
-      addLog("⚠️ No users selected.")
-      setLoading(false)
-      return
-    }
-
-    try {
-      for (const u of targetUsers) {
-        addLog(`Processing user: ${u.email}...`)
-
-        // 1. Sign Up
-        const { data, error } = await supabase.auth.signUp({
-          email: u.email,
-          password: u.pass,
-          options: {
-            data: { full_name: u.name }
-          }
-        })
-
-        if (error) {
-          addLog(`⚠️ Auth Note: ${error.message} (User might exist)`)
-        }
-
-        // ... remainder of loop logic specific to u ...
-        // Note: The rest of the setup logic needs to be inside the loop, 
-        // but since I'm only replacing up to the valid loop start, I need to ensure I don't break the existing loop structure.
-        // Wait, the ReplacementContent must connect cleanly. 
-        // The loop in existing code starts at line 71: `for (const u of users) {`
-        // I will replace from `const forceFixOrganizer` down to that loop start.
-
-        // Let's refine the TargetContent to match exactly.
-      }
-    } catch (e: any) {
-      // ...
-    }
-  }
-  // Wait, I cannot include the loop body here because I don't want to rewrite it all.
-  // I will use multi_replace to insert the state and update the loop.
-
 
   const runSetup = async () => {
     setLoading(true)
@@ -383,55 +300,48 @@ export default function SetupPage() {
                       u.role === 'organizer' ? <Building size={16} className="text-purple-500" /> :
                         u.role === 'staff' ? <User size={16} className="text-blue-500" /> :
                           <Users size={16} className="text-green-500" />}
-                      <p className="font-bold text-sm">{u.email}</p>
-                      <p className="text-xs text-muted-foreground">{u.name}</p>
-                    </div>
+                    <p className="font-bold text-sm">{u.email}</p>
+                    <p className="text-xs text-muted-foreground">{u.name}</p>
                   </div>
                   <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">{u.role}</span>
                 </div>
               ))}
+            </div>
+
+            <div className="bg-slate-900 rounded-xl p-4 text-xs font-mono text-green-400 h-full min-h-[200px] overflow-y-auto">
+              <p className="text-slate-500 border-b border-slate-800 pb-2 mb-2">System Logs...</p>
+              {logs.length === 0 && <p className="opacity-50 italic">Ready to start...</p>}
+              {logs.map((log, i) => (
+                <p key={i} className="mb-1">{log}</p>
+              ))}
+            </div>
           </div>
 
-          <div className="bg-slate-900 rounded-xl p-4 text-xs font-mono text-green-400 h-full min-h-[200px] overflow-y-auto">
-            <p className="text-slate-500 border-b border-slate-800 pb-2 mb-2">System Logs...</p>
-            {logs.length === 0 && <p className="opacity-50 italic">Ready to start...</p>}
-            {logs.map((log, i) => (
-              <p key={i} className="mb-1">{log}</p>
-            ))}
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={runSetup}
+              disabled={loading}
+              size="lg"
+              className="w-full text-lg font-bold h-14 shadow-lg shadow-primary/20"
+            >
+              {loading ? "Processing..." : "Run Full Setup & Seed Data"}
+            </Button>
+
+            <Button onClick={forceFixOrganizer} variant="outline" className="w-full">
+              <Wrench className="w-4 h-4 mr-2" /> Force Fix "organizer@permit.com" Role
+            </Button>
+
+            <Button
+              onClick={clearData}
+              variant="destructive"
+              disabled={loading}
+              className="w-full mt-4 border-red-200 bg-red-50 text-destructive hover:bg-red-100"
+            >
+              🗑️ Clear ALL Data (Start Fresh)
+            </Button>
+
+
           </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <Button
-            onClick={runSetup}
-            disabled={loading}
-            size="lg"
-            className="w-full text-lg font-bold h-14 shadow-lg shadow-primary/20"
-          >
-            {loading ? "Processing..." : "Run Full Setup & Seed Data"}
-          </Button>
-
-          <Wrench className="w-4 h-4 mr-2" /> Force Fix "organizer@permit.com" Role
-        </Button>
-
-        <Button
-          onClick={clearData}
-          variant="destructive"
-          disabled={loading}
-          className="w-full mt-4 border-red-200 bg-red-50 text-destructive hover:bg-red-100"
-        >
-          🗑️ Clear ALL Data (Start Fresh)
-        </Button>
-
-        <Button
-          onClick={clearData}
-          variant="destructive"
-          disabled={loading}
-          className="w-full mt-4 border-red-200 bg-red-50 text-destructive hover:bg-red-100"
-        >
-          🗑️ Clear ALL Data (Start Fresh)
-        </Button>
-    </div>
 
         </CardContent >
       </Card >

@@ -10,6 +10,7 @@ import { PaymentSettings } from "@/components/settings-toggle"
 export default async function AdminDashboardPage() {
     // ... no changes to data fetching ...
     const data = await fetchDashboardData()
+    const { role: currentUserRole } = data
     const supabase = await createClient()
 
     // Fetch Staff List
@@ -80,42 +81,45 @@ export default async function AdminDashboardPage() {
             </div>
 
             {/* Staff Management Section */}
-            <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                        <Shield className="w-5 h-5" /> Pengurusan Staf
-                    </h2>
-                </div>
+            {/* Staff Management Section - Hide for Staff */}
+            {currentUserRole !== 'staff' && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
+                            <Shield className="w-5 h-5" /> Pengurusan Staf
+                        </h2>
+                    </div>
 
-                <div className="bg-white border border-border/50 rounded-3xl overflow-hidden shadow-sm">
-                    <div className="p-6">
-                        {staffList && staffList.length > 0 ? (
-                            <div className="divide-y divide-border/30">
-                                {staffList.map((staff: any) => (
-                                    <div key={staff.id} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
-                                                {staff.email.charAt(0).toUpperCase()}
+                    <div className="bg-white border border-border/50 rounded-3xl overflow-hidden shadow-sm">
+                        <div className="p-6">
+                            {staffList && staffList.length > 0 ? (
+                                <div className="divide-y divide-border/30">
+                                    {staffList.map((staff: any) => (
+                                        <div key={staff.id} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
+                                                    {staff.email.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm">{staff.full_name || staff.email}</p>
+                                                    <p className="text-xs text-muted-foreground">{staff.email}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-sm">{staff.full_name || staff.email}</p>
-                                                <p className="text-xs text-muted-foreground">{staff.email}</p>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Aktif</span>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Aktif</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 text-muted-foreground">
-                                <p>Tiada staf didaftarkan lagi.</p>
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    <p>Tiada staf didaftarkan lagi.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }
