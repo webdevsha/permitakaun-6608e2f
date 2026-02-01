@@ -30,7 +30,7 @@ interface SidebarProps {
 }
 
 export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
-  const { role, signOut, user, isLoading } = useAuth()
+  const { role, signOut, user, profile, isLoading } = useAuth()
   const pathname = usePathname()
   const userRole = role || "tenant"
 
@@ -183,11 +183,11 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           isCollapsed ? "justify-center p-2 bg-transparent" : ""
         )}>
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm">
-            {user?.email?.charAt(0).toUpperCase() || "U"}
+            {(profile?.full_name || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
           </div>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold truncate text-foreground">{user?.email?.split('@')[0]}</p>
+              <p className="text-sm font-bold truncate text-foreground">{profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
               <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{userRole}</p>
             </div>
           )}

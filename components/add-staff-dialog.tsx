@@ -9,7 +9,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,39 +42,43 @@ export function AddStaffDialog() {
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button className="rounded-full text-xs font-bold bg-primary text-primary-foreground">
-                    <UserPlus className="w-3 h-3 mr-2" /> Tambah Staf
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-white border-border rounded-xl">
-                <DialogHeader>
-                    <DialogTitle className="font-serif">Tambah Staf Baru</DialogTitle>
-                    <DialogDescription>
-                        Cipta akaun untuk staf. Mereka boleh log masuk menggunakan emel ini.
-                    </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                        <Label htmlFor="fullName">Nama Penuh</Label>
-                        <Input id="fullName" name="fullName" placeholder="Ahmad Albab" required className="rounded-lg" />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="email">Emel</Label>
-                        <Input id="email" name="email" type="email" placeholder="staf@permit.com" required className="rounded-lg" />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="password">Kata Laluan Sementara</Label>
-                        <Input id="password" name="password" type="password" placeholder="******" required className="rounded-lg" />
-                    </div>
-                    <DialogFooter>
-                        <Button type="submit" disabled={loading} className="w-full rounded-lg">
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cipta Akaun"}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+        <>
+            <Button
+                onClick={() => setOpen(true)}
+                className="rounded-full text-xs font-bold bg-primary text-primary-foreground"
+            >
+                <UserPlus className="w-3 h-3 mr-2" /> Tambah Staf
+            </Button>
+
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="sm:max-w-[425px] bg-white border-border rounded-xl">
+                    <DialogHeader>
+                        <DialogTitle className="font-serif">Tambah Staf Baru</DialogTitle>
+                        <DialogDescription>
+                            Cipta akaun untuk staf. Mereka boleh log masuk menggunakan emel ini.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="fullName">Nama Penuh</Label>
+                            <Input id="fullName" name="fullName" placeholder="Ahmad Albab" required className="rounded-lg" />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="email">Emel</Label>
+                            <Input id="email" name="email" type="email" placeholder="staf@permit.com" required className="rounded-lg" />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="password">Kata Laluan Sementara</Label>
+                            <Input id="password" name="password" type="password" placeholder="******" required className="rounded-lg" />
+                        </div>
+                        <DialogFooter>
+                            <Button type="submit" disabled={loading} className="w-full rounded-lg">
+                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cipta Akaun"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+        </>
     )
 }

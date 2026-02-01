@@ -14,6 +14,7 @@ import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PaymentSettings } from "@/components/settings-toggle"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { clearAllSetupData } from "@/app/setup/actions"
 
 // Helper component defined outside to prevent re-renders causing focus loss
 const DataField = ({
@@ -210,6 +211,38 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     }
   }
 
+  const handleClearData = async () => {
+    if (!confirm("⚠️ AMARAN: Ini akan memadam SEMUA data (Lokasi, Peniaga, Penganjur) kecuali Akaun Pengguna. Data tidak boleh dikembalikan. Adakah anda pasti?")) return
+
+    setLoading(true)
+    try {
+      const res = await clearAllSetupData()
+      if (res.success) {
+        if (res.warning) {
+          toast.warning(res.warning, { duration: 6000 })
+        }
+
+        const counts = res.counts || { transactions: 0, rentals: 0, tenants: 0, locations: 0, organizers: 0 }
+        const totalDeleted = Object.values(counts).reduce((a, b) => a + b, 0)
+
+        if (totalDeleted === 0 && !res.warning) {
+          toast.info("Tiada data untuk dipadam.")
+        } else {
+          toast.success(`Berjaya memadam: ${counts.transactions} Transaksi, ${counts.organizers} Penganjur, ${counts.tenants} Peniaga, ${counts.locations} Lokasi, ${counts.rentals} Sewaan.`)
+        }
+
+        // Optional: refresh page or data
+        window.location.reload()
+      } else {
+        toast.error("Gagal memadam data: " + res.error)
+      }
+    } catch (e: any) {
+      toast.error("Ralat: " + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // --- USER MANAGEMENT (SUPERADMIN ONLY) ---
   const [usersList, setUsersList] = useState<any[]>([])
   const [loadingUsers, setLoadingUsers] = useState(false)
@@ -368,7 +401,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
             </TabsTrigger>
           )}
-          {(role === 'admin' || role === 'staff') && (
+          {(role === 'admin') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
             </TabsTrigger>
@@ -715,10 +748,33 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 )}
               </CardContent>
             </Card>
+
+            {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
+              <Card className="bg-red-50 border-red-100 shadow-sm rounded-[1.5rem] overflow-hidden">
+                <CardHeader>
+                  <CardTitle className="text-red-700 font-serif flex items-center gap-2">
+                    <Trash2 className="w-6 h-6" /> Zon Bahaya
+                  </CardTitle>
+                  <CardDescription className="text-red-600/80">
+                    Tindakan ini tidak boleh dikembalikan. Sila berhati-hati.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="destructive"
+                    onClick={handleClearData}
+                    disabled={loading}
+                    className="w-full sm:w-auto"
+                  >
+                    🗑️ Padam SEMUA Data (Reset Sistem)
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
 
-        {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+        {(role === 'superadmin' || role === 'admin') && (
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">

@@ -141,7 +141,26 @@ export async function fetchDashboardData() {
                 .select('*')
                 .eq('email', user.email)
                 .maybeSingle()
-            currentTenant = tenantByEmail
+
+            // If we found a tenant by email but it doesn't have profile_id linked,
+            // we should link it now to prevent future mismatches
+            if (tenantByEmail && !tenantByEmail.profile_id) {
+                const { error: updateError } = await supabase
+                    .from('tenants')
+                    .update({ profile_id: user.id })
+                    .eq('id', tenantByEmail.id)
+
+                if (!updateError) {
+                    // Successfully linked, update our local copy
+                    currentTenant = { ...tenantByEmail, profile_id: user.id }
+                } else {
+                    // If update failed, still use the tenant but log the issue
+                    console.warn('Failed to link tenant profile_id:', updateError)
+                    currentTenant = tenantByEmail
+                }
+            } else {
+                currentTenant = tenantByEmail
+            }
         }
 
         if (currentTenant) {

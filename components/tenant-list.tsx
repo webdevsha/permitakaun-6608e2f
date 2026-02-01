@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
 import { Badge } from "./ui/badge"
@@ -79,22 +79,29 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
    const [filterStatus, setFilterStatus] = useState("all")
    const [searchQuery, setSearchQuery] = useState("")
 
-   const tenants = (initialTenants || [])
-      .filter((t: any) => {
-         if (filterStatus === "active" && t.status !== "active") return false
-         if (filterStatus === "inactive" && t.status === "active") return false
-         if (searchQuery && !t.full_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false
-         return true
-      })
-      .sort((a: any, b: any) => {
-         if (a.status === 'active' && b.status !== 'active') return -1
-         if (a.status !== 'active' && b.status === 'active') return 1
-         return (a.full_name || "").localeCompare(b.full_name || "")
-      })
+   const tenants = useMemo(() => {
+      return (initialTenants || [])
+         .filter((t: any) => {
+            if (filterStatus === "active" && t.status !== "active") return false
+            if (filterStatus === "inactive" && t.status === "active") return false
+            if (searchQuery && !t.full_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false
+            return true
+         })
+         .sort((a: any, b: any) => {
+            if (a.status === 'active' && b.status !== 'active') return -1
+            if (a.status !== 'active' && b.status === 'active') return 1
+            const nameA = a.full_name?.toLowerCase() || ""
+            const nameB = b.full_name?.toLowerCase() || ""
+            if (nameA < nameB) return -1
+            if (nameA > nameB) return 1
+            return 0
+         })
+   }, [initialTenants, filterStatus, searchQuery])
 
    const mutate = () => window.location.reload()
 
    const [selectedTenant, setSelectedTenant] = useState<any>(null)
+   const [isDetailOpen, setIsDetailOpen] = useState(false)
    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
    // Dialog Data States
@@ -145,6 +152,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
 
    const handleViewTenant = async (tenant: any) => {
       setSelectedTenant(tenant)
+      setIsDetailOpen(true)
       setLoadingDetails(true)
 
       const { data: txData } = await supabase
@@ -419,140 +427,9 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                               </div>
                            </TableCell>
                            <TableCell className="text-right">
-                              <Dialog>
-                                 <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
-                                       <Eye size={16} />
-                                    </Button>
-                                 </DialogTrigger>
-                                 <DialogContent className="bg-white border-border sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-                                    <DialogHeader>
-                                       <DialogTitle className="text-2xl font-serif text-foreground">Maklumat Peniaga</DialogTitle>
-                                    </DialogHeader>
-                                    {selectedTenant && (
-                                       <div className="space-y-6 py-4">
-                                          {/* Header Profile */}
-                                          <div className="flex items-start gap-4 p-4 bg-secondary/10 rounded-2xl border border-border/50">
-                                             <div className="relative w-16 h-16 rounded-full overflow-hidden border border-border bg-white shrink-0">
-                                                {selectedTenant.profile_image_url ? <Image src={selectedTenant.profile_image_url} alt="Profile" fill className="object-cover" /> :
-                                                   <div className="w-full h-full flex items-center justify-center font-bold text-xl">{selectedTenant.full_name?.charAt(0)}</div>}
-                                             </div>
-                                             <div className="flex-1 grid grid-cols-2 gap-4 text-sm">
-                                                <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Nama Peniaga</p>
-                                                   <p className="font-bold">{selectedTenant.full_name}</p>
-                                                </div>
-                                                <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Perniagaan</p>
-                                                   <p className="font-medium">{selectedTenant.business_name}</p>
-                                                </div>
-                                                <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Telefon</p>
-                                                   <p className="font-mono">{selectedTenant.phone_number}</p>
-                                                </div>
-                                                <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Status Akaun (Gen)</p>
-                                                   <p className="font-mono">{selectedTenant.status}</p>
-                                                </div>
-                                                <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Status Module Akaun</p>
-                                                   <Badge variant={selectedTenant.accounting_status === 'active' ? 'default' : 'secondary'}>{selectedTenant.accounting_status || 'inactive'}</Badge>
-                                                </div>
-                                             </div>
-                                          </div>
-
-                                          {/* Document Attachments */}
-                                          <div>
-                                             <h3 className="font-bold text-foreground mb-3 flex items-center gap-2 text-sm">
-                                                <FileText className="w-4 h-4 text-primary" /> Dokumen Lampiran
-                                             </h3>
-                                             <div className="flex gap-2 flex-wrap">
-                                                {selectedTenant.ssm_file_url && (
-                                                   <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.ssm_file_url)}>
-                                                      <Building size={14} /> Sijil SSM
-                                                   </Badge>
-                                                )}
-                                                {selectedTenant.food_handling_cert_url && (
-                                                   <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.food_handling_cert_url)}>
-                                                      <Utensils size={14} /> Sijil Makanan
-                                                   </Badge>
-                                                )}
-                                                {selectedTenant.other_docs_url && (
-                                                   <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.other_docs_url)}>
-                                                      <FolderOpen size={14} /> Dokumen Lain
-                                                   </Badge>
-                                                )}
-                                                {!selectedTenant.ssm_file_url && !selectedTenant.food_handling_cert_url && !selectedTenant.other_docs_url && (
-                                                   <p className="text-xs text-muted-foreground italic">Tiada dokumen dilampirkan.</p>
-                                                )}
-                                             </div>
-                                          </div>
-
-                                          {/* Rental Management Section */}
-                                          <div>
-                                             <h3 className="font-bold text-foreground mb-3 flex items-center gap-2">
-                                                <Store className="w-4 h-4 text-primary" /> Pengurusan Tapak (Rentals)
-                                             </h3>
-                                             <div className="border border-border/50 rounded-xl overflow-hidden">
-                                                {loadingDetails ? <div className="p-4 text-center"><Loader2 className="animate-spin inline" /></div> :
-                                                   tenantRentals.length > 0 ? (
-                                                      <Table>
-                                                         <TableHeader className="bg-secondary/20">
-                                                            <TableRow className="h-10">
-                                                               <TableHead>Lokasi</TableHead>
-                                                               <TableHead>Jenis</TableHead>
-                                                               <TableHead className="w-[140px]">No. Petak</TableHead>
-                                                               <TableHead className="text-center w-[120px]">Status</TableHead>
-                                                            </TableRow>
-                                                         </TableHeader>
-                                                         <TableBody>
-                                                            {tenantRentals.map((rental) => (
-                                                               <TableRow key={rental.id}>
-                                                                  <TableCell className="font-medium">
-                                                                     {rental.locations?.name}
-                                                                     <span className="block text-[10px] text-muted-foreground">{rental.locations?.operating_days}</span>
-                                                                  </TableCell>
-                                                                  <TableCell className="capitalize text-xs">{rental.rate_type}</TableCell>
-                                                                  <TableCell>
-                                                                     <div className="flex items-center gap-1">
-                                                                        <Input
-                                                                           className="h-8 text-xs w-20 bg-white"
-                                                                           defaultValue={rental.stall_number || ""}
-                                                                           onBlur={(e) => handleSaveStall(rental.id, e.target.value)}
-                                                                           placeholder="A-01"
-                                                                        />
-                                                                     </div>
-                                                                  </TableCell>
-                                                                  <TableCell className="text-center">
-                                                                     <div className="flex justify-center items-center gap-2">
-                                                                        <Switch
-                                                                           checked={rental.status === 'active'}
-                                                                           onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status)}
-                                                                        />
-                                                                        <span className={cn("text-[10px] font-bold w-10 text-left", rental.status === 'active' ? "text-brand-green" : "text-amber-600")}>
-                                                                           {rental.status === 'active' ? 'Aktif' : 'Pend.'}
-                                                                        </span>
-                                                                     </div>
-                                                                  </TableCell>
-                                                               </TableRow>
-                                                            ))}
-                                                         </TableBody>
-                                                      </Table>
-                                                   ) : (
-                                                      <div className="p-4 text-center text-sm text-muted-foreground">Tiada tapak sewa.</div>
-                                                   )}
-                                             </div>
-                                          </div>
-
-                                          <div className="flex gap-3 pt-2">
-                                             <Button className="flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-bold" onClick={() => openWhatsApp(selectedTenant.phone_number)}>
-                                                <Phone className="mr-2 h-4 w-4" /> WhatsApp
-                                             </Button>
-                                          </div>
-                                       </div>
-                                    )}
-                                 </DialogContent>
-                              </Dialog>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
+                                 <Eye size={16} />
+                              </Button>
                            </TableCell>
                         </TableRow>
                      ))}
@@ -567,6 +444,137 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                </Table>
             </div>
          </CardContent>
+
+         {/* Global Detail Dialog */}
+         <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+            <DialogContent className="bg-white border-border sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+               <DialogHeader>
+                  <DialogTitle className="text-2xl font-serif text-foreground">Maklumat Peniaga</DialogTitle>
+               </DialogHeader>
+               {selectedTenant && (
+                  <div className="space-y-6 py-4">
+                     {/* Header Profile */}
+                     <div className="flex items-start gap-4 p-4 bg-secondary/10 rounded-2xl border border-border/50">
+                        <div className="relative w-16 h-16 rounded-full overflow-hidden border border-border bg-white shrink-0">
+                           {selectedTenant.profile_image_url ? <Image src={selectedTenant.profile_image_url} alt="Profile" fill className="object-cover" /> :
+                              <div className="w-full h-full flex items-center justify-center font-bold text-xl">{selectedTenant.full_name?.charAt(0)}</div>}
+                        </div>
+                        <div className="flex-1 grid grid-cols-2 gap-4 text-sm">
+                           <div>
+                              <p className="text-xs text-muted-foreground font-bold uppercase">Nama Peniaga</p>
+                              <p className="font-bold">{selectedTenant.full_name}</p>
+                           </div>
+                           <div>
+                              <p className="text-xs text-muted-foreground font-bold uppercase">Perniagaan</p>
+                              <p className="font-medium">{selectedTenant.business_name}</p>
+                           </div>
+                           <div>
+                              <p className="text-xs text-muted-foreground font-bold uppercase">Telefon</p>
+                              <p className="font-mono">{selectedTenant.phone_number}</p>
+                           </div>
+                           <div>
+                              <p className="text-xs text-muted-foreground font-bold uppercase">Status Akaun (Gen)</p>
+                              <p className="font-mono">{selectedTenant.status}</p>
+                           </div>
+                           <div>
+                              <p className="text-xs text-muted-foreground font-bold uppercase">Status Module Akaun</p>
+                              <Badge variant={selectedTenant.accounting_status === 'active' ? 'default' : 'secondary'}>{selectedTenant.accounting_status || 'inactive'}</Badge>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Document Attachments */}
+                     <div>
+                        <h3 className="font-bold text-foreground mb-3 flex items-center gap-2 text-sm">
+                           <FileText className="w-4 h-4 text-primary" /> Dokumen Lampiran
+                        </h3>
+                        <div className="flex gap-2 flex-wrap">
+                           {selectedTenant.ssm_file_url && (
+                              <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.ssm_file_url)}>
+                                 <Building size={14} /> Sijil SSM
+                              </Badge>
+                           )}
+                           {selectedTenant.food_handling_cert_url && (
+                              <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.food_handling_cert_url)}>
+                                 <Utensils size={14} /> Sijil Makanan
+                              </Badge>
+                           )}
+                           {selectedTenant.other_docs_url && (
+                              <Badge variant="outline" className="cursor-pointer hover:bg-secondary p-2 flex gap-2" onClick={() => window.open(selectedTenant.other_docs_url)}>
+                                 <FolderOpen size={14} /> Dokumen Lain
+                              </Badge>
+                           )}
+                           {!selectedTenant.ssm_file_url && !selectedTenant.food_handling_cert_url && !selectedTenant.other_docs_url && (
+                              <p className="text-xs text-muted-foreground italic">Tiada dokumen dilampirkan.</p>
+                           )}
+                        </div>
+                     </div>
+
+                     {/* Rental Management Section */}
+                     <div>
+                        <h3 className="font-bold text-foreground mb-3 flex items-center gap-2">
+                           <Store className="w-4 h-4 text-primary" /> Pengurusan Tapak (Rentals)
+                        </h3>
+                        <div className="border border-border/50 rounded-xl overflow-hidden">
+                           {loadingDetails ? <div className="p-4 text-center"><Loader2 className="animate-spin inline" /></div> :
+                              tenantRentals.length > 0 ? (
+                                 <Table>
+                                    <TableHeader className="bg-secondary/20">
+                                       <TableRow className="h-10">
+                                          <TableHead>Lokasi</TableHead>
+                                          <TableHead>Jenis</TableHead>
+                                          <TableHead className="w-[140px]">No. Petak</TableHead>
+                                          <TableHead className="text-center w-[120px]">Status</TableHead>
+                                       </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                       {tenantRentals.map((rental) => (
+                                          <TableRow key={rental.id}>
+                                             <TableCell className="font-medium">
+                                                {rental.locations?.name}
+                                                <span className="block text-[10px] text-muted-foreground">{rental.locations?.operating_days}</span>
+                                             </TableCell>
+                                             <TableCell className="capitalize text-xs">{rental.rate_type}</TableCell>
+                                             <TableCell>
+                                                <div className="flex items-center gap-1">
+                                                   <Input
+                                                      className="h-8 text-xs w-20 bg-white"
+                                                      defaultValue={rental.stall_number || ""}
+                                                      onBlur={(e) => handleSaveStall(rental.id, e.target.value)}
+                                                      placeholder="A-01"
+                                                   />
+                                                </div>
+                                             </TableCell>
+                                             <TableCell className="text-center">
+                                                <div className="flex justify-center items-center gap-2">
+                                                   <Switch
+                                                      checked={rental.status === 'active'}
+                                                      onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status)}
+                                                   />
+                                                   <span className={cn("text-[10px] font-bold w-10 text-left", rental.status === 'active' ? "text-brand-green" : "text-amber-600")}>
+                                                      {rental.status === 'active' ? 'Aktif' : 'Pend.'}
+                                                   </span>
+                                                </div>
+                                             </TableCell>
+                                          </TableRow>
+                                       ))}
+                                    </TableBody>
+                                 </Table>
+                              ) : (
+                                 <div className="p-4 text-center text-sm text-muted-foreground">Tiada tapak sewa.</div>
+                              )}
+                        </div>
+                     </div>
+
+                     <div className="flex gap-3 pt-2">
+                        <Button className="flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-bold" onClick={() => openWhatsApp(selectedTenant.phone_number)}>
+                           <Phone className="mr-2 h-4 w-4" /> WhatsApp
+                        </Button>
+                     </div>
+                  </div>
+               )}
+            </DialogContent>
+         </Dialog>
       </Card>
    )
 }

@@ -105,7 +105,23 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     total_lots: "50",
     rate_khemah: "0",
     rate_cbs: "0",
-    rate_monthly: "0"
+    rate_monthly: "0",
+    organizer_id: "" // Added organizer_id
+  })
+
+  // Admin: Fetch Organizers List
+  const [organizersList, setOrganizersList] = useState<any[]>([])
+
+  // Fetch Organizers on mount/access
+  // We can do this with a useEffect or SWR, but let's check current pattern.
+  // The component receives initialLocations.
+  // We'll add a useEffect to fetch organizers if admin.
+
+  useSWR('organizers-list', async () => {
+    if (role === 'admin' || role === 'superadmin' || role === 'staff') {
+      const { data } = await supabase.from('organizers').select('id, name, organizer_code').eq('status', 'active')
+      setOrganizersList(data || [])
+    }
   })
 
   const resetForm = () => {
@@ -119,7 +135,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       total_lots: "50",
       rate_khemah: "0",
       rate_cbs: "0",
-      rate_monthly: "0"
+      rate_monthly: "0",
+      organizer_id: ""
     })
     setIsEditMode(false)
   }
@@ -141,7 +158,10 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       total_lots: loc.total_lots?.toString() || "0",
       rate_khemah: loc.rate_khemah?.toString() || "0",
       rate_cbs: loc.rate_cbs?.toString() || "0",
-      rate_monthly: loc.rate_monthly?.toString() || "0"
+      rate_khemah: loc.rate_khemah?.toString() || "0",
+      rate_cbs: loc.rate_cbs?.toString() || "0",
+      rate_monthly: loc.rate_monthly?.toString() || "0",
+      organizer_id: loc.organizer_id?.toString() || ""
     })
     setIsEditMode(true)
     setIsDialogOpen(true)
@@ -164,7 +184,20 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         total_lots: parseInt(formData.total_lots) || 0,
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
+        rate_cbs: parseFloat(formData.rate_cbs) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
+        organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? parseInt(formData.organizer_id) : null
+      }
+
+      // Clean up null organizer_id if not admin (will be handled below for organizer role)
+      // But wait, update payload needs to be accurate.
+
+      if (role === 'organizer') {
+        // Organizer role overrides this later in insert, BUT for update it might be tricky.
+        // Let's handle it: 
+        // If organizer, we don't change organizer_id on update usually?
+        // Actually, if organizer, we ignore the payload.organizer_id 
+        delete payload.organizer_id
       }
 
       if (isEditMode && formData.id) {
@@ -181,7 +214,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
         const { error } = await supabase.from('locations').insert({
           ...payload,
-          organizer_id: organizerId
+          organizer_id: organizerId || payload.organizer_id // Use auto-detected or form-selected
         })
         if (error) throw error
         toast.success("Lokasi baru berjaya ditambah")
@@ -357,6 +390,28 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
               </DialogHeader>
 
               <div className="grid gap-4 py-4">
+                {/* Admin: Organizer Selector */}
+                {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
+                  <div className="grid gap-2">
+                    <Label>Penganjur</Label>
+                    <Select
+                      value={formData.organizer_id}
+                      onValueChange={(v) => setFormData({ ...formData, organizer_id: v })}
+                    >
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Pilih Penganjur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizersList.map(org => (
+                          <SelectItem key={org.id} value={org.id.toString()}>
+                            {org.name} ({org.organizer_code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="program_name">Nama Program</Label>
