@@ -38,6 +38,13 @@ export async function initiatePayment(params: {
     // Encode the path to return to after status page
     const nextPathEncoded = encodeURIComponent(params.redirectPath)
 
+    // Encode metadata if present (for subscription features)
+    let metadataQuery = ''
+    if (params.metadata) {
+        if (params.metadata.planType) metadataQuery += `&planType=${params.metadata.planType}`
+        if (params.metadata.isSubscription) metadataQuery += `&isSubscription=true`
+    }
+
     const callbackUrl = `${baseUrl}/api/payment/callback`
 
     let result;
@@ -51,7 +58,7 @@ export async function initiatePayment(params: {
                 amount: params.amount,
                 description: params.description,
                 // We append status=... so our page knows result immediately
-                redirectUrl: `${statusPageUrl}?gateway=chip-in&next=${nextPathEncoded}`
+                redirectUrl: `${statusPageUrl}?gateway=chip-in&next=${nextPathEncoded}${metadataQuery}`
             })
         } else {
             console.log("[Payment] Calling Billplz API...")
@@ -63,7 +70,7 @@ export async function initiatePayment(params: {
                 description: params.description,
                 callbackUrl: callbackUrl,
                 // Billplz will append data here
-                redirectUrl: `${statusPageUrl}?gateway=billplz&next=${nextPathEncoded}`
+                redirectUrl: `${statusPageUrl}?gateway=billplz&next=${nextPathEncoded}${metadataQuery}`
             })
         }
 

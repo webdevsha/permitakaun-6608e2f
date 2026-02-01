@@ -1,4 +1,3 @@
-"use client"
 
 import { useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -6,6 +5,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, XCircle, Loader2, ArrowLeft, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { activateSubscription } from "@/actions/subscription"
+import { toast } from "sonner"
 
 export default function PaymentStatusPage() {
     const searchParams = useSearchParams()
@@ -14,46 +15,84 @@ export default function PaymentStatusPage() {
     const [details, setDetails] = useState<any>({})
 
     useEffect(() => {
-        // 1. Check Gateway Source
-        const gateway = searchParams.get('gateway')
-        const nextPath = searchParams.get('next') || '/dashboard'
+        const verifyPayment = async () => {
+            // 1. Check Gateway Source
+            const gateway = searchParams.get('gateway')
+            const nextPath = searchParams.get('next') || '/dashboard'
 
-        if (gateway === 'chip-in') {
-            const result = searchParams.get('status')
-            // Chip-in might explicitly pass status via our custom redirect URL params
-            if (result === 'success') {
-                setStatus('success')
-                setDetails({
-                    id: searchParams.get('id'),
-                    message: 'Pembayaran Chip-In Berjaya'
-                })
-            } else {
-                setStatus('failure')
-                setDetails({
-                    message: 'Pembayaran Chip-In Gagal'
-                })
-            }
-        } else if (gateway === 'billplz') {
-            const paid = searchParams.get('billplz[paid]')
-            const id = searchParams.get('billplz[id]')
+            // Metadata Checks
+            const isSubscription = searchParams.get('isSubscription') === 'true'
+            const planType = searchParams.get('planType')
 
-            if (paid === 'true') {
-                setStatus('success')
-                setDetails({
-                    id: id,
-                    message: 'Pembayaran Billplz Berjaya'
-                })
+            if (gateway === 'chip-in') {
+                const result = searchParams.get('status')
+                // Chip-in might explicitly pass status via our custom redirect URL params
+                if (result === 'success') {
+                    if (isSubscription && planType) {
+                        try {
+                            await activateSubscription({
+                                transactionId: searchParams.get('id') || 'chip-in-txn',
+                                planType: planType,
+                                amount: 39, // Placeholder, should come from params or verification
+                                paymentRef: searchParams.get('id') || 'chip-in-ref'
+                            })
+                            toast.success("Langganan diaktifkan!")
+                        } catch (e) {
+                            console.error(e)
+                            toast.error("Gagal mengaktifkan langganan")
+                        }
+                    }
+
+                    setStatus('success')
+                    setDetails({
+                        id: searchParams.get('id'),
+                        message: 'Pembayaran Chip-In Berjaya'
+                    })
+                } else {
+                    setStatus('failure')
+                    setDetails({
+                        message: 'Pembayaran Chip-In Gagal'
+                    })
+                }
+            } else if (gateway === 'billplz') {
+                const paid = searchParams.get('billplz[paid]')
+                const id = searchParams.get('billplz[id]')
+
+                if (paid === 'true') {
+                    if (isSubscription && planType) {
+                        try {
+                            await activateSubscription({
+                                transactionId: id || 'billplz-txn',
+                                planType: planType,
+                                amount: 39,
+                                paymentRef: id || 'billplz-ref'
+                            })
+                            toast.success("Langganan diaktifkan!")
+                        } catch (e) {
+                            console.error(e)
+                            toast.error("Gagal mengaktifkan langganan")
+                        }
+                    }
+
+                    setStatus('success')
+                    setDetails({
+                        id: id,
+                        message: 'Pembayaran Billplz Berjaya'
+                    })
+                } else {
+                    setStatus('failure')
+                    setDetails({
+                        id: id,
+                        message: 'Pembayaran Dibatalkan / Gagal'
+                    })
+                }
             } else {
+                // Fallback or unknown
                 setStatus('failure')
-                setDetails({
-                    id: id,
-                    message: 'Pembayaran Dibatalkan / Gagal'
-                })
             }
-        } else {
-            // Fallback or unknown
-            setStatus('failure')
         }
+
+        verifyPayment()
 
     }, [searchParams])
 

@@ -64,7 +64,11 @@ export function SubscriptionPlans() {
       const result = await initiatePayment({
         amount: parseFloat(price),
         description: `Langganan Pelan ${planName}`,
-        redirectPath: '/dashboard'
+        redirectPath: '/dashboard',
+        metadata: {
+          planType: planName.toLowerCase().includes('premium') ? 'premium' : planName.toLowerCase().includes('standard') ? 'standard' : 'basic',
+          isSubscription: true
+        }
       })
 
       if (result.error) throw new Error(result.error)
@@ -97,8 +101,8 @@ export function SubscriptionPlans() {
           <Card
             key={plan.name}
             className={`relative rounded-[2rem] border-2 flex flex-col ${plan.popular
-                ? "border-primary shadow-xl scale-105 z-10 " + plan.color
-                : "border-border shadow-sm hover:shadow-md transition-shadow bg-white"
+              ? "border-primary shadow-xl scale-105 z-10 " + plan.color
+              : "border-border shadow-sm hover:shadow-md transition-shadow bg-white"
               }`}
           >
             {plan.popular && (

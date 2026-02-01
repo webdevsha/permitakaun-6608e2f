@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/client"
 import { getTrialPeriod } from "@/actions/settings"
+import { checkSubscriptionStatus } from "@/actions/subscription"
 
 export type AccessStatus = {
     hasAccess: boolean
@@ -27,7 +28,20 @@ export async function checkAkaunAccess(user: any, role: string): Promise<AccessS
         return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
     }
 
-    // Check Subscription (Placeholder - assume checking 'subscriptions' table)
-    // For now, if trial expired, denied.
+    // Check Subscription
+    // We need to fetch ID first. This is a bit heavy for a utility but necessary.
+    // Client-side optimizing: You should pass this status from a parent Server Component if possible.
+    // But for now we fetch.
+
+    // We can't easily get tenant_id here without querying. 
+    // This function is getting heavy.
+    const supabase = createClient()
+    const { data: tenant } = await supabase.from('tenants').select('id').eq('profile_id', user.id).single()
+
+    if (tenant) {
+        const hasSub = await checkSubscriptionStatus(tenant.id)
+        if (hasSub) return { hasAccess: true, reason: 'subscription_active' }
+    }
+
     return { hasAccess: false, reason: 'expired', daysRemaining: 0 }
 }
