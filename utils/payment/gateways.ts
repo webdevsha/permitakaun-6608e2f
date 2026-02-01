@@ -86,6 +86,8 @@ export async function createChipInPayment(params: {
         }
     })
 
+    // console.log("[Chip-In] Request:", url, body)
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -95,10 +97,19 @@ export async function createChipInPayment(params: {
         body
     })
 
-    const data = await response.json()
+    const responseText = await response.text()
+    console.log("[Chip-In] Raw Response:", responseText)
+
+    let data
+    try {
+        data = JSON.parse(responseText)
+    } catch (e) {
+        throw new Error(`Invalid JSON from Chip-In: ${responseText.substring(0, 100)}...`)
+    }
+
     if (!response.ok) {
-        console.error("Chip Error:", data)
-        throw new Error(`Chip-In Error: ${JSON.stringify(data)}`)
+        console.error("Chip Error Data:", data)
+        throw new Error(`Chip-In Error (${response.status}): ${JSON.stringify(data)}`)
     }
 
     return {

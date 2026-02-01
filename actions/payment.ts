@@ -20,9 +20,19 @@ export async function initiatePayment(params: {
     }
 
     // Dynamic Mode Check
-    const mode = await getPaymentMode()
+    let mode = 'sandbox'
+    try {
+        mode = await getPaymentMode()
+    } catch (e) {
+        console.error("Error fetching payment mode, defaulting to sandbox:", e)
+    }
 
-    // ... rest of logic ...
+    console.log(`[Payment] Initiating payment in ${mode} mode for ${user.email}`)
+    console.log(`[Payment] Config:`, {
+        billplzKey: PAYMENT_CONFIG.billplz.apiKey ? 'Set' : 'Missing',
+        chipKey: PAYMENT_CONFIG.chipIn.apiKey ? 'Set' : 'Missing'
+    })
+
     const fullRedirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${params.redirectPath}`
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payment/callback`
 
@@ -30,7 +40,7 @@ export async function initiatePayment(params: {
 
     try {
         if (mode === 'sandbox') {
-            // Use Chip-In
+            console.log("[Payment] Calling Chip-In API...")
             result = await createChipInPayment({
                 email: user.email,
                 amount: params.amount,
@@ -38,7 +48,7 @@ export async function initiatePayment(params: {
                 redirectUrl: fullRedirectUrl
             })
         } else {
-            // Use Billplz
+            console.log("[Payment] Calling Billplz API...")
             result = await createBillplzBill({
                 email: user.email,
                 name: user.user_metadata?.full_name || 'User',
@@ -49,6 +59,8 @@ export async function initiatePayment(params: {
             })
         }
 
+        console.log("[Payment] Result:", result)
+
         if (result && result.url) {
             // Optionally store the transaction in DB as 'pending' before redirecting
             // For now, we assume the redirect handles flow or we just return the URL
@@ -58,7 +70,7 @@ export async function initiatePayment(params: {
         }
 
     } catch (e: any) {
-        console.error("Payment Init Error:", e)
+        console.error("[Payment] Init Error:", e)
         return { error: e.message || "Ralat semasa memulakan pembayaran." }
     }
 }
