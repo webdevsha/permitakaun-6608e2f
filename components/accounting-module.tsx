@@ -171,16 +171,44 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 }
               }
 
-              const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
-              if (profile) {
-                const startDate = new Date(profile.created_at)
-                const now = new Date()
-                const diffTime = Math.abs(now.getTime() - startDate.getTime())
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+              // Check Organizer accounting_status (if organizer role)
+              if (currentRole === 'organizer') {
+                const { data: organizer } = await supabase
+                  .from('organizers')
+                  .select('accounting_status')
+                  .eq('id', user.id)
+                  .maybeSingle()
 
-                if (diffDays > settings.trial_duration_days) {
-                  accessGranted = false
-                  denyReason = 'trial_expired'
+                if (organizer && organizer.accounting_status === 'active') {
+                  accessGranted = true
+                } else {
+                  // Fall back to trial duration check
+                  const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+                  if (profile) {
+                    const startDate = new Date(profile.created_at)
+                    const now = new Date()
+                    const diffTime = Math.abs(now.getTime() - startDate.getTime())
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+                    if (diffDays > settings.trial_duration_days) {
+                      accessGranted = false
+                      denyReason = 'trial_expired'
+                    }
+                  }
+                }
+              } else {
+                // For Staff/Admin, check trial duration only
+                const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+                if (profile) {
+                  const startDate = new Date(profile.created_at)
+                  const now = new Date()
+                  const diffTime = Math.abs(now.getTime() - startDate.getTime())
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+                  if (diffDays > settings.trial_duration_days) {
+                    accessGranted = false
+                    denyReason = 'trial_expired'
+                  }
                 }
               }
             }
@@ -259,18 +287,39 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // FINANCIAL CALCULATION ENGINE
   // ------------------------------------------------------------------
 
+  // PERSPECTIVE TRANSFORMATION: Convert transactions to viewer's perspective
+  // Transactions are stored from payer's perspective, but calculations need viewer's perspective
+  const viewerTenantIds = tenants
+    ?.filter((t: any) => t.profile_id === user?.id)
+    .map((t: any) => t.id) || []
+
+  const perspectiveTransactions = transactions?.map((t: any) => {
+    // Is the viewer the payer of this transaction?
+    const viewerIsPayer = viewerTenantIds.includes(t.tenant_id)
+
+    // If viewer is NOT the payer but sees a rent payment, flip the perspective
+    if (!viewerIsPayer && t.category === 'Sewa') {
+      return {
+        ...t,
+        type: t.type === 'expense' ? 'income' : 'expense' // Flip for recipient
+      }
+    }
+
+    return t // Keep as-is for viewer's own transactions
+  }) || []
+
   // 1. Paid Up Capital (Modal)
-  const totalCapital = transactions
+  const totalCapital = perspectiveTransactions
     ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category === 'Modal')
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
   // 2. Operating Revenue (Income excluding Modal)
-  const operatingRevenue = transactions
+  const operatingRevenue = perspectiveTransactions
     ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category !== 'Modal')
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
   // 3. Total Expenses
-  const totalExpenses = transactions
+  const totalExpenses = perspectiveTransactions
     ?.filter((t: any) => t.type === 'expense' && t.status === 'approved')
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
@@ -893,6 +942,31 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     <TableBody>
                       {displayedTransactions?.map((transaction: any) => {
                         const receipt = transaction.receipt_url
+
+                        // PERSPECTIVE LOGIC: Determine if viewer is the payer or recipient
+                        // Transactions are stored from PAYER's perspective (tenant_id = payer)
+                        // But we need to show from VIEWER's perspective
+
+                        // Find viewer's tenant ID(s)
+                        const viewerTenantIds = tenants
+                          ?.filter((t: any) => t.profile_id === user?.id)
+                          .map((t: any) => t.id) || []
+
+                        // Is the viewer the payer of this transaction?
+                        const viewerIsPayer = viewerTenantIds.includes(transaction.tenant_id)
+
+                        // Determine display type and sign
+                        let displayType = transaction.type
+                        let displaySign = transaction.type === 'income' ? '+' : '-'
+
+                        if (!viewerIsPayer && transaction.category === 'Sewa') {
+                          // Viewer is NOT the payer, but sees this rent payment
+                          // This means viewer is the RECIPIENT (organizer)
+                          // Flip the perspective: payer's expense = recipient's income
+                          displayType = transaction.type === 'expense' ? 'income' : 'expense'
+                          displaySign = displayType === 'income' ? '+' : '-'
+                        }
+
                         return (
                           <TableRow
                             key={transaction.id}
@@ -919,9 +993,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               </div>
                             </TableCell>
                             <TableCell
-                              className={`text-right font-bold text-lg ${transaction.type === "income" ? "text-brand-green" : "text-red-500"}`}
+                              className={`text-right font-bold text-lg ${displayType === "income" ? "text-brand-green" : "text-red-500"}`}
                             >
-                              {transaction.type === "income" ? "+" : "-"} RM {Number(transaction.amount).toFixed(2)}
+                              {displaySign} RM {Number(transaction.amount).toFixed(2)}
                             </TableCell>
                             <TableCell className="text-center">
                               {receipt ? (

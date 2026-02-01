@@ -158,8 +158,6 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       total_lots: loc.total_lots?.toString() || "0",
       rate_khemah: loc.rate_khemah?.toString() || "0",
       rate_cbs: loc.rate_cbs?.toString() || "0",
-      rate_khemah: loc.rate_khemah?.toString() || "0",
-      rate_cbs: loc.rate_cbs?.toString() || "0",
       rate_monthly: loc.rate_monthly?.toString() || "0",
       organizer_id: loc.organizer_id?.toString() || ""
     })
@@ -184,20 +182,17 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         total_lots: parseInt(formData.total_lots) || 0,
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
-        rate_cbs: parseFloat(formData.rate_cbs) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
-        organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? parseInt(formData.organizer_id) : null
+        organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null
       }
 
       // Clean up null organizer_id if not admin (will be handled below for organizer role)
       // But wait, update payload needs to be accurate.
 
       if (role === 'organizer') {
-        // Organizer role overrides this later in insert, BUT for update it might be tricky.
-        // Let's handle it: 
-        // If organizer, we don't change organizer_id on update usually?
-        // Actually, if organizer, we ignore the payload.organizer_id 
-        delete payload.organizer_id
+        // Organizer role: remove organizer_id from payload (will be set automatically)
+        const { organizer_id, ...rest } = payload
+        Object.assign(payload, rest)
       }
 
       if (isEditMode && formData.id) {
