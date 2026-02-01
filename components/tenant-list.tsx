@@ -76,18 +76,26 @@ const fetchTenants = async () => {
 }
 
 export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
-   const tenants = (initialTenants || []).sort((a: any, b: any) => {
-      // 1. Sort by Status (Active first)
-      if (a.status === 'active' && b.status !== 'active') return -1
-      if (a.status !== 'active' && b.status === 'active') return 1
+   const [filterStatus, setFilterStatus] = useState("all")
+   const [searchQuery, setSearchQuery] = useState("")
 
-      // 2. Sort by Name (Alphabetical)
-      return (a.full_name || "").localeCompare(b.full_name || "")
-   })
-   // const isLoading = false // Data now comes from server
-   const mutate = () => window.location.reload() // Simple reload for updates
+   const tenants = (initialTenants || [])
+      .filter((t: any) => {
+         if (filterStatus === "active" && t.status !== "active") return false
+         if (filterStatus === "inactive" && t.status === "active") return false
+         if (searchQuery && !t.full_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false
+         return true
+      })
+      .sort((a: any, b: any) => {
+         if (a.status === 'active' && b.status !== 'active') return -1
+         if (a.status !== 'active' && b.status === 'active') return 1
+         return (a.full_name || "").localeCompare(b.full_name || "")
+      })
+
+   const mutate = () => window.location.reload()
 
    const [selectedTenant, setSelectedTenant] = useState<any>(null)
+   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
    // Dialog Data States
    const [tenantTransactions, setTenantTransactions] = useState<any[]>([])
@@ -139,7 +147,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setSelectedTenant(tenant)
       setLoadingDetails(true)
 
-      // 1. Fetch Transactions
       const { data: txData } = await supabase
          .from('transactions')
          .select('*')
@@ -147,7 +154,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
          .order('date', { ascending: false })
       setTenantTransactions(txData || [])
 
-      // 2. Fetch Rentals (Locations)
       const { data: rentalData } = await supabase
          .from('tenant_locations')
          .select('*, locations(*)')
@@ -158,7 +164,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setLoadingDetails(false)
    }
 
-   // Admin: Toggle Tenant Account Status
    const handleTenantStatusChange = async (tenantId: number, newStatus: string) => {
       setIsUpdating(true)
       try {
@@ -173,14 +178,26 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
-   // Admin: Toggle Individual Rental Location Status
+   const handleAccountingStatusChange = async (tenantId: number, newAcctStatus: string) => {
+      setIsUpdating(true)
+      try {
+         // Note: 'accounting_status' column must exist
+         const { error } = await supabase.from('tenants').update({ accounting_status: newAcctStatus }).eq('id', tenantId)
+         if (error) throw error
+         toast.success(`Akses akaun dikemaskini ke ${newAcctStatus}`)
+         mutate()
+      } catch (err: any) {
+         toast.error(err.message)
+      } finally {
+         setIsUpdating(false)
+      }
+   }
+
    const handleRentalStatusChange = async (rentalId: number, currentStatus: string) => {
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
       try {
          const { error } = await supabase.from('tenant_locations').update({ status: newStatus }).eq('id', rentalId)
          if (error) throw error
-
-         // Update local state to reflect change immediately
          setTenantRentals(prev => prev.map(r => r.id === rentalId ? { ...r, status: newStatus } : r))
          toast.success("Status tapak dikemaskini")
       } catch (e: any) {
@@ -188,7 +205,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
-   // Admin: Save Stall Number
    const handleSaveStall = async (rentalId: number, stallNumber: string) => {
       try {
          const { error } = await supabase.from('tenant_locations').update({ stall_number: stallNumber }).eq('id', rentalId)
@@ -204,50 +220,121 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       window.open(`https://wa.me/${phone.replace(/\D/g, '')}`, "_blank")
    }
 
-   // if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>
+   // Bulk Actions
+   const toggleSelectAll = () => {
+      if (selectedIds.size === tenants.length) {
+         setSelectedIds(new Set())
+      } else {
+         setSelectedIds(new Set(tenants.map((t: any) => t.id)))
+      }
+   }
+
+   const toggleSelection = (id: number) => {
+      const newSet = new Set(selectedIds)
+      if (newSet.has(id)) newSet.delete(id)
+      else newSet.add(id)
+      setSelectedIds(newSet)
+   }
+
+   const handleBulkAction = async (action: 'general_active' | 'general_inactive' | 'accounting_active' | 'accounting_inactive') => {
+      if (selectedIds.size === 0) return
+      if (!confirm(`Anda pasti mahu mengemaskini ${selectedIds.size} peniaga?`)) return
+
+      setIsUpdating(true)
+      try {
+         const ids = Array.from(selectedIds)
+         let updateData = {}
+         if (action === 'general_active') updateData = { status: 'active' }
+         if (action === 'general_inactive') updateData = { status: 'inactive' }
+         if (action === 'accounting_active') updateData = { accounting_status: 'active' }
+         if (action === 'accounting_inactive') updateData = { accounting_status: 'inactive' }
+
+         const { error } = await supabase.from('tenants').update(updateData).in('id', ids)
+         if (error) throw error
+
+         toast.success("Bulk update berjaya!")
+         mutate()
+         setSelectedIds(new Set())
+      } catch (e: any) {
+         toast.error("Bulk update gagal: " + e.message)
+      } finally {
+         setIsUpdating(false)
+      }
+   }
 
    return (
       <Card className="border-border/50 shadow-sm bg-white">
          <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <div>
                   <CardTitle className="font-serif text-2xl text-foreground">Pengurusan Peniaga & Sewa</CardTitle>
                   <CardDescription>Senarai peniaga aktif dan status pembayaran sewa terkini</CardDescription>
                </div>
-               <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                  <DialogTrigger asChild>
-                     <Button className="bg-primary text-white shadow-md rounded-xl"><Plus className="mr-2 w-4 h-4" /> Tambah Peniaga</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                     <DialogHeader>
-                        <DialogTitle>Daftar Peniaga Manual</DialogTitle>
-                        <DialogDescription>Pendaftaran pantas untuk peniaga baru</DialogDescription>
-                     </DialogHeader>
-                     <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                           <Label>Nama Penuh</Label>
-                           <Input value={newTenant.name} onChange={e => setNewTenant({ ...newTenant, name: e.target.value })} />
-                        </div>
-                        <div className="space-y-2">
-                           <Label>Nama Perniagaan</Label>
-                           <Input value={newTenant.business} onChange={e => setNewTenant({ ...newTenant, business: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+               <div className="flex gap-2">
+                  <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                     <DialogTrigger asChild>
+                        <Button className="bg-primary text-white shadow-md rounded-xl"><Plus className="mr-2 w-4 h-4" /> Tambah Peniaga</Button>
+                     </DialogTrigger>
+                     <DialogContent>
+                        <DialogHeader>
+                           <DialogTitle>Daftar Peniaga Manual</DialogTitle>
+                           <DialogDescription>Pendaftaran pantas untuk peniaga baru</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
                            <div className="space-y-2">
-                              <Label>No. Telefon</Label>
-                              <Input value={newTenant.phone} onChange={e => setNewTenant({ ...newTenant, phone: e.target.value })} placeholder="012..." />
+                              <Label>Nama Penuh</Label>
+                              <Input value={newTenant.name} onChange={e => setNewTenant({ ...newTenant, name: e.target.value })} />
                            </div>
                            <div className="space-y-2">
-                              <Label>Emel (Pilihan)</Label>
-                              <Input value={newTenant.email} onChange={e => setNewTenant({ ...newTenant, email: e.target.value })} />
+                              <Label>Nama Perniagaan</Label>
+                              <Input value={newTenant.business} onChange={e => setNewTenant({ ...newTenant, business: e.target.value })} />
+                           </div>
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                 <Label>No. Telefon</Label>
+                                 <Input value={newTenant.phone} onChange={e => setNewTenant({ ...newTenant, phone: e.target.value })} placeholder="012..." />
+                              </div>
+                              <div className="space-y-2">
+                                 <Label>Emel (Pilihan)</Label>
+                                 <Input value={newTenant.email} onChange={e => setNewTenant({ ...newTenant, email: e.target.value })} />
+                              </div>
                            </div>
                         </div>
-                     </div>
-                     <DialogFooter>
-                        <Button onClick={handleAddTenant} disabled={addingTenant}>Simpan</Button>
-                     </DialogFooter>
-                  </DialogContent>
-               </Dialog>
+                        <DialogFooter>
+                           <Button onClick={handleAddTenant} disabled={addingTenant}>Simpan</Button>
+                        </DialogFooter>
+                     </DialogContent>
+                  </Dialog>
+               </div>
+            </div>
+
+            {/* Filters & Bulk Actions */}
+            <div className="flex flex-col md:flex-row gap-4 mt-4 items-center justify-between bg-secondary/10 p-3 rounded-xl border border-border/50">
+               <div className="flex items-center gap-2 w-full md:w-auto">
+                  <Input
+                     placeholder="Cari nama..."
+                     className="h-9 w-full md:w-[200px] bg-white"
+                     value={searchQuery}
+                     onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <select
+                     className="h-9 rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm md:w-[150px]"
+                     value={filterStatus}
+                     onChange={(e) => setFilterStatus(e.target.value)}
+                  >
+                     <option value="all">Semua Status</option>
+                     <option value="active">Aktif Sahaja</option>
+                     <option value="inactive">Tidak Aktif</option>
+                  </select>
+               </div>
+
+               {selectedIds.size > 0 && (
+                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                     <span className="text-xs font-bold text-muted-foreground mr-2">{selectedIds.size} dipilih</span>
+                     <Button size="sm" variant="outline" onClick={() => handleBulkAction('general_active')} disabled={isUpdating}>Set Aktif (Umum)</Button>
+                     <Button size="sm" variant="outline" onClick={() => handleBulkAction('accounting_active')} disabled={isUpdating}>Set Akaun ON</Button>
+                  </div>
+               )}
             </div>
          </CardHeader>
          <CardContent>
@@ -255,16 +342,32 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                <Table>
                   <TableHeader className="bg-secondary/20">
                      <TableRow className="border-border/50">
+                        <TableHead className="w-[40px]">
+                           <input
+                              type="checkbox"
+                              className="accent-primary w-4 h-4"
+                              checked={tenants.length > 0 && selectedIds.size === tenants.length}
+                              onChange={toggleSelectAll}
+                           />
+                        </TableHead>
                         <TableHead className="text-foreground font-bold">Nama Peniaga</TableHead>
                         <TableHead className="text-foreground font-bold">Lokasi Tapak</TableHead>
-                        <TableHead className="text-foreground font-bold">Bayaran Terakhir</TableHead>
-                        <TableHead className="text-foreground font-bold text-center">Status Akaun</TableHead>
+                        <TableHead className="text-foreground font-bold text-center">Status Umum</TableHead>
+                        <TableHead className="text-foreground font-bold text-center">Module Akaun</TableHead>
                         <TableHead className="text-right text-foreground font-bold">Tindakan</TableHead>
                      </TableRow>
                   </TableHeader>
                   <TableBody>
                      {tenants?.map((tenant: any) => (
                         <TableRow key={tenant.id} className="border-border/30 hover:bg-secondary/10 transition-colors">
+                           <TableCell>
+                              <input
+                                 type="checkbox"
+                                 className="accent-primary w-4 h-4"
+                                 checked={selectedIds.has(tenant.id)}
+                                 onChange={() => toggleSelection(tenant.id)}
+                              />
+                           </TableCell>
                            <TableCell>
                               <div className="flex items-center gap-3">
                                  {tenant.profile_image_url ? (
@@ -292,10 +395,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                  ))}
                               </div>
                            </TableCell>
-                           <TableCell className="text-sm">
-                              {tenant.lastPaymentDate}
-                              {tenant.lastPaymentAmount > 0 && <span className="block text-xs text-muted-foreground">RM {tenant.lastPaymentAmount}</span>}
-                           </TableCell>
                            <TableCell className="text-center">
                               <div className="flex justify-center items-center gap-2">
                                  <Switch
@@ -303,7 +402,20 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                     onCheckedChange={() => handleTenantStatusChange(tenant.id, tenant.status === 'active' ? 'inactive' : 'active')}
                                     disabled={isUpdating}
                                  />
-                                 <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">{tenant.status}</span>
+                                 <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">{tenant.status === 'active' ? 'Aktif' : 'Pasif'}</span>
+                              </div>
+                           </TableCell>
+                           <TableCell className="text-center">
+                              <div className="flex justify-center items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100">
+                                 <Switch
+                                    checked={tenant.accounting_status === 'active'}
+                                    onCheckedChange={() => handleAccountingStatusChange(tenant.id, tenant.accounting_status === 'active' ? 'inactive' : 'active')}
+                                    disabled={isUpdating}
+                                    className="data-[state=checked]:bg-blue-600"
+                                 />
+                                 <span className={cn("text-[10px] uppercase font-bold w-10 text-left", tenant.accounting_status === 'active' ? "text-blue-600" : "text-slate-400")}>
+                                    {tenant.accounting_status === 'active' ? 'ON' : 'OFF'}
+                                 </span>
                               </div>
                            </TableCell>
                            <TableCell className="text-right">
@@ -339,12 +451,12 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                                    <p className="font-mono">{selectedTenant.phone_number}</p>
                                                 </div>
                                                 <div>
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">No. SSM</p>
-                                                   <p className="font-mono">{selectedTenant.ssm_number || "-"}</p>
+                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Status Akaun (Gen)</p>
+                                                   <p className="font-mono">{selectedTenant.status}</p>
                                                 </div>
-                                                <div className="col-span-2">
-                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Alamat</p>
-                                                   <p className="text-sm">{selectedTenant.address || "-"}</p>
+                                                <div>
+                                                   <p className="text-xs text-muted-foreground font-bold uppercase">Status Module Akaun</p>
+                                                   <Badge variant={selectedTenant.accounting_status === 'active' ? 'default' : 'secondary'}>{selectedTenant.accounting_status || 'inactive'}</Badge>
                                                 </div>
                                              </div>
                                           </div>
@@ -432,31 +544,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                              </div>
                                           </div>
 
-                                          {/* Transaction History */}
-                                          <div>
-                                             <h3 className="font-bold text-foreground mb-3 flex items-center gap-2">
-                                                <Calendar className="w-4 h-4 text-primary" /> Sejarah Transaksi
-                                             </h3>
-                                             <div className="border border-border/50 rounded-xl overflow-hidden max-h-[200px] overflow-y-auto">
-                                                {tenantTransactions.length > 0 ? (
-                                                   <Table>
-                                                      <TableHeader className="bg-secondary/20">
-                                                         <TableRow className="h-8"><TableHead className="text-xs">Tarikh</TableHead><TableHead className="text-xs">Ket.</TableHead><TableHead className="text-xs text-right">RM</TableHead></TableRow>
-                                                      </TableHeader>
-                                                      <TableBody>
-                                                         {tenantTransactions.map(tx => (
-                                                            <TableRow key={tx.id} className="h-9">
-                                                               <TableCell className="text-xs font-mono">{tx.date}</TableCell>
-                                                               <TableCell className="text-xs">{tx.description}</TableCell>
-                                                               <TableCell className="text-xs text-right font-bold">{tx.amount}</TableCell>
-                                                            </TableRow>
-                                                         ))}
-                                                      </TableBody>
-                                                   </Table>
-                                                ) : <div className="p-4 text-center text-xs text-muted-foreground">Tiada rekod.</div>}
-                                             </div>
-                                          </div>
-
                                           <div className="flex gap-3 pt-2">
                                              <Button className="flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-bold" onClick={() => openWhatsApp(selectedTenant.phone_number)}>
                                                 <Phone className="mr-2 h-4 w-4" /> WhatsApp
@@ -471,7 +558,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                      ))}
                      {tenants?.length === 0 && (
                         <TableRow>
-                           <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                           <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                               Tiada peniaga dijumpai.
                            </TableCell>
                         </TableRow>

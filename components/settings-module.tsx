@@ -604,7 +604,8 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                             usr.role === 'admin' ? "bg-red-50 text-red-600 border-red-100" :
                               usr.role === 'staff' ? "bg-blue-50 text-blue-600 border-blue-100" :
                                 usr.role === 'organizer' ? "bg-purple-50 text-purple-600 border-purple-100" :
-                                  "bg-green-50 text-green-600 border-green-100"
+                                  usr.role === 'superadmin' ? "bg-zinc-800 text-white border-zinc-700" :
+                                    "bg-green-50 text-green-600 border-green-100"
                           )}>
                             {usr.role}
                           </span>
@@ -615,12 +616,13 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                               className="text-xs border rounded p-1"
                               value={usr.role}
                               onChange={(e) => handleUpdateRole(usr.id, e.target.value)}
-                              disabled={usr.email === 'admin@permit.com'} // Protect main admin
+                              disabled={usr.email === 'admin@permit.com' || (usr.role === 'superadmin' && usr.email === 'rafisha92@gmail.com')}
                             >
                               <option value="tenant">Tenant</option>
                               <option value="organizer">Organizer</option>
                               <option value="staff">Staff</option>
                               <option value="admin">Admin</option>
+                              <option value="superadmin">Superadmin</option>
                             </select>
                           </div>
                         </TableCell>
@@ -628,6 +630,18 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                     ))}
                   </TableBody>
                 </Table>
+
+                {/* Role Legend */}
+                <div className="p-4 bg-slate-50 border-t border-border/30 text-xs text-muted-foreground">
+                  <p className="font-bold mb-2">Panduan Peranan (Role):</p>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> <b>Tenant</b>: Peniaga/Penyewa. Akses terhad kepada dashboard sewa & akaun.</li>
+                    <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span> <b>Organizer</b>: Penganjur tapak. Menguruskan peniaga di bawah mereka.</li>
+                    <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> <b>Staff</b>: Membantu Admin. Akses membaca data, tidak boleh ubah tetapan kritikal.</li>
+                    <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500"></span> <b>Admin</b>: Pentadbir Utama Sistem. Akses penuh kecuali module Superadmin.</li>
+                    <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-zinc-800"></span> <b>Superadmin</b>: Developer/Owner. Akses ke database keys, user roles, dan server cache.</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
 
@@ -665,7 +679,7 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           </TabsContent>
         )}
       </Tabs>
-    </div>
+    </div >
   )
 }
 // Settings Module Component Verification
