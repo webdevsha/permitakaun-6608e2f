@@ -16,7 +16,8 @@ BEGIN
     ) VALUES (
       NEW.tenant_id,
       NEW.amount,
-      'income',
+      NEW.amount,
+      'expense', -- Corrected: Rent payment is an EXPENSE for the tenant
       'Sewa', -- Default category for payments
       'approved',
       COALESCE(NEW.payment_date, CURRENT_DATE),

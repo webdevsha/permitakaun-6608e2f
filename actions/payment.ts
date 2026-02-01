@@ -78,30 +78,31 @@ export async function initiatePayment(params: {
         console.log("[Payment] Result:", result)
 
         if (result && result.url) {
-            // Fetch Tenant ID
+            // Fetch Tenant ID and Organizer Code
             const { data: tenant } = await supabase
                 .from('tenants')
-                .select('id')
+                .select('id, organizer_code')
                 .eq('profile_id', user.id)
                 .single()
 
             if (tenant) {
-                // Insert Pending Transaction
-                const { error: txError } = await supabase.from('transactions').insert({
+                // Insert Pending Payment Record into tenant_payments
+                // The 'transactions' record will be created automatically by the DB trigger upon approval.
+                const { error: txError } = await supabase.from('tenant_payments').insert({
                     tenant_id: tenant.id,
-                    date: new Date().toISOString(),
+                    organizer_code: tenant.organizer_code, // Store Organizer Code
+                    payment_date: new Date().toISOString(),
                     amount: params.amount,
-                    type: 'expense', // From tenant perspective
-                    category: 'Sewa',
-                    description: `${params.description} (Ref: ${result.id})`,
                     status: 'pending',
-                    receipt_url: result.url, // Store payment link
+                    payment_method: 'billplz',
+                    billplz_id: result.id, // Store Billplz ID for verification
+                    receipt_url: result.url // Store payment link
                 })
 
                 if (txError) {
-                    console.error("[Payment] Failed to record pending tx:", txError)
+                    console.error("[Payment] Failed to record pending payment:", txError)
                 } else {
-                    console.log("[Payment] Recorded pending transaction.")
+                    console.log("[Payment] Recorded pending payment to tenant_payments.")
                 }
             }
 
