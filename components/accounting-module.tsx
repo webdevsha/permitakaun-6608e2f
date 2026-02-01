@@ -159,19 +159,36 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
           accessGranted = false
           denyReason = 'locked'
         } else {
-          // Check Trial
-          // Assuming 'created_at' on user profile denotes start time
-          // If no profile, we assume active for now (or locked, safer to be permissible for test)
-          const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user?.id).single()
-          if (profile) {
-            const startDate = new Date(profile.created_at)
-            const now = new Date()
-            const diffTime = Math.abs(now.getTime() - startDate.getTime())
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          // Module Active Check
+          if (currentRole === 'tenant') {
+            // Tenant: Check specific "Akaun Status" (mapped to 'status' or 'subscription_status' if exists)
+            // Using 'status' field as requested ("Akaun status is Active")
+            const { data: tenant } = await supabase
+              .from('tenants')
+              .select('status')
+              .eq('profile_id', user?.id)
+              .maybeSingle()
 
-            if (diffDays > settings.trial_duration_days) {
+            // If not active, show Subscription (Langganan)
+            if (!tenant || tenant.status !== 'active') {
               accessGranted = false
               denyReason = 'trial_expired'
+            }
+          } else {
+            // Others (Staff/Admin/Organizer): Check Trial or allow
+            // Assuming Admin/Staff always have access, but keeping trial logic if previously intended
+            // Actually, usually Admins bypass this. But let's stick to the existing trial logic for non-tenants/non-superadmin.
+            const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user?.id).single()
+            if (profile) {
+              const startDate = new Date(profile.created_at)
+              const now = new Date()
+              const diffTime = Math.abs(now.getTime() - startDate.getTime())
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+              if (diffDays > settings.trial_duration_days) {
+                accessGranted = false
+                denyReason = 'trial_expired'
+              }
             }
           }
         }
