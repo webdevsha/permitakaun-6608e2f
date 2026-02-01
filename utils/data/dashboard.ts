@@ -11,15 +11,18 @@ export async function fetchDashboardData() {
 
     // Fallback: Force admin for specific email if profile missing
     let role = profile?.role
-    if (!role && user.email === 'admin@permit.com') {
+
+    // Force Superadmin Override (Hardcoded Security)
+    if (user.email === 'rafisha92@gmail.com') {
+        role = 'superadmin'
+    } else if (!role && user.email === 'admin@permit.com') {
         role = 'admin'
     } else if (!role && user.email === 'organizer@permit.com') {
         role = 'organizer'
     } else if (!role && user.email === 'staff@permit.com') {
         role = 'staff'
-    } else if (!role && user.email === 'rafisha92@gmail.com') {
-        role = 'superadmin'
     }
+
     role = role || 'tenant'
 
     let tenants: any[] = []
