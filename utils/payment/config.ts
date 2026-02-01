@@ -8,6 +8,13 @@ export const PAYMENT_CONFIG = {
         endpoint: 'https://www.billplz.com/api/v3'
     },
 
+    billplzSandbox: {
+        apiKey: process.env.BILLPLZ_SANDBOX_API_KEY,
+        xSignature: process.env.BILLPLZ_SANDBOX_X_SIGNATURE,
+        collectionId: process.env.BILLPLZ_SANDBOX_COLLECTION_ID,
+        endpoint: 'https://www.billplz-sandbox.com/api/v3'
+    },
+
     chipIn: {
         apiKey: process.env.CHIP_API_KEY,
         brandId: process.env.CHIP_BRAND_ID,

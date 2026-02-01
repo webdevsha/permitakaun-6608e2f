@@ -11,7 +11,8 @@ BEGIN
       category,
       status,
       date,
-      description
+      description,
+      receipt_url  -- Added field
     ) VALUES (
       NEW.tenant_id,
       NEW.amount,
@@ -19,7 +20,8 @@ BEGIN
       'Sewa', -- Default category for payments
       'approved',
       COALESCE(NEW.payment_date, CURRENT_DATE),
-      'Bayaran Sewa/Permit (Auto-Generated)'
+      'Bayaran Sewa/Permit (Auto-Generated)',
+      NEW.receipt_url -- Copy receipt URL from payment record
     );
   END IF;
   RETURN NEW;
@@ -33,4 +35,4 @@ DROP TRIGGER IF EXISTS on_payment_approved ON public.tenant_payments;
 CREATE TRIGGER on_payment_approved
 AFTER UPDATE ON public.tenant_payments
 FOR EACH ROW
-EXECUTE COMPLETED PROCEDURE public.handle_payment_approval();
+EXECUTE PROCEDURE public.handle_payment_approval();

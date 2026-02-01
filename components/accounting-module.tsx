@@ -418,8 +418,17 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         receipt_url: receiptUrl
       }
 
+      // Just-In-Time: Auto-resolve Tenant ID if missing (for Organizers/Admins)
+      if (!txData.tenant_id && (userRole === 'organizer' || userRole === 'admin') && tenants && user) {
+        const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
+        if (selfTenant) {
+          txData.tenant_id = selfTenant.id
+        }
+      }
+
       if (!txData.tenant_id) {
-        toast.error("Sila pilih Peniaga/Tenant")
+        // If still missing, show error
+        toast.error("Sila pilih Peniaga/Tenant (Self-Tenant Not Found)")
         setIsSaving(false)
         return
       }
