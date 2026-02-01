@@ -2,10 +2,15 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Check, Lock, Star } from "lucide-react"
+import { Check, Lock, Star, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { initiatePayment } from "@/actions/payment"
+import { useState } from "react"
+import { toast } from "sonner"
 
 export function SubscriptionPlans() {
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
+
   const plans = [
     {
       name: "Asas (Basic)",
@@ -53,6 +58,26 @@ export function SubscriptionPlans() {
     }
   ]
 
+  const handleSubscribe = async (planName: string, price: string) => {
+    setLoadingPlan(planName)
+    try {
+      const result = await initiatePayment({
+        amount: parseFloat(price),
+        description: `Langganan Pelan ${planName}`,
+        redirectPath: '/dashboard'
+      })
+
+      if (result.error) throw new Error(result.error)
+      if (result.url) {
+        toast.success("Mengarahkan ke pembayaran...")
+        window.location.href = result.url
+      }
+    } catch (e: any) {
+      toast.error("Gagal: " + e.message)
+      setLoadingPlan(null)
+    }
+  }
+
   return (
     <div className="space-y-8 py-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="text-center space-y-4 max-w-3xl mx-auto">
@@ -62,20 +87,19 @@ export function SubscriptionPlans() {
         </div>
         <h2 className="text-4xl font-serif font-bold tracking-tight">Naik Taraf Akaun Anda</h2>
         <p className="text-xl text-muted-foreground">
-          Modul Akaun Profesional dikhaskan untuk pengguna Premium. 
+          Modul Akaun Profesional dikhaskan untuk pengguna Premium.
           Pilih pelan langganan untuk membuka akses penuh laporan kewangan dan analisis.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto pt-6">
         {plans.map((plan) => (
-          <Card 
-            key={plan.name} 
-            className={`relative rounded-[2rem] border-2 flex flex-col ${
-              plan.popular 
+          <Card
+            key={plan.name}
+            className={`relative rounded-[2rem] border-2 flex flex-col ${plan.popular
                 ? "border-primary shadow-xl scale-105 z-10 " + plan.color
                 : "border-border shadow-sm hover:shadow-md transition-shadow bg-white"
-            }`}
+              }`}
           >
             {plan.popular && (
               <div className="absolute -top-4 left-0 right-0 flex justify-center">
@@ -84,14 +108,14 @@ export function SubscriptionPlans() {
                 </Badge>
               </div>
             )}
-            
+
             <CardHeader className="text-center pb-2">
               <CardTitle className="font-serif text-2xl">{plan.name}</CardTitle>
               <CardDescription className={plan.popular ? "text-primary-foreground/80" : ""}>
                 {plan.description}
               </CardDescription>
             </CardHeader>
-            
+
             <CardContent className="flex-1 space-y-6">
               <div className="text-center">
                 <span className="text-5xl font-bold tracking-tight">RM{plan.price}</span>
@@ -99,7 +123,7 @@ export function SubscriptionPlans() {
                   /bulan
                 </span>
               </div>
-              
+
               <ul className="space-y-3 text-sm">
                 {plan.features.map((feature, i) => (
                   <li key={i} className="flex items-center gap-3">
@@ -113,23 +137,25 @@ export function SubscriptionPlans() {
                 ))}
               </ul>
             </CardContent>
-            
+
             <CardFooter>
-              <Button 
-                variant={plan.buttonVariant} 
+              <Button
+                variant={plan.buttonVariant}
                 className="w-full h-12 rounded-xl font-bold text-md shadow-sm"
+                onClick={() => handleSubscribe(plan.name, plan.price)}
+                disabled={!!loadingPlan}
               >
-                Langgan Sekarang
+                {loadingPlan === plan.name ? <Loader2 className="animate-spin" /> : "Langgan Sekarang"}
               </Button>
             </CardFooter>
           </Card>
         ))}
       </div>
-      
+
       <div className="text-center pt-8">
-         <p className="text-sm text-muted-foreground">
-           Perlukan bantuan memilih? <a href="#" className="text-primary font-bold hover:underline">Hubungi Sokongan</a>
-         </p>
+        <p className="text-sm text-muted-foreground">
+          Perlukan bantuan memilih? <a href="#" className="text-primary font-bold hover:underline">Hubungi Sokongan</a>
+        </p>
       </div>
     </div>
   )
