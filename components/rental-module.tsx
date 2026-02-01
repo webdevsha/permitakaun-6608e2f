@@ -92,6 +92,20 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     }
   }, [searchParams, tenant])
 
+  // Refetch location data when page becomes visible (to get latest rates)
+  useEffect(() => {
+    if (!tenant) return
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && tenant.id) {
+        refetchMyLocations(tenant.id)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [tenant])
+
 
   const fetchHistory = async (tenantId: number) => {
     // UPDATED: Fetch from 'transactions' table to include all records (including seeded data)
@@ -110,12 +124,43 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         remarks: tx.description,
         amount: tx.amount,
         status: tx.status,
-        status: tx.status,
         receipt_url: tx.receipt_url,
         category: tx.category,
         type: tx.type
       }))
       setHistory(mappedHistory)
+    }
+  }
+
+  // Refetch myLocations to get latest rental rates
+  const refetchMyLocations = async (tenantId: number) => {
+    const { data: locData } = await supabase
+      .from('tenant_locations')
+      .select(`*, locations:location_id (*)`)
+      .eq('tenant_id', tenantId)
+
+    if (locData) {
+      const updatedLocations = locData.map((item: any) => {
+        let price = 0
+        if (item.rate_type === 'khemah') price = item.locations.rate_khemah
+        else if (item.rate_type === 'cbs') price = item.locations.rate_cbs
+        else if (item.rate_type === 'monthly') price = item.locations.rate_monthly
+
+        return {
+          ...item,
+          display_price: price,
+          location_name: item.locations.name
+        }
+      })
+      setMyLocations(updatedLocations)
+
+      // Update payment amount if current selection exists
+      if (selectedLocationId) {
+        const currentLoc = updatedLocations.find((l: any) => l.id.toString() === selectedLocationId)
+        if (currentLoc) {
+          setPaymentAmount(currentLoc.display_price.toString())
+        }
+      }
     }
   }
 

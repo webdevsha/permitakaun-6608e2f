@@ -216,16 +216,28 @@ export async function fetchDashboardData() {
                 }
 
                 // Fetch Transactions for these tenants
+                // For Organizers: Only show RENT payments (Sewa) from tenants, not their personal expenses
                 console.log(`[Dashboard DEBUG] Fetching transactions for IDs:`, tIds)
                 const { data: tx, error: txErr } = await supabase
                     .from('transactions')
                     .select('*, tenants(full_name, business_name)')
                     .in('tenant_id', tIds)
+                    .eq('category', 'Sewa') // Only rent payments, not subscriptions or other personal expenses
                     .order('date', { ascending: false })
 
                 if (txErr) console.error('[Dashboard DEBUG] Transaction Fetch Error:', txErr)
                 console.log(`[Dashboard DEBUG] Transactions Found: ${tx?.length || 0}`)
-                transactions = tx || []
+
+                // Also fetch the organizer's OWN manual transactions (their personal Cash In/Out)
+                const { data: ownTx } = await supabase
+                    .from('transactions')
+                    .select('*, tenants(full_name, business_name)')
+                    .in('tenant_id', tenants.filter((t: any) => t.profile_id === user.id).map((t: any) => t.id))
+                    .order('date', { ascending: false })
+
+                // Combine: Rent from managed tenants + Own manual transactions
+                transactions = [...(tx || []), ...(ownTx || [])]
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
             } else {
                 transactions = []
