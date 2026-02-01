@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Building, User } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Plus, Search, Building, User, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -20,25 +21,41 @@ import {
 import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-
-const fetchOrganizers = async () => {
-  const supabase = createClient()
-  const { data, error } = await supabase.from('organizers').select('*').order('created_at', { ascending: false })
-  if (error) throw error
-  return data
-}
+import { cn } from "@/lib/utils"
 
 export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any[] }) {
   const organizers = initialOrganizers || []
   const mutate = () => window.location.reload()
-  const isLoading = false
 
   const [isOpen, setIsOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [currentId, setCurrentId] = useState<number | null>(null)
+
   const [newOrg, setNewOrg] = useState({ name: '', code: '', email: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+
   const supabase = createClient()
 
-  const handleCreate = async () => {
+  const resetForm = () => {
+    setNewOrg({ name: '', code: '', email: '' })
+    setIsEditing(false)
+    setCurrentId(null)
+  }
+
+  const handleOpenCreate = () => {
+    resetForm()
+    setIsOpen(true)
+  }
+
+  const handleOpenEdit = (org: any) => {
+    setNewOrg({ name: org.name, code: org.organizer_code, email: org.email || '' })
+    setIsEditing(true)
+    setCurrentId(org.id)
+    setIsOpen(true)
+  }
+
+  const handleSubmit = async () => {
     if (!newOrg.name || !newOrg.code) {
       toast.error("Nama dan Kod wajib diisi")
       return
@@ -46,23 +63,62 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
 
     setIsSubmitting(true)
     try {
-      const { error } = await supabase.from('organizers').insert({
-        name: newOrg.name,
-        organizer_code: newOrg.code.toUpperCase(),
-        email: newOrg.email,
-        status: 'active'
-      })
+      if (isEditing && currentId) {
+        // Update
+        const { error } = await supabase.from('organizers').update({
+          name: newOrg.name,
+          email: newOrg.email
+          // Code usually not editable to prevent breaking links, but can be if careful
+        }).eq('id', currentId)
+        if (error) throw error
+        toast.success("Penganjur dikemaskini")
+      } else {
+        // Create
+        const { error } = await supabase.from('organizers').insert({
+          name: newOrg.name,
+          organizer_code: newOrg.code.toUpperCase(),
+          email: newOrg.email,
+          status: 'active',
+          accounting_status: 'inactive'
+        })
+        if (error) throw error
+        toast.success("Penganjur berjaya ditambah")
+      }
 
-      if (error) throw error
-
-      toast.success("Penganjur berjaya ditambah")
       setIsOpen(false)
-      setNewOrg({ name: '', code: '', email: '' })
+      resetForm()
       mutate()
     } catch (e: any) {
       toast.error("Gagal: " + e.message)
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleStatusChange = async (id: number, field: string, currentValue: string) => {
+    setIsUpdating(true)
+    const newValue = currentValue === 'active' ? 'inactive' : 'active'
+    try {
+      const { error } = await supabase.from('organizers').update({ [field]: newValue }).eq('id', id)
+      if (error) throw error
+      toast.success("Status dikemaskini")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal: " + e.message)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Adakah anda pasti? Tindakan ini tidak boleh diundur.")) return
+    try {
+      const { error } = await supabase.from('organizers').delete().eq('id', id)
+      if (error) throw error
+      toast.success("Penganjur dipadam")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal padam: " + e.message)
     }
   }
 
@@ -73,15 +129,14 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
           <h2 className="text-3xl font-serif font-bold text-foreground">Pengurusan Penganjur</h2>
           <p className="text-muted-foreground">Senarai penganjur pasar dan tapak niaga</p>
         </div>
+        <Button onClick={handleOpenCreate} className="rounded-xl shadow-md">
+          <Plus className="mr-2 h-4 w-4" /> Tambah Penganjur
+        </Button>
+
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-xl shadow-md">
-              <Plus className="mr-2 h-4 w-4" /> Tambah Penganjur
-            </Button>
-          </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Tambah Penganjur Baru</DialogTitle>
+              <DialogTitle>{isEditing ? 'Kemaskini Penganjur' : 'Tambah Penganjur Baru'}</DialogTitle>
               <DialogDescription>Masukkan butiran organisasi</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -91,7 +146,13 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
               </div>
               <div className="space-y-2">
                 <Label>Kod Penganjur (Unik)</Label>
-                <Input value={newOrg.code} onChange={e => setNewOrg({ ...newOrg, code: e.target.value })} placeholder="ORG001" className="uppercase" />
+                <Input
+                  value={newOrg.code}
+                  onChange={e => setNewOrg({ ...newOrg, code: e.target.value })}
+                  placeholder="ORG001"
+                  className="uppercase"
+                  disabled={isEditing} // Lock code on edit
+                />
               </div>
               <div className="space-y-2">
                 <Label>Emel Admin (Pilihan)</Label>
@@ -99,7 +160,7 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting}>Simpan</Button>
+              <Button onClick={handleSubmit} disabled={isSubmitting}>Simpan</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -113,8 +174,9 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
                 <TableHead className="pl-6">Nama</TableHead>
                 <TableHead>Kod</TableHead>
                 <TableHead>Emel</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Admin</TableHead>
+                <TableHead className="text-center">Status Umum</TableHead>
+                <TableHead className="text-center">Module Akaun</TableHead>
+                <TableHead className="text-right pr-6">Tindakan</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -130,14 +192,45 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
                   </TableCell>
                   <TableCell><Badge variant="outline" className="font-mono">{org.organizer_code}</Badge></TableCell>
                   <TableCell>{org.email || '-'}</TableCell>
-                  <TableCell><Badge className="capitalize bg-brand-green/10 text-brand-green border-none">{org.status}</Badge></TableCell>
-                  <TableCell>
-                    {org.profile_id ? <span className="text-xs text-muted-foreground flex items-center gap-1"><User size={12} /> Assigned</span> : <span className="text-xs text-amber-600 italic">Unassigned</span>}
+                  <TableCell className="text-center">
+                    <div className="flex justify-center items-center gap-2">
+                      <Switch
+                        checked={org.status === 'active'}
+                        onCheckedChange={() => handleStatusChange(org.id, 'status', org.status)}
+                        disabled={isUpdating}
+                      />
+                      <span className={cn("text-[10px] font-bold uppercase w-12 text-left", org.status === 'active' ? "text-green-600" : "text-muted-foreground")}>
+                        {org.status}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex justify-center items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100 w-fit mx-auto">
+                      <Switch
+                        checked={org.accounting_status === 'active'}
+                        onCheckedChange={() => handleStatusChange(org.id, 'accounting_status', org.accounting_status)}
+                        disabled={isUpdating}
+                        className="data-[state=checked]:bg-blue-600"
+                      />
+                      <span className={cn("text-[10px] font-bold uppercase w-8 text-left", org.accounting_status === 'active' ? "text-blue-600" : "text-slate-400")}>
+                        {org.accounting_status === 'active' ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right pr-6">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(org)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
+                        <Pencil size={15} />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(org.id)} className="h-8 w-8 text-red-600 hover:bg-red-50">
+                        <Trash2 size={15} />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
               {organizers?.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Tiada data.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Tiada data.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
