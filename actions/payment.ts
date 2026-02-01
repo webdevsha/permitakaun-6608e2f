@@ -33,29 +33,37 @@ export async function initiatePayment(params: {
         chipKey: PAYMENT_CONFIG.chipIn.apiKey ? 'Set' : 'Missing'
     })
 
-    const fullRedirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${params.redirectPath}`
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payment/callback`
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const statusPageUrl = `${baseUrl}/payment/status`
+    // Encode the path to return to after status page
+    const nextPathEncoded = encodeURIComponent(params.redirectPath)
+
+    const callbackUrl = `${baseUrl}/api/payment/callback`
 
     let result;
 
     try {
         if (mode === 'sandbox') {
             console.log("[Payment] Calling Chip-In API...")
+            // Chip-In allows separate success/fail URLs
             result = await createChipInPayment({
                 email: user.email,
                 amount: params.amount,
                 description: params.description,
-                redirectUrl: fullRedirectUrl
+                // We append status=... so our page knows result immediately
+                redirectUrl: `${statusPageUrl}?gateway=chip-in&next=${nextPathEncoded}`
             })
         } else {
             console.log("[Payment] Calling Billplz API...")
+            // Billplz redirects to ONE url and appends billplz[...] params
             result = await createBillplzBill({
                 email: user.email,
                 name: user.user_metadata?.full_name || 'User',
                 amount: params.amount,
                 description: params.description,
                 callbackUrl: callbackUrl,
-                redirectUrl: fullRedirectUrl
+                // Billplz will append data here
+                redirectUrl: `${statusPageUrl}?gateway=billplz&next=${nextPathEncoded}`
             })
         }
 

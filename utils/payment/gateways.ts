@@ -69,12 +69,13 @@ export async function createChipInPayment(params: {
     // Chip-in usually requires detailed products.
     const amountCents = Math.round(params.amount * 100)
 
-    console.log("[Chip-In] Brand ID:", PAYMENT_CONFIG.chipIn.brandId)
+    // Check for existing query params to decide separator
+    const separator = params.redirectUrl.includes('?') ? '&' : '?'
 
     const body = JSON.stringify({
         brand_id: PAYMENT_CONFIG.chipIn.brandId,
-        success_redirect: params.redirectUrl,
-        failure_redirect: params.redirectUrl,
+        success_redirect: `${params.redirectUrl}${separator}status=success`,
+        failure_redirect: `${params.redirectUrl}${separator}status=failure`,
         purchase: {
             products: [
                 {
