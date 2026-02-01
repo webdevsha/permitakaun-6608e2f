@@ -27,13 +27,13 @@ import { useAuth } from "@/components/providers/auth-provider"
 
 const fetcher = async () => {
   const supabase = createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   const role = profile?.role
-  
+
   let query = supabase
     .from('locations')
     .select('*, organizers(name)')
@@ -41,33 +41,35 @@ const fetcher = async () => {
 
   // --- ORGANIZER FILTER ---
   if (role === 'organizer') {
-     const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
-     if (org) {
-        query = query.eq('organizer_id', org.id)
-     } else {
-        return [] // Organizer has no profile linked
-     }
+    const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
+    if (org) {
+      query = query.eq('organizer_id', org.id)
+    } else {
+      return [] // Organizer has no profile linked
+    }
   }
-  
+
   const { data: locations, error } = await query
   if (error) throw error
-  
+
   // Fetch tenant counts for each location
   const locationsWithCounts = await Promise.all(locations.map(async (loc: any) => {
     const { count } = await supabase
       .from('tenant_locations')
       .select('*', { count: 'exact', head: true })
       .eq('location_id', loc.id)
-    
+
     return { ...loc, tenant_count: count || 0 }
   }))
 
   return locationsWithCounts
 }
 
-export function LocationModule() {
+export function LocationModule({ initialLocations }: { initialLocations?: any[] }) {
   const { role } = useAuth()
-  const { data: locations, mutate, isLoading } = useSWR('locations_list_v5', fetcher)
+  const locations = initialLocations || []
+  const mutate = () => window.location.reload()
+  const isLoading = false
   const [selectedLocation, setSelectedLocation] = useState<any>(null)
   const [locationTenants, setLocationTenants] = useState<any[]>([])
   const [loadingTenants, setLoadingTenants] = useState(false)
@@ -150,23 +152,23 @@ export function LocationModule() {
       }
 
       if (isEditMode && formData.id) {
-         const { error } = await supabase.from('locations').update(payload).eq('id', formData.id)
-         if (error) throw error
-         toast.success("Lokasi berjaya dikemaskini")
+        const { error } = await supabase.from('locations').update(payload).eq('id', formData.id)
+        if (error) throw error
+        toast.success("Lokasi berjaya dikemaskini")
       } else {
-         let organizerId = null;
-         // If user is organizer, get their ID
-         if (role === 'organizer') {
-           const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
-           organizerId = orgData?.id
-         }
+        let organizerId = null;
+        // If user is organizer, get their ID
+        if (role === 'organizer') {
+          const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+          organizerId = orgData?.id
+        }
 
-         const { error } = await supabase.from('locations').insert({
-           ...payload,
-           organizer_id: organizerId
-         })
-         if (error) throw error
-         toast.success("Lokasi baru berjaya ditambah")
+        const { error } = await supabase.from('locations').insert({
+          ...payload,
+          organizer_id: organizerId
+        })
+        if (error) throw error
+        toast.success("Lokasi baru berjaya ditambah")
       }
 
       setIsDialogOpen(false)
@@ -183,7 +185,7 @@ export function LocationModule() {
   const handleViewTenants = async (location: any) => {
     setSelectedLocation(location)
     setLoadingTenants(true)
-    
+
     const { data } = await supabase
       .from('tenant_locations')
       .select(`
@@ -191,7 +193,7 @@ export function LocationModule() {
         tenants:tenant_id (full_name, business_name, phone_number, status)
       `)
       .eq('location_id', location.id)
-      
+
     setLocationTenants(data || [])
     setLoadingTenants(false)
   }
@@ -200,24 +202,24 @@ export function LocationModule() {
   const handleRentalStatusChange = async (rentalId: number, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
     try {
-       const { error } = await supabase.from('tenant_locations').update({ status: newStatus }).eq('id', rentalId)
-       if (error) throw error
-       
-       setLocationTenants(prev => prev.map(r => r.id === rentalId ? {...r, status: newStatus} : r))
-       toast.success("Status tapak dikemaskini")
+      const { error } = await supabase.from('tenant_locations').update({ status: newStatus }).eq('id', rentalId)
+      if (error) throw error
+
+      setLocationTenants(prev => prev.map(r => r.id === rentalId ? { ...r, status: newStatus } : r))
+      toast.success("Status tapak dikemaskini")
     } catch (e: any) {
-       toast.error("Gagal kemaskini: " + e.message)
+      toast.error("Gagal kemaskini: " + e.message)
     }
   }
 
   // Handle Stall Number Update
   const handleSaveStall = async (rentalId: number, stallNumber: string) => {
     try {
-       const { error } = await supabase.from('tenant_locations').update({ stall_number: stallNumber }).eq('id', rentalId)
-       if (error) throw error
-       toast.success("No. Petak disimpan")
+      const { error } = await supabase.from('tenant_locations').update({ stall_number: stallNumber }).eq('id', rentalId)
+      if (error) throw error
+      toast.success("No. Petak disimpan")
     } catch (e: any) {
-       toast.error("Gagal simpan: " + e.message)
+      toast.error("Gagal simpan: " + e.message)
     }
   }
 
@@ -236,7 +238,7 @@ export function LocationModule() {
           <h2 className="text-3xl font-serif font-bold text-foreground">Pengurusan Lokasi</h2>
           <p className="text-muted-foreground">{role === 'organizer' ? 'Urus tapak pasar anda' : 'Urus semua lokasi sistem'}</p>
         </div>
-        
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleOpenAdd} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-2xl h-12 px-6">
@@ -249,37 +251,37 @@ export function LocationModule() {
               <DialogTitle className="font-serif text-2xl">{isEditMode ? "Kemaskini Lokasi" : "Lokasi Baru"}</DialogTitle>
               <DialogDescription>{isEditMode ? "Ubah butiran lokasi sedia ada" : "Konfigurasi tapak pasar baru"}</DialogDescription>
             </DialogHeader>
-            
+
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="grid gap-2">
-                    <Label htmlFor="program_name">Nama Program</Label>
-                    <Input 
-                      id="program_name" 
-                      value={formData.program_name}
-                      onChange={(e) => setFormData({...formData, program_name: e.target.value})}
-                      placeholder="Contoh: Karnival Mega" 
-                      className="rounded-xl"
-                    />
-                 </div>
-                 <div className="grid gap-2">
-                    <Label htmlFor="name">Nama Lokasi/Jalan</Label>
-                    <Input 
-                      id="name" 
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      placeholder="Contoh: Jalan Tun Razak" 
-                      className="rounded-xl"
-                    />
-                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="program_name">Nama Program</Label>
+                  <Input
+                    id="program_name"
+                    value={formData.program_name}
+                    onChange={(e) => setFormData({ ...formData, program_name: e.target.value })}
+                    placeholder="Contoh: Karnival Mega"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Nama Lokasi/Jalan</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Contoh: Jalan Tun Razak"
+                    className="rounded-xl"
+                  />
+                </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
-                 <div className="grid gap-2">
+                <div className="grid gap-2">
                   <Label>Jenis Operasi</Label>
-                  <Select 
-                    value={formData.type} 
-                    onValueChange={(v: "daily" | "monthly") => setFormData({...formData, type: v})}
+                  <Select
+                    value={formData.type}
+                    onValueChange={(v: "daily" | "monthly") => setFormData({ ...formData, type: v })}
                   >
                     <SelectTrigger className="rounded-xl">
                       <SelectValue />
@@ -292,10 +294,10 @@ export function LocationModule() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Jumlah Lot/Tapak</Label>
-                  <Input 
+                  <Input
                     type="number"
                     value={formData.total_lots}
-                    onChange={(e) => setFormData({...formData, total_lots: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, total_lots: e.target.value })}
                     className="rounded-xl"
                   />
                 </div>
@@ -303,24 +305,24 @@ export function LocationModule() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                   <Label>Hari/Waktu Operasi</Label>
-                   <Input 
-                     value={formData.operating_days}
-                     onChange={(e) => setFormData({...formData, operating_days: e.target.value})}
-                     placeholder="Contoh: Sabtu & Ahad" 
-                     className="rounded-xl"
-                   />
+                  <Label>Hari/Waktu Operasi</Label>
+                  <Input
+                    value={formData.operating_days}
+                    onChange={(e) => setFormData({ ...formData, operating_days: e.target.value })}
+                    placeholder="Contoh: Sabtu & Ahad"
+                    className="rounded-xl"
+                  />
                 </div>
                 <div className="grid gap-2">
-                   <Label>Bil. Hari Seminggu</Label>
-                   <Input 
-                     type="number"
-                     min="1"
-                     max="7"
-                     value={formData.days_per_week}
-                     onChange={(e) => setFormData({...formData, days_per_week: e.target.value})}
-                     className="rounded-xl"
-                   />
+                  <Label>Bil. Hari Seminggu</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="7"
+                    value={formData.days_per_week}
+                    onChange={(e) => setFormData({ ...formData, days_per_week: e.target.value })}
+                    className="rounded-xl"
+                  />
                 </div>
               </div>
 
@@ -328,42 +330,42 @@ export function LocationModule() {
                 <Label className="font-bold text-primary">Tetapan Kadar Sewa (RM)</Label>
                 {formData.type === 'daily' ? (
                   <div className="space-y-4">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
-                           <Input 
-                              type="number" 
-                              value={formData.rate_khemah}
-                              onChange={(e) => setFormData({...formData, rate_khemah: e.target.value})}
-                              className="h-9 bg-white" 
-                           />
-                        </div>
-                        <div>
-                           <Label className="text-xs">Kadar Seminggu (CBS/Lori)</Label>
-                           <Input 
-                              type="number" 
-                              value={formData.rate_cbs}
-                              onChange={(e) => setFormData({...formData, rate_cbs: e.target.value})}
-                              className="h-9 bg-white" 
-                           />
-                        </div>
-                     </div>
-                     <div className="p-3 bg-white/50 rounded-lg text-xs text-muted-foreground border border-dashed">
-                        <p className="font-bold mb-1">Anggaran Bulanan (4 Minggu):</p>
-                        <div className="flex justify-between">
-                           <span>Khemah: RM {(parseFloat(formData.rate_khemah || '0') * 4).toFixed(2)}</span>
-                           <span>CBS: RM {(parseFloat(formData.rate_cbs || '0') * 4).toFixed(2)}</span>
-                        </div>
-                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
+                        <Input
+                          type="number"
+                          value={formData.rate_khemah}
+                          onChange={(e) => setFormData({ ...formData, rate_khemah: e.target.value })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Kadar Seminggu (CBS/Lori)</Label>
+                        <Input
+                          type="number"
+                          value={formData.rate_cbs}
+                          onChange={(e) => setFormData({ ...formData, rate_cbs: e.target.value })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white/50 rounded-lg text-xs text-muted-foreground border border-dashed">
+                      <p className="font-bold mb-1">Anggaran Bulanan (4 Minggu):</p>
+                      <div className="flex justify-between">
+                        <span>Khemah: RM {(parseFloat(formData.rate_khemah || '0') * 4).toFixed(2)}</span>
+                        <span>CBS: RM {(parseFloat(formData.rate_cbs || '0') * 4).toFixed(2)}</span>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div>
                     <Label className="text-xs">Kadar Sewa Bulanan</Label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       value={formData.rate_monthly}
-                      onChange={(e) => setFormData({...formData, rate_monthly: e.target.value})}
-                      className="bg-white" 
+                      onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })}
+                      className="bg-white"
                     />
                   </div>
                 )}
@@ -382,155 +384,155 @@ export function LocationModule() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {locations?.map((loc: any) => {
           return (
-          <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
-            <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-               <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm" onClick={() => handleOpenEdit(loc)}>
+            <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
+              <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm" onClick={() => handleOpenEdit(loc)}>
                   <Pencil className="w-4 h-4 text-primary" />
-               </Button>
-            </div>
-
-            <CardHeader className="bg-secondary/10 border-b border-border/30 pb-4">
-              <div className="flex flex-col gap-1">
-                 {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
-                 <CardTitle className="text-xl font-serif">{loc.name}</CardTitle>
-                 {loc.organizers?.name && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                       <Building className="w-3 h-3" />
-                       <span className="font-medium">{loc.organizers.name}</span>
-                    </div>
-                 )}
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-5">
-              
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                 <div className="space-y-1">
+
+              <CardHeader className="bg-secondary/10 border-b border-border/30 pb-4">
+                <div className="flex flex-col gap-1">
+                  {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
+                  <CardTitle className="text-xl font-serif">{loc.name}</CardTitle>
+                  {loc.organizers?.name && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                      <Building className="w-3 h-3" />
+                      <span className="font-medium">{loc.organizers.name}</span>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-5">
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
                     <span className="text-xs text-muted-foreground block">Jenis</span>
                     <Badge variant="outline" className="capitalize bg-white">
-                       {loc.type === 'daily' ? 'Mingguan' : 'Bulanan'}
+                      {loc.type === 'daily' ? 'Mingguan' : 'Bulanan'}
                     </Badge>
-                 </div>
-                 <div className="space-y-1">
+                  </div>
+                  <div className="space-y-1">
                     <span className="text-xs text-muted-foreground block">Operasi</span>
                     <span className="font-medium text-xs flex items-center gap-1">
-                       <Calendar className="w-3 h-3" /> {loc.days_per_week || 1} Hari/Minggu
+                      <Calendar className="w-3 h-3" /> {loc.days_per_week || 1} Hari/Minggu
                     </span>
-                 </div>
-              </div>
+                  </div>
+                </div>
 
-              {/* Rates */}
-              <div className="bg-muted/30 p-4 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
-                   <Store className="w-3 h-3" /> Kadar Sewa
-                </p>
-                {loc.type === 'daily' ? (
-                  <div className="space-y-2">
-                     <div className="flex justify-between items-center text-sm">
+                {/* Rates */}
+                <div className="bg-muted/30 p-4 rounded-xl space-y-3">
+                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
+                    <Store className="w-3 h-3" /> Kadar Sewa
+                  </p>
+                  {loc.type === 'daily' ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground text-xs">Khemah</span>
                         <div className="text-right">
-                           <span className="font-bold block">RM {loc.rate_khemah} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                           <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_khemah * 4).toFixed(0)} /bulan</span>
+                          <span className="font-bold block">RM {loc.rate_khemah} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
+                          <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_khemah * 4).toFixed(0)} /bulan</span>
                         </div>
-                     </div>
-                     <div className="h-px bg-border/50" />
-                     <div className="flex justify-between items-center text-sm">
+                      </div>
+                      <div className="h-px bg-border/50" />
+                      <div className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground text-xs">CBS (Lori)</span>
                         <div className="text-right">
-                           <span className="font-bold block">RM {loc.rate_cbs} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                           <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_cbs * 4).toFixed(0)} /bulan</span>
+                          <span className="font-bold block">RM {loc.rate_cbs} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
+                          <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_cbs * 4).toFixed(0)} /bulan</span>
                         </div>
-                     </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-between items-center text-sm pt-1">
-                    <span className="text-muted-foreground">Bulanan</span>
-                    <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
-                  </div>
-                )}
-              </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-sm pt-1">
+                      <span className="text-muted-foreground">Bulanan</span>
+                      <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
+                    </div>
+                  )}
+                </div>
 
-              <div className="pt-2">
-                 <Dialog onOpenChange={(open) => open && handleViewTenants(loc)}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full rounded-xl border-primary/20 hover:bg-primary/5 hover:text-primary">
-                      <Users className="mr-2 h-4 w-4" /> Senarai Peniaga ({loc.tenant_count})
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl bg-white rounded-3xl">
-                    <DialogHeader>
-                      <DialogTitle className="text-2xl font-serif">Peniaga di {loc.name}</DialogTitle>
-                      <DialogDescription>
-                         Penganjur: <span className="font-bold text-primary">{loc.organizers?.name || "-"}</span>
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    <div className="mt-4 max-h-[400px] overflow-y-auto">
-                      {loadingTenants ? (
-                        <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-                      ) : locationTenants.length > 0 ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Nama</TableHead>
-                              <TableHead>Bisnes</TableHead>
-                              <TableHead>No. Petak</TableHead>
-                              <TableHead className="text-center">Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {locationTenants.map((lt: any) => (
-                              <TableRow key={lt.id}>
-                                <TableCell className="font-medium">
-                                  {lt.tenants?.full_name}
-                                  <div className="text-xs text-muted-foreground">{lt.tenants?.phone_number}</div>
-                                </TableCell>
-                                <TableCell>{lt.tenants?.business_name}</TableCell>
-                                <TableCell>
-                                  <Input 
-                                    className="h-8 w-24 bg-white text-xs border-primary/20" 
-                                    defaultValue={lt.stall_number || ""}
-                                    placeholder="Petak..."
-                                    onBlur={(e) => handleSaveStall(lt.id, e.target.value)}
-                                  />
-                                </TableCell>
-                                <TableCell className="text-center">
-                                   <div className="flex items-center justify-center gap-2">
-                                      <Switch 
+                <div className="pt-2">
+                  <Dialog onOpenChange={(open) => open && handleViewTenants(loc)}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full rounded-xl border-primary/20 hover:bg-primary/5 hover:text-primary">
+                        <Users className="mr-2 h-4 w-4" /> Senarai Peniaga ({loc.tenant_count})
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-4xl bg-white rounded-3xl">
+                      <DialogHeader>
+                        <DialogTitle className="text-2xl font-serif">Peniaga di {loc.name}</DialogTitle>
+                        <DialogDescription>
+                          Penganjur: <span className="font-bold text-primary">{loc.organizers?.name || "-"}</span>
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="mt-4 max-h-[400px] overflow-y-auto">
+                        {loadingTenants ? (
+                          <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+                        ) : locationTenants.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Nama</TableHead>
+                                <TableHead>Bisnes</TableHead>
+                                <TableHead>No. Petak</TableHead>
+                                <TableHead className="text-center">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {locationTenants.map((lt: any) => (
+                                <TableRow key={lt.id}>
+                                  <TableCell className="font-medium">
+                                    {lt.tenants?.full_name}
+                                    <div className="text-xs text-muted-foreground">{lt.tenants?.phone_number}</div>
+                                  </TableCell>
+                                  <TableCell>{lt.tenants?.business_name}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                      className="h-8 w-24 bg-white text-xs border-primary/20"
+                                      defaultValue={lt.stall_number || ""}
+                                      placeholder="Petak..."
+                                      onBlur={(e) => handleSaveStall(lt.id, e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Switch
                                         checked={lt.status === 'active'}
                                         onCheckedChange={() => handleRentalStatusChange(lt.id, lt.status)}
                                       />
                                       <span className={cn("text-[10px] uppercase font-bold w-12 text-left", lt.status === 'active' ? "text-brand-green" : "text-muted-foreground")}>
-                                         {lt.status === 'active' ? 'Aktif' : 'Pend.'}
+                                        {lt.status === 'active' ? 'Aktif' : 'Pend.'}
                                       </span>
-                                   </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      ) : (
-                        <div className="text-center py-12 bg-secondary/10 rounded-2xl text-muted-foreground">
-                          <Store className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                          <p>Tiada peniaga didaftarkan di lokasi ini.</p>
-                        </div>
-                      )}
-                    </div>
-                    <DialogFooter>
-                       <Button variant="outline" onClick={() => setSelectedLocation(null)}>Tutup</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <div className="text-center py-12 bg-secondary/10 rounded-2xl text-muted-foreground">
+                            <Store className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                            <p>Tiada peniaga didaftarkan di lokasi ini.</p>
+                          </div>
+                        )}
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedLocation(null)}>Tutup</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
 
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
           )
         })}
         {locations?.length === 0 && (
           <div className="col-span-full py-20 text-center text-muted-foreground bg-secondary/10 rounded-3xl border border-dashed border-border">
-             <MapPin className="w-12 h-12 mx-auto mb-4 opacity-20" />
-             <p className="text-lg font-bold">Tiada lokasi dijumpai.</p>
-             <p className="text-sm">Klik "Tambah Lokasi" untuk mula mendaftar tapak perniagaan.</p>
+            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-bold">Tiada lokasi dijumpai.</p>
+            <p className="text-sm">Klik "Tambah Lokasi" untuk mula mendaftar tapak perniagaan.</p>
           </div>
         )}
       </div>

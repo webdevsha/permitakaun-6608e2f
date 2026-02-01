@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   role: null,
   isLoading: true,
-  signOut: async () => {},
+  signOut: async () => { },
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [role, setRole] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  
+
   // Create the client once and reuse it (Singleton-like behavior for the provider)
   const [supabase] = useState(() => createClient())
   const router = useRouter()
@@ -40,17 +40,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = async (userId: string, userEmail?: string) => {
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .single()
-        
-        if (mounted && !error && data) {
-          setProfile(data)
-          setRole(data.role ?? 'tenant')
+
+        let determinedRole = data?.role ?? 'tenant'
+
+        // Fallback for specific emails if profile is missing or role is tenant
+        if (userEmail) {
+          if (userEmail === 'admin@permit.com' && determinedRole !== 'admin') determinedRole = 'admin'
+          else if (userEmail === 'staff@permit.com' && determinedRole !== 'staff') determinedRole = 'staff'
+          else if (userEmail === 'organizer@permit.com' && determinedRole !== 'organizer') determinedRole = 'organizer'
+        }
+
+        if (mounted) {
+          // We might not have data if profile doesn't exist, but we still want to set the role if we found a fallback
+          setProfile(data || null)
+          setRole(determinedRole)
         }
       } catch (error) {
         console.error("Profile fetch error:", error)
@@ -61,12 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // Check for active session
         const { data: { session: initialSession } } = await supabase.auth.getSession()
-        
+
         if (mounted) {
           if (initialSession) {
             setSession(initialSession)
             setUser(initialSession.user)
-            await fetchProfile(initialSession.user.id)
+            await fetchProfile(initialSession.user.id, initialSession.user.email)
           }
           // If no session, user is null (default), we just stop loading
         }
@@ -88,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (currentSession?.user) {
         // Fetch profile on sign-in or token refresh to ensure role is up to date
-        await fetchProfile(currentSession.user.id)
+        await fetchProfile(currentSession.user.id, currentSession.user.email)
       } else {
         setProfile(null)
         setRole(null)
