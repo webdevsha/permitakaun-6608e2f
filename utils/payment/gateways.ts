@@ -69,7 +69,10 @@ export async function createChipInPayment(params: {
     // Chip-in usually requires detailed products.
     const amountCents = Math.round(params.amount * 100)
 
+    console.log("[Chip-In] Brand ID:", PAYMENT_CONFIG.chipIn.brandId)
+
     const body = JSON.stringify({
+        brand_id: PAYMENT_CONFIG.chipIn.brandId,
         success_redirect: params.redirectUrl,
         failure_redirect: params.redirectUrl,
         purchase: {

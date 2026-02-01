@@ -9,8 +9,9 @@ export const PAYMENT_CONFIG = {
     },
 
     chipIn: {
-        brandId: process.env.CHIP_BRAND_ID, // Use if needed, or just token
         apiKey: process.env.CHIP_API_KEY,
+        brandId: process.env.CHIP_BRAND_ID,
+        isSandbox: process.env.NEXT_PUBLIC_PAYMENT_MODE === 'sandbox',
         endpoint: 'https://gate.chip-in.asia/api/v1' // Verify endpoint for "Chip-in" or "Chip"
     }
 }
