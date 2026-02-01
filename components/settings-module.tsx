@@ -630,6 +630,38 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                 </Table>
               </CardContent>
             </Card>
+
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <CardTitle className="font-serif text-lg flex items-center gap-2">
+                  <Database className="text-orange-500 w-5 h-5" /> System Health & Cache
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100">
+                  <div className="space-y-1">
+                    <p className="font-bold text-sm text-orange-900">Clear System Cache</p>
+                    <p className="text-xs text-orange-800/70">Force refresh all data keys and layout segments.</p>
+                  </div>
+                  <Button onClick={async () => {
+                    const { clearCache } = await import('@/actions/system')
+                    const res = await clearCache()
+                    if (res.success) toast.success(res.message)
+                    else toast.error(res.message)
+                    window.location.reload()
+                  }} variant="outline" className="border-orange-200 hover:bg-orange-100 text-orange-700">
+                    <RefreshCw className="mr-2 h-4 w-4" /> Clear Cache
+                  </Button>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 font-mono text-xs text-slate-500">
+                  <p className="font-bold mb-2">Debug Context:</p>
+                  <p>User Email: {user?.email}</p>
+                  <p>Resolved Role: {role}</p>
+                  <p>User ID: {user?.id}</p>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
       </Tabs>
