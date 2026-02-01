@@ -51,31 +51,11 @@ import { cn } from "@/lib/utils"
 import { SubscriptionPlans } from "@/components/subscription-plans"
 import { useAuth } from "@/components/providers/auth-provider"
 
-// Fetcher: Get ALL transactions
-const fetcher = async () => {
-  const supabase = createClient()
-
-  const { data, error } = await supabase
-    .from('transactions')
-    .select(`
-      *, 
-      tenants (
-        full_name, 
-        business_name
-      )
-    `)
-    .order('date', { ascending: false })
-
-  if (error) {
-    console.error("Supabase fetch error:", error)
-    throw error
-  }
-  return data
-}
 
 export function AccountingModule({ initialTransactions }: { initialTransactions?: any[] }) {
   const { role, user } = useAuth()
   const [userRole, setUserRole] = useState<string>("")
+  // Use server-provided transactions (already filtered by role in fetchDashboardData)
   const transactions = initialTransactions || []
   const mutate = () => window.location.reload()
   const [isLoading, setIsLoading] = useState(true)
