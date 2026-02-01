@@ -17,6 +17,8 @@ export async function fetchDashboardData() {
         role = 'organizer'
     } else if (!role && user.email === 'staff@permit.com') {
         role = 'staff'
+    } else if (!role && user.email === 'rafisha92@gmail.com') {
+        role = 'superadmin'
     }
     role = role || 'tenant'
 
@@ -27,8 +29,8 @@ export async function fetchDashboardData() {
     let availableLocations: any[] = []
     let userProfile: any = null
 
-    // --- ADMIN & STAFF: Fetch ALL ---
-    if (role === 'admin' || role === 'staff') {
+    // --- ADMIN & STAFF & SUPERADMIN: Fetch ALL ---
+    if (role === 'admin' || role === 'staff' || role === 'superadmin') {
         // Fetch Tenants with Locations
         const { data: t } = await supabase
             .from('tenants')

@@ -30,13 +30,32 @@ interface SidebarProps {
 }
 
 export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
-  const { role, signOut, user } = useAuth()
+  const { role, signOut, user, isLoading } = useAuth()
   const pathname = usePathname()
   const userRole = role || "tenant"
 
+  if (isLoading) {
+    // Return a skeleton sidebar matching the collapsed state to prevent layout shift
+    return (
+      <aside className={cn(
+        "hidden md:flex flex-col border-r bg-white h-screen sticky top-0 transition-all duration-300 ease-in-out z-30 shadow-sm",
+        isCollapsed ? "w-[80px]" : "w-[280px]"
+      )}>
+        <div className={cn("flex items-center border-b border-border/50", isCollapsed ? "justify-center h-20" : "justify-between px-6 h-24")}>
+          <div className="w-10 h-10 bg-secondary/50 rounded-full animate-pulse"></div>
+        </div>
+        <div className="flex-1 py-6 flex flex-col gap-2 px-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-12 bg-secondary/30 rounded-xl animate-pulse"></div>
+          ))}
+        </div>
+      </aside>
+    )
+  }
+
   let navItems = []
 
-  if (userRole === 'admin') {
+  if (userRole === 'admin' || userRole === 'superadmin') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },

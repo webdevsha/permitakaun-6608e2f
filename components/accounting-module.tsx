@@ -74,14 +74,19 @@ const fetcher = async () => {
 }
 
 export function AccountingModule({ initialTransactions }: { initialTransactions?: any[] }) {
-  const { role } = useAuth()
+  const { role, user } = useAuth()
   const [userRole, setUserRole] = useState<string>("")
   const transactions = initialTransactions || []
   const mutate = () => window.location.reload()
-  const isLoading = false
+  const [isLoading, setIsLoading] = useState(true)
 
   const supabase = createClient()
 
+  // Access Control State
+  const [isModuleVerified, setIsModuleVerified] = useState(false)
+  const [accessDeniedStatus, setAccessDeniedStatus] = useState<"locked" | "trial_expired" | null>(null)
+
+  // Config State
   const [activeTab, setActiveTab] = useState("dashboard")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<any>(null)
@@ -115,39 +120,133 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
     emergency: 3.5
   })
 
+  // Superadmin Settings State
+  const [systemSettings, setSystemSettings] = useState({ is_active: true, trial_duration_days: 14 })
+  const [isSuperadminConfigOpen, setIsSuperadminConfigOpen] = useState(false)
+
+
   useEffect(() => {
-    if (role) {
-      setUserRole(role)
-    } else {
-      const storedRole = sessionStorage.getItem("userRole") || "tenant"
-      setUserRole(storedRole)
+    const init = async () => {
+      setIsLoading(true)
+      let currentRole = role || "tenant"
+      setUserRole(currentRole)
+
+      // 1. Fetch 7-Tabung Config
+      if (user) {
+        const { data: configData } = await supabase.from('accounting_config').select('percentages').eq('profile_id', user.id).maybeSingle()
+        if (configData && configData.percentages) {
+          setPercentages(configData.percentages)
+        }
+      }
+
+      // 2. Fetch System Settings & Verify Access
+      // Default access
+      let accessGranted = true
+      let denyReason: "locked" | "trial_expired" | null = null
+
+      if (currentRole === 'superadmin') {
+        accessGranted = true
+        // Fetch/Init system settings for editing
+        const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
+        if (sysData) setSystemSettings(sysData.value)
+      } else {
+        // Normal checks
+        const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
+        const settings = sysData?.value || { is_active: true, trial_duration_days: 14 }
+
+        if (!settings.is_active) {
+          // Module globally disabled
+          accessGranted = false
+          denyReason = 'locked'
+        } else {
+          // Check Trial
+          // Assuming 'created_at' on user profile denotes start time
+          // If no profile, we assume active for now (or locked, safer to be permissible for test)
+          const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user?.id).single()
+          if (profile) {
+            const startDate = new Date(profile.created_at)
+            const now = new Date()
+            const diffTime = Math.abs(now.getTime() - startDate.getTime())
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+            if (diffDays > settings.trial_duration_days) {
+              accessGranted = false
+              denyReason = 'trial_expired'
+            }
+          }
+        }
+      }
+
+      setAccessDeniedStatus(denyReason)
+      setIsModuleVerified(accessGranted)
+      setIsLoading(false)
     }
-  }, [role])
+
+    if (role !== null) init()
+  }, [role, user])
+
+  const handleSaveConfig = async () => {
+    // Validate total 100%
+    const total = Object.values(percentages).reduce((a, b) => a + b, 0)
+    if (Math.abs(total - 100) > 0.1) {
+      toast.error(`Jumlah peratus mesti 100%. Sekarang: ${total.toFixed(1)}%`)
+      return
+    }
+
+    if (!user) return
+
+    try {
+      const { error } = await supabase.from('accounting_config').upsert({
+        profile_id: user.id,
+        percentages: percentages
+      }, { onConflict: 'profile_id' })
+
+      if (error) throw error
+      toast.success("Konfigurasi 7-Tabung disimpan.")
+      setIsConfigOpen(false)
+    } catch (e: any) {
+      toast.error("Gagal simpan: " + e.message)
+    }
+  }
+
+  const handleSaveSystemSettings = async () => {
+    try {
+      const { error } = await supabase.from('system_settings').upsert({
+        key: 'accounting_module',
+        value: systemSettings,
+        updated_at: new Date().toISOString()
+      })
+      if (error) throw error
+      toast.success("Tetapan Sistem Disimpan")
+      setIsSuperadminConfigOpen(false)
+    } catch (e: any) {
+      toast.error("Gagal: " + e.message)
+    }
+  }
 
   // Reset limit when filters change
   useEffect(() => {
     setDisplayLimit(5)
   }, [filterMonth, filterType, filterStatus])
 
-  // --- RESTRICTED VIEW FOR TENANTS ---
-  if (userRole === 'tenant') {
+  if (isLoading) {
+    return <div className="p-12 text-center text-muted-foreground"><Loader2 className="animate-spin h-8 w-8 mx-auto mb-4" />Menyemak kelayakan...</div>
+  }
+
+  if (accessDeniedStatus === 'trial_expired') {
     return <SubscriptionPlans />
   }
 
-  // --- ORGANIZER VIEW (NOT ACTIVATED) ---
-  if (userRole === 'organizer') {
+  if (accessDeniedStatus === 'locked') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] text-center space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className="p-6 bg-secondary/30 rounded-full mb-2">
           <Lock className="w-12 h-12 text-muted-foreground/60" />
         </div>
-        <h2 className="text-3xl font-serif font-bold text-foreground">Modul Akaun Tidak Diaktifkan</h2>
+        <h2 className="text-3xl font-serif font-bold text-foreground">Modul Dikunci Sementara</h2>
         <p className="text-muted-foreground max-w-md text-lg leading-relaxed">
-          Modul perakaunan untuk penganjur belum diaktifkan atau memerlukan langganan tambahan. Sila hubungi Admin untuk maklumat lanjut.
+          Modul Akaun sedang diselenggara atau dinyahaktifkan oleh Admin. Sila cuba sebentar lagi.
         </p>
-        <Button variant="outline" className="mt-4" onClick={() => toast.info("Sila hubungi 012-3456789 (Admin)")}>
-          Hubungi Admin
-        </Button>
       </div>
     )
   }
@@ -552,6 +651,45 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
                   <Badge className="bg-brand-green/10 text-brand-green border-none px-4 py-1 rounded-full font-bold">
                     100% DIAGIH
                   </Badge>
+                  {userRole === 'superadmin' && (
+                    <Dialog open={isSuperadminConfigOpen} onOpenChange={setIsSuperadminConfigOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="ml-2 h-8 rounded-full text-xs border-dashed border-red-300 text-red-600 bg-red-50 hover:bg-red-100">
+                          <Lock className="w-3 h-3 mr-1" /> Admin Control
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Kawalan Superadmin (Akaun)</DialogTitle>
+                          <DialogDescription>Tetapan global untuk modul Akaun</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="flex items-center justify-between">
+                            <Label>Akses Modul (Global)</Label>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{systemSettings.is_active ? 'Aktif' : 'Nyahaktif'}</span>
+                              <input
+                                type="checkbox"
+                                checked={systemSettings.is_active}
+                                onChange={(e) => setSystemSettings({ ...systemSettings, is_active: e.target.checked })}
+                                className="toggle"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Tempoh Percubaan (Hari)</Label>
+                            <Input
+                              type="number"
+                              value={systemSettings.trial_duration_days}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, trial_duration_days: parseInt(e.target.value) })}
+                            />
+                            <p className="text-[10px] text-muted-foreground">Pengguna akan melihat skrin langganan selepas tempoh ini dari tarikh pendaftaran.</p>
+                          </div>
+                          <Button onClick={handleSaveSystemSettings} className="w-full">Simpan Perubahan Sistem</Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                   <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="ml-2 h-8 w-8 text-muted-foreground hover:text-primary">
