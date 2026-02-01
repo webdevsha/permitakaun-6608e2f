@@ -45,11 +45,17 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   const viewParam = searchParams.get('view')
   const [activeTab, setActiveTab] = useState<string>(viewParam === 'history' ? 'history' : 'status')
 
+  const [isMounted, setIsMounted] = useState(false)
+
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [paymentAmount, setPaymentAmount] = useState<string>("")
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<"manual" | "billplz">("billplz")
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // New Rental Application State
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false)
@@ -318,6 +324,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     }
   }
 
+  if (!isMounted) return null // Prevent hydration mismatch
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>
 
   if (!tenant) return (

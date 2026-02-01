@@ -147,8 +147,9 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
         let accessGranted = true
         let denyReason: "locked" | "trial_expired" | null = null
 
-        if (currentRole === 'superadmin') {
+        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
           accessGranted = true
+          // Even if system is locked for tenants, staff/admin can access.
           const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
           if (sysData) setSystemSettings(sysData.value)
         } else {

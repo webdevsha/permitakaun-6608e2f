@@ -78,6 +78,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   // UI State
   const [isEditing, setIsEditing] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Profile State
   const [formData, setFormData] = useState({
@@ -182,7 +187,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
     if (data) setUsersList(data)
     setLoadingUsers(false)
   }
@@ -198,9 +203,9 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     }
   }
 
-  // Fetch users when tab becomes active if superadmin
+  // Fetch users when tab becomes active (admin/superadmin/staff)
   useEffect(() => {
-    if (role === 'superadmin') {
+    if (role === 'superadmin' || role === 'admin' || role === 'staff') {
       fetchUsers()
     }
   }, [role])
@@ -309,6 +314,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     setFormData(prev => ({ ...prev, [field]: val }))
   }
 
+  if (!isMounted) return null
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
 
   return (
