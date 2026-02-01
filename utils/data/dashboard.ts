@@ -38,8 +38,9 @@ export async function fetchDashboardData() {
     let myLocations: any[] = []
     let availableLocations: any[] = []
 
-    // --- ADMIN & SUPERADMIN: Fetch ALL ---
-    if (role === 'admin' || role === 'superadmin') {
+    // --- ADMIN & SUPERADMIN & SPECIAL ADMIN ORGANIZERS: Fetch ALL ---
+    // admin@kumim.my is granted admin-level visibility while keeping organizer role
+    if (role === 'admin' || role === 'superadmin' || user.email === 'admin@kumim.my') {
         // Fetch Tenants with Locations
         const { data: t } = await supabase
             .from('tenants')
@@ -332,7 +333,9 @@ export async function fetchLocations() {
         .select('*, organizers(name)')
         .order('created_at', { ascending: true })
 
-    if (role === 'organizer') {
+    // Regular organizers only see their own locations
+    // Admin organizers (like admin@kumim.my) see ALL locations
+    if (role === 'organizer' && user.email !== 'admin@kumim.my') {
         const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
         if (org) {
             query = query.eq('organizer_id', org.id)
@@ -340,6 +343,7 @@ export async function fetchLocations() {
             return []
         }
     }
+    // Admins, staff, and admin organizers see all locations (no filter)
 
     const { data: locations } = await query
     if (!locations) return []

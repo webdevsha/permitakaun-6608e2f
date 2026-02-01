@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { Shield, User, Users, CheckCircle, AlertTriangle, Building, Wrench } from "lucide-react"
-import { clearAllSetupData } from "./actions"
+import { clearAllSetupData, cleanHazmanData, wipeSystemData } from "./actions"
 import { cn } from "@/lib/utils"
 
 export default function SetupPage() {
@@ -59,6 +59,40 @@ export default function SetupPage() {
   }
 
 
+  const handleWipeAll = async () => {
+    if (!confirm("⚠️ DANGER: This will delete EVERYTHING (All Tenants, Locations, Organizers, Transactions). Are you sure?")) return
+    if (!confirm("⚠️ DOUBLE CHECK: This is irreversible. Confirm?")) return
+
+    setLoading(true)
+    addLog("🧨 Wiping ENTIRE System...")
+    const res = await wipeSystemData()
+    if (res.success) {
+      addLog("✅ System Wiped.")
+      toast.success("System wiped completely.")
+    } else {
+      addLog(`❌ Wipe Failed: ${res.error}`)
+    }
+    setLoading(false)
+  }
+
+
+
+  const cleanHazmanOnly = async () => {
+    if (!confirm("🧹 Clean only Hazman (ORG002) data? other data will be kept.")) return
+
+    setLoading(true)
+    addLog(`🧹 Cleaning Hazman (ORG002) data...`)
+    const res = await cleanHazmanData()
+
+    if (res.success) {
+      addLog(`✅ ${res.message}`)
+      toast.success("Hazman data cleaned!")
+    } else {
+      addLog(`❌ Failed: ${res.error}`)
+      toast.error("Failed to clean Hazman data")
+    }
+    setLoading(false)
+  }
 
   const forceFixOrganizer = async () => {
     setLoading(true)
@@ -196,8 +230,8 @@ export default function SetupPage() {
               addLog(`   Linked Organizer to User`)
             }
 
-            // Seed Locations for this Organizer
-            if (orgId) {
+            // Seed Locations for this Organizer (skip for ORG002 - they start with clean slate)
+            if (orgId && u.orgCode !== 'ORG002') {
               const { count } = await supabase.from('locations').select('*', { count: 'exact', head: true }).eq('organizer_id', orgId)
               if (count === 0) {
                 await supabase.from('locations').insert([
@@ -355,6 +389,11 @@ export default function SetupPage() {
               {loading ? "Processing..." : "Run Full Setup & Seed Data"}
             </Button>
 
+
+            <Button onClick={cleanHazmanOnly} variant="secondary" className="w-full bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-200">
+              🧹 Clean Hazman (ORG002) Data Only
+            </Button>
+
             <Button onClick={forceFixOrganizer} variant="outline" className="w-full">
               <Wrench className="w-4 h-4 mr-2" /> Force Fix "organizer@permit.com" Role
             </Button>
@@ -366,6 +405,14 @@ export default function SetupPage() {
               className="w-full mt-4 border-red-200 bg-red-50 text-destructive hover:bg-red-100"
             >
               🗑️ Clear ALL Data (Start Fresh)
+            </Button>
+
+            <Button
+              onClick={handleWipeAll}
+              variant="destructive"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"
+            >
+              🧨 WIPEOUT (Delete Everything for Everyone)
             </Button>
 
 

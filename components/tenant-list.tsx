@@ -8,7 +8,7 @@ import { Button } from "./ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen, Plus } from "lucide-react"
+import { MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, Download, Building, MapPin, CheckCircle, XCircle, Store, Save, Utensils, FolderOpen, Plus, Trash2 } from "lucide-react"
 import {
    Dialog,
    DialogContent,
@@ -147,6 +147,25 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
          toast.error("Gagal: " + e.message)
       } finally {
          setAddingTenant(false)
+      }
+   }
+
+   const handleDeleteTenant = async (tenantId: number, tenantName: string) => {
+      if (!confirm(`Adakah anda pasti mahu memadam peniaga "${tenantName}"? Tindakan ini tidak boleh dibatalkan.`)) {
+         return
+      }
+
+      setIsUpdating(true)
+      try {
+         const { error } = await supabase.from('tenants').delete().eq('id', tenantId)
+
+         if (error) throw error
+         toast.success(`Peniaga "${tenantName}" berjaya dipadam`)
+         mutate()
+      } catch (e: any) {
+         toast.error("Gagal memadam: " + e.message)
+      } finally {
+         setIsUpdating(false)
       }
    }
 
@@ -427,9 +446,19 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                               </div>
                            </TableCell>
                            <TableCell className="text-right">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
-                                 <Eye size={16} />
-                              </Button>
+                              <div className="flex justify-end gap-1">
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
+                                    <Eye size={16} />
+                                 </Button>
+                                 <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}
+                                 >
+                                    <Trash2 size={16} />
+                                 </Button>
+                              </div>
                            </TableCell>
                         </TableRow>
                      ))}

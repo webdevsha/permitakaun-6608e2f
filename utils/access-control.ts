@@ -11,12 +11,12 @@ export type AccessStatus = {
 // Client-side check (fast, for UI)
 // Note: Real security should be RLS/Middleware, but UI needs to show/hide stuff.
 export async function checkAkaunAccess(user: any, role: string): Promise<AccessStatus> {
+    // Admins and staff always have access
     if (['admin', 'superadmin', 'staff'].includes(role)) {
         return { hasAccess: true, reason: 'admin_override' }
     }
 
-    // Default trial period if not fetched (should ideally fetch from specific API or passed prop)
-    // We'll fetch it from server action for now.
+    // Get trial period
     const trialDays = await getTrialPeriod().catch(() => 14)
 
     const createdAt = new Date(user.created_at).getTime()
@@ -28,19 +28,31 @@ export async function checkAkaunAccess(user: any, role: string): Promise<AccessS
         return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
     }
 
-    // Check Subscription
-    // We need to fetch ID first. This is a bit heavy for a utility but necessary.
-    // Client-side optimizing: You should pass this status from a parent Server Component if possible.
-    // But for now we fetch.
-
-    // We can't easily get tenant_id here without querying. 
-    // This function is getting heavy.
+    // Check subscription based on role
     const supabase = createClient()
-    const { data: tenant } = await supabase.from('tenants').select('id').eq('profile_id', user.id).single()
 
-    if (tenant) {
-        const hasSub = await checkSubscriptionStatus(tenant.id)
-        if (hasSub) return { hasAccess: true, reason: 'subscription_active' }
+    if (role === 'tenant') {
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('profile_id', user.id)
+            .single()
+
+        if (tenant) {
+            const hasSub = await checkSubscriptionStatus(tenant.id)
+            if (hasSub) return { hasAccess: true, reason: 'subscription_active' }
+        }
+    } else if (role === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('id')
+            .eq('profile_id', user.id)
+            .single()
+
+        if (organizer) {
+            const hasSub = await checkSubscriptionStatus(organizer.id)
+            if (hasSub) return { hasAccess: true, reason: 'subscription_active' }
+        }
     }
 
     return { hasAccess: false, reason: 'expired', daysRemaining: 0 }
