@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -159,6 +160,35 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
     }
   }
 
+  // --- USER MANAGEMENT (SUPERADMIN ONLY) ---
+  const [usersList, setUsersList] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true)
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    if (data) setUsersList(data)
+    setLoadingUsers(false)
+  }
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    try {
+      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
+      if (error) throw error
+      toast.success(`Role updated to ${newRole}`)
+      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+    } catch (e: any) {
+      toast.error("Failed to update role: " + e.message)
+    }
+  }
+
+  // Fetch users when tab becomes active if superadmin
+  useEffect(() => {
+    if (role === 'superadmin') {
+      fetchUsers()
+    }
+  }, [role])
+
   const handleFileUpload = async (file: File, prefix: string) => {
     const fileExt = file.name.split('.').pop()
     const fileName = `${prefix}-${user?.id}-${Date.now()}.${fileExt}`
@@ -281,6 +311,11 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           {role === 'admin' && (
             <TabsTrigger value="backup" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
+            </TabsTrigger>
+          )}
+          {role === 'superadmin' && (
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
             </TabsTrigger>
           )}
         </TabsList>
@@ -529,9 +564,74 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
         )}
-      </Tabs>
+
+            {role === 'superadmin' && (
+              <TabsContent value="users" className="space-y-6">
+                <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+                  <CardHeader className="bg-secondary/10 border-b border-border/30">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                          <Users className="text-primary w-6 h-6" /> Pengurusan Pengguna (Superadmin)
+                        </CardTitle>
+                        <CardDescription>Urus peranan pengguna sistem</CardDescription>
+                      </div>
+                      <Button onClick={fetchUsers} disabled={loadingUsers} variant="outline" size="sm">
+                        <RefreshCw className={cn("w-4 h-4 mr-2", loadingUsers && "animate-spin")} /> Refresh
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-secondary/20">
+                        <TableRow>
+                          <TableHead className="pl-6">Email</TableHead>
+                          <TableHead>Nama</TableHead>
+                          <TableHead>Role Semasa</TableHead>
+                          <TableHead className="text-right pr-6">Tukar Role</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {usersList.map((usr) => (
+                          <TableRow key={usr.id}>
+                            <TableCell className="pl-6 font-medium">{usr.email}</TableCell>
+                            <TableCell>{usr.full_name || '-'}</TableCell>
+                            <TableCell>
+                              <span className={cn(
+                                "text-[10px] font-bold uppercase px-2 py-1 rounded-full border",
+                                usr.role === 'admin' ? "bg-red-50 text-red-600 border-red-100" :
+                                  usr.role === 'staff' ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                    usr.role === 'organizer' ? "bg-purple-50 text-purple-600 border-purple-100" :
+                                      "bg-green-50 text-green-600 border-green-100"
+                              )}>
+                                {usr.role}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                <select
+                                  className="text-xs border rounded p-1"
+                                  value={usr.role}
+                                  onChange={(e) => handleUpdateRole(usr.id, e.target.value)}
+                                  disabled={usr.email === 'admin@permit.com'} // Protect main admin
+                                >
+                                  <option value="tenant">Tenant</option>
+                                  <option value="organizer">Organizer</option>
+                                  <option value="staff">Staff</option>
+                                  <option value="admin">Admin</option>
+                                </select>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+          </Tabs>
     </div>
   )
 }
