@@ -147,8 +147,9 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
         let accessGranted = true
         let denyReason: "locked" | "trial_expired" | null = null
 
-        if (currentRole === 'superadmin') {
+        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
           accessGranted = true
+          // Even if system is locked for tenants, staff/admin can access.
           const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
           if (sysData) setSystemSettings(sysData.value)
         } else {
@@ -417,7 +418,7 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
-        status: userRole === 'admin' ? 'approved' : 'pending',
+        status: (userRole === 'admin' || userRole === 'staff') ? 'approved' : 'pending',
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
@@ -449,8 +450,8 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
   }
 
   const handleDelete = async (id: number) => {
-    if (userRole !== "admin") {
-      toast.error("Hanya Admin boleh memadam transaksi")
+    if (userRole !== "admin" && userRole !== "staff") {
+      toast.error("Hanya Admin/Staff boleh memadam transaksi")
       return
     }
 
@@ -935,7 +936,7 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
                               </Badge>
                             </TableCell>
                             <TableCell className="px-8 text-right">
-                              {userRole === "admin" && (
+                              {(userRole === "admin" || userRole === "staff") && (
                                 <div className="flex items-center justify-end gap-2">
                                   <Button
                                     size="icon"

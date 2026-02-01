@@ -19,6 +19,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             if (isLoading || !user) return
             if (pathname.includes('/dashboard/subscription') || pathname.includes('/dashboard/settings')) return
 
+            // ONLY enforce subscription for Accounting features
+            if (!pathname.startsWith('/dashboard/accounting')) return
+
+            // Admin Override (Double safety)
+            if (role === 'admin' || role === 'staff' || role === 'superadmin') return
+
             const { hasAccess, reason } = await checkAkaunAccess(user, role || 'tenant')
 
             if (!hasAccess && reason === 'expired') {
