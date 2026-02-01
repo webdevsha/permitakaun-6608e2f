@@ -249,7 +249,29 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
-    const { data, error } = await supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
+    let query = supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
+
+    // SPECIAL RULE for Hazman (admin@kumim.my):
+    // Hide all "Seed/Demo" users so he starts with a clean list.
+    // He should only see his own staff (e.g. manjaya.solution) and new users.
+    if (user?.email === 'admin@kumim.my') {
+      const hiddenEmails = [
+        'admin@permit.com',
+        'organizer@permit.com',
+        'staff@permit.com',
+        'rafisha92@gmail.com',
+        'siti@permit.com',
+        'ahmad@permit.com',
+        'nurshafiranoh@gmail.com',
+        'hai@shafiranoh.com',
+        'nshfnoh@proton.me',
+        'admin@klpasar.com',
+        'admin@uptown.com'
+      ]
+      query = query.not('email', 'in', `(${hiddenEmails.map(e => `"${e}"`).join(',')})`)
+    }
+
+    const { data } = await query
     if (data) setUsersList(data)
     setLoadingUsers(false)
   }

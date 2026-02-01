@@ -594,12 +594,13 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                 <div className="flex flex-col gap-1">
                   {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
                   <CardTitle className="text-xl font-serif">{loc.name}</CardTitle>
-                  {loc.organizers?.name && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                      <Building className="w-3 h-3" />
-                      <span className="font-medium">{loc.organizers.name}</span>
-                    </div>
-                  )}
+                  {/* Organizer Name */}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                    <Building className="w-3 h-3" />
+                    <span className="font-medium text-xs">
+                      {loc.organizers?.name ? loc.organizers.name : <span className="text-orange-500 italic">to be added</span>}
+                    </span>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">

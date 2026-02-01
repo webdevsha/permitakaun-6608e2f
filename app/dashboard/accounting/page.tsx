@@ -5,6 +5,6 @@ export default async function AccountingPage() {
     const data = await fetchDashboardData()
 
     return (
-        <AccountingModule initialTransactions={data.transactions} />
+        <AccountingModule initialTransactions={data.transactions} tenants={data.tenants} />
     )
 }

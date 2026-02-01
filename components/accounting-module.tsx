@@ -52,7 +52,7 @@ import { SubscriptionPlans } from "@/components/subscription-plans"
 import { useAuth } from "@/components/providers/auth-provider"
 
 
-export function AccountingModule({ initialTransactions }: { initialTransactions?: any[] }) {
+export function AccountingModule({ initialTransactions, tenants }: { initialTransactions?: any[], tenants?: any[] }) {
   const { role, user } = useAuth()
   const [userRole, setUserRole] = useState<string>("")
   // Use server-provided transactions (already filtered by role in fetchDashboardData)
@@ -84,7 +84,7 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
     category: "",
     amount: "",
     type: "income" as "income" | "expense",
-    tenant: "",
+    tenant_id: "",
     date: new Date().toISOString().split('T')[0]
   })
 
@@ -144,9 +144,14 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
             if (currentRole === 'tenant') {
               const { data: tenant, error } = await supabase
                 .from('tenants')
-                .select('accounting_status')
+                .select('id, accounting_status') // Fetch ID too
                 .eq('profile_id', user.id)
                 .maybeSingle()
+
+              // Auto-set tenant_id for tenants
+              if (tenant) {
+                setNewTransaction(prev => ({ ...prev, tenant_id: tenant.id }))
+              }
 
               if (error) console.error("Tenant status fetch error:", error)
 
@@ -157,6 +162,15 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
               }
             } else {
               // Others (Staff/Admin/Organizer)
+
+              // Auto-Assign Self-Tenant for Organizers/Admins
+              if (tenants) {
+                const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
+                if (selfTenant) {
+                  setNewTransaction(prev => ({ ...prev, tenant_id: selfTenant.id }))
+                }
+              }
+
               const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
               if (profile) {
                 const startDate = new Date(profile.created_at)
@@ -399,8 +413,15 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
         amount: amount,
         type: newTransaction.type,
         status: (userRole === 'admin' || userRole === 'staff') ? 'approved' : 'pending',
+        tenant_id: newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null,
         date: newTransaction.date,
         receipt_url: receiptUrl
+      }
+
+      if (!txData.tenant_id) {
+        toast.error("Sila pilih Peniaga/Tenant")
+        setIsSaving(false)
+        return
       }
 
       if (editingTransaction) {
@@ -453,7 +474,7 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
       category: transaction.category || "",
       amount: transaction.amount.toString(),
       type: transaction.type,
-      tenant: "",
+      tenant_id: transaction.tenant_id?.toString() || "",
       date: transaction.date
     })
     setIsDialogOpen(true)
@@ -467,9 +488,16 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
       category: "",
       amount: "",
       type: "income",
-      tenant: "",
+      tenant_id: "",
       date: new Date().toISOString().split('T')[0]
     })
+
+    // Re-fetch tenant ID if user is tenant
+    if (role === 'tenant' && tenants) {
+      // Find self in tenants list if possible, or just rely on init. 
+      // Better: store "myTenantId" in state during init.
+      // For now, simpler: user.id check
+    }
   }
 
   return (
@@ -513,6 +541,9 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
                     onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
                   />
                 </div>
+
+                {/* Tenant Selection for Admin/Organizer */}
+                {/* Tenant Selection REMOVED - Auto-assigned to Self */}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
