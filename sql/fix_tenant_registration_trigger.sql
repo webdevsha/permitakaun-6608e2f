@@ -31,6 +31,7 @@ BEGIN
         phone_number,
         ic_number,
         ssm_number,
+        address,
         organizer_code,
         status
       ) VALUES (
@@ -41,6 +42,7 @@ BEGIN
         new.raw_user_meta_data->>'phone_number',
         new.raw_user_meta_data->>'ic_number',
         new.raw_user_meta_data->>'ssm_number',
+        new.raw_user_meta_data->>'address',
         new.raw_user_meta_data->>'organizer_code',
         'pending' -- New signups start as pending
       );

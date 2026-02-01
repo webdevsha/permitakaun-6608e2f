@@ -24,6 +24,7 @@ export default function SignupPage() {
     phone: "",
     ssmNumber: "",
     icNumber: "",
+    address: "",
     organizerCode: ""
   })
 
@@ -57,6 +58,7 @@ export default function SignupPage() {
             phone_number: formData.phone,
             ssm_number: formData.ssmNumber,
             ic_number: formData.icNumber,
+            address: formData.address,
             organizer_code: formData.organizerCode, // Pass organizer code
             role: role // Pass the selected role
           }
@@ -154,8 +156,8 @@ export default function SignupPage() {
             <button
               onClick={() => setRole('tenant')}
               className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${role === 'tenant'
-                  ? 'bg-white text-primary shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               Peniaga (Tenant)
@@ -163,8 +165,8 @@ export default function SignupPage() {
             <button
               onClick={() => setRole('organizer')}
               className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${role === 'organizer'
-                  ? 'bg-white text-primary shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               Penganjur (Organizer)
@@ -223,6 +225,17 @@ export default function SignupPage() {
                 className="border-input rounded-xl h-11"
                 value={formData.businessName}
                 onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address">Alamat Surat Menyurat</Label>
+              <Input
+                id="address"
+                className="border-input rounded-xl h-11"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="Contoh: No 123, Jalan ABC, 50000 KL"
               />
             </div>
 
