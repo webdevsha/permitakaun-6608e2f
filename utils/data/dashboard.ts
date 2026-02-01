@@ -122,49 +122,97 @@ export async function fetchDashboardData() {
         if (role === 'organizer') {
             const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
             orgCode = org?.organizer_code
+
+            // Fetch My Locations (Organizer's Locations)
+            if (org) {
+                const { data: locs } = await supabase
+                    .from('locations')
+                    .select('*')
+                    .eq('organizer_id', org.id)
+                    .order('name')
+
+                if (locs) {
+                    myLocations = locs.map((l: any) => ({
+                        location_name: l.name,
+                        display_price: l.rate_monthly || l.rate_khemah || 0, // Fallback price for display
+                        ...l
+                    }))
+                }
+            }
         }
 
-        if (orgCode) {
-            // Fetch Tenants for this organizer
-            const { data: t } = await supabase
-                .from('tenants')
-                .select('*, tenant_locations(*, locations(*))')
-                .eq('organizer_code', orgCode)
+        // Combine logic: Fetch tenants by Code OR by Location Rental
+        if (orgCode || (myLocations && myLocations.length > 0)) {
+            let tenantIds = new Set<string>();
 
-            // Enrich Tenants (similar logic)
-            if (t) {
-                const { data: payments } = await supabase
-                    .from('tenant_payments')
-                    .select('*')
-                    .eq('status', 'approved')
-                    .in('tenant_id', t.map(x => x.id))
-                    .order('payment_date', { ascending: false })
-
-                tenants = t.map(tenant => {
-                    const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
-                    let paymentStatus = 'active'
-                    if (!lastPayment) paymentStatus = 'new'
-                    return {
-                        ...tenant,
-                        locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
-                        lastPaymentDate: lastPayment?.payment_date
-                            ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
-                            : "Tiada Rekod",
-                        lastPaymentAmount: lastPayment?.amount || 0,
-                        paymentStatus
-                    }
-                })
+            // 1. Get Tenants by Organizer Code
+            if (orgCode) {
+                const { data: tByCode } = await supabase
+                    .from('tenants')
+                    .select('id')
+                    .eq('organizer_code', orgCode)
+                tByCode?.forEach(x => tenantIds.add(x.id))
             }
 
-            // Fetch Transactions for these tenants only
-            if (tenants.length > 0) {
-                const tenantIds = tenants.map((t: any) => t.id)
+            // 2. Get Tenants by Location Rentals
+            // (Even if they don't have my organizer_code, they are my tenants if they rent my spot)
+            if (myLocations && myLocations.length > 0) {
+                const locIds = myLocations.map((l: any) => l.id)
+                const { data: rentalTenants } = await supabase
+                    .from('tenant_locations')
+                    .select('tenant_id')
+                    .in('location_id', locIds)
+                    .eq('status', 'active')
+
+                rentalTenants?.forEach(r => tenantIds.add(r.tenant_id))
+            }
+
+            // Fetch Full Data for these Tenants
+            if (tenantIds.size > 0) {
+                const tIds = Array.from(tenantIds) as string[]
+
+                const { data: t } = await supabase
+                    .from('tenants')
+                    .select('*, tenant_locations(*, locations(*))')
+                    .in('id', tIds)
+                    .order('full_name', { ascending: true })
+
+                // Enrich Tenants
+                if (t) {
+                    const { data: payments } = await supabase
+                        .from('tenant_payments')
+                        .select('*')
+                        .eq('status', 'approved')
+                        .in('tenant_id', tIds)
+                        .order('payment_date', { ascending: false })
+
+                    tenants = t.map(tenant => {
+                        const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
+                        let paymentStatus = 'active'
+                        if (!lastPayment) paymentStatus = 'new'
+                        return {
+                            ...tenant,
+                            locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
+                            lastPaymentDate: lastPayment?.payment_date
+                                ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : "Tiada Rekod",
+                            lastPaymentAmount: lastPayment?.amount || 0,
+                            paymentStatus
+                        }
+                    })
+                }
+
+                // Fetch Transactions for these tenants
                 const { data: tx } = await supabase
                     .from('transactions')
                     .select('*, tenants(full_name, business_name)')
-                    .in('tenant_id', tenantIds)
+                    .in('tenant_id', tIds)
                     .order('date', { ascending: false })
+
                 transactions = tx || []
+
+            } else {
+                transactions = []
             }
         }
         // --- TENANT VIEW ---

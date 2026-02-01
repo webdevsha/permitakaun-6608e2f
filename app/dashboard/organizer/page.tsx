@@ -200,6 +200,57 @@ export default async function OrganizerDashboardPage() {
                     )}
                 </div>
             </div>
+
+            {/* TRANSACTIONS SECTION */}
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-serif font-semibold">Senarai Transaksi Terkini</h2>
+                    <Link href="/dashboard/accounting" className="text-primary text-sm font-medium hover:underline flex items-center gap-1">
+                        Lihat Semua <ArrowRight size={14} />
+                    </Link>
+                </div>
+
+                {dashboardData.transactions && dashboardData.transactions.length > 0 ? (
+                    <div className="bg-white border border-border/50 rounded-[2rem] shadow-sm overflow-hidden">
+                        <div className="p-0">
+                            <div className="grid grid-cols-1 divide-y divide-border/30">
+                                {dashboardData.transactions.slice(0, 5).map((tx: any) => {
+                                    // Logic for Organizer View:
+                                    // Tenant's 'expense' for 'Sewa' is Organizer's INCOME.
+                                    const isRentPayment = tx.type === 'expense' && (tx.category === 'Sewa' || tx.description?.toLowerCase().includes('sewa'));
+                                    const displayType = isRentPayment ? 'income' : tx.type;
+
+                                    return (
+                                        <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-secondary/10 transition-colors">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${displayType === 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                    {displayType === 'income' ? <TrendingUp size={18} /> : <AlertCircle size={18} />}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm tracking-tight">{tx.description || "Bayaran"}</p>
+                                                    <p className="text-xs text-muted-foreground">{new Date(tx.date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })} • {tx.tenants?.full_name || "Peniaga"}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`font-bold ${displayType === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {displayType === 'income' ? '+' : '-'} RM {tx.amount.toFixed(2)}
+                                                </p>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-foreground capitalize">
+                                                    {tx.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-white p-8 rounded-3xl border border-dashed border-border text-center">
+                        <p className="text-muted-foreground text-sm">Tiada transaksi direkodkan.</p>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
