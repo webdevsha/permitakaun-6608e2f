@@ -294,14 +294,24 @@ export async function fetchDashboardData() {
             if (locData) {
                 myLocations = locData.map((item: any) => {
                     let price = 0
-                    if (item.rate_type === 'khemah') price = item.locations.rate_khemah
-                    else if (item.rate_type === 'cbs') price = item.locations.rate_cbs
-                    else if (item.rate_type === 'monthly') price = item.locations.rate_monthly
+                    const loc = item.locations
+
+                    // Try to get price based on rate_type
+                    if (item.rate_type === 'khemah' && loc.rate_khemah) {
+                        price = loc.rate_khemah
+                    } else if (item.rate_type === 'cbs' && loc.rate_cbs) {
+                        price = loc.rate_cbs
+                    } else if (item.rate_type === 'monthly' && loc.rate_monthly) {
+                        price = loc.rate_monthly
+                    } else {
+                        // Fallback: Use any available rate (prefer monthly > khemah > cbs)
+                        price = loc.rate_monthly || loc.rate_khemah || loc.rate_cbs || 0
+                    }
 
                     return {
                         ...item,
                         display_price: price,
-                        location_name: item.locations.name
+                        location_name: loc.name
                     }
                 })
             }
