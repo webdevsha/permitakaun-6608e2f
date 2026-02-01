@@ -45,27 +45,34 @@ export async function clearAllSetupData() {
             if (myTenant) keepTenantIds.push(myTenant.id)
         }
 
-        // 2. Perform filtered deletion
-        // Delete tenant_locations first (dependency)
+        // 2. Perform filtered deletion in correct order (respecting foreign keys)
+
+        // Step 1: Delete transactions (references tenants)
+        let q0 = supabase.from('transactions').delete()
+        if (keepTenantIds.length > 0) q0 = q0.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
+        const { data: d0, error: e0 } = await q0.neq('id', 0).select()
+        if (e0) throw new Error(`Error deleting transactions: ${e0.message}`)
+
+        // Step 2: Delete tenant_locations (references both tenants and locations)
         let q1 = supabase.from('tenant_locations').delete()
         if (keepTenantIds.length > 0) q1 = q1.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
         if (keepLocationIds.length > 0) q1 = q1.not('location_id', 'in', `(${keepLocationIds.join(',')})`)
         const { data: d1, error: e1 } = await q1.neq('id', 0).select()
         if (e1) throw new Error(`Error deleting rentals: ${e1.message}`)
 
-        // Delete tenants
+        // Step 3: Delete tenants
         let q2 = supabase.from('tenants').delete()
         if (keepTenantIds.length > 0) q2 = q2.not('id', 'in', `(${keepTenantIds.join(',')})`)
         const { data: d2, error: e2 } = await q2.neq('id', 0).select()
         if (e2) throw new Error(`Error deleting tenants: ${e2.message}`)
 
-        // Delete locations
+        // Step 4: Delete locations
         let q3 = supabase.from('locations').delete()
         if (keepLocationIds.length > 0) q3 = q3.not('id', 'in', `(${keepLocationIds.join(',')})`)
         const { data: d3, error: e3 } = await q3.neq('id', 0).select()
         if (e3) throw new Error(`Error deleting locations: ${e3.message}`)
 
-        // Delete organizers
+        // Step 5: Delete organizers
         let q4 = supabase.from('organizers').delete()
         if (keepOrganizerIds.length > 0) q4 = q4.not('id', 'in', `(${keepOrganizerIds.map(id => `'${id}'`).join(',')})`)
         const { data: d4, error: e4 } = await q4.neq('id', '00000000-0000-0000-0000-000000000000').select()
@@ -78,6 +85,7 @@ export async function clearAllSetupData() {
             success: true,
             warning: !serviceRoleKey ? "⚠️ Service Role Key MISSING. Deletion used normal permissions and may have failed for others' data." : undefined,
             counts: {
+                transactions: d0?.length || 0,
                 rentals: d1?.length || 0,
                 tenants: d2?.length || 0,
                 locations: d3?.length || 0,
