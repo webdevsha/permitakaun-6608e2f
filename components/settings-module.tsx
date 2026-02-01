@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PaymentSettings } from "@/components/settings-toggle"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 // Helper component defined outside to prevent re-renders causing focus loss
@@ -47,13 +48,33 @@ const DataField = ({
   </div>
 )
 
-export function SettingsModule({ initialProfile, initialBackups }: { initialProfile?: any, initialBackups?: any[] }) {
-  const { user, role } = useAuth()
+export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays = 14, currentUser }: { initialProfile?: any, initialBackups?: any[], trialPeriodDays?: number, currentUser?: any }) {
+  const { user, role } = useAuth() // Note: user from auth-provider might be slightly different context than currentUser passed from server, but IDs match. Using currentUser for creation date reliability.
   const supabase = createClient()
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [tenantId, setTenantId] = useState<number | null>(null)
+
+  // Calculate Trial Status
+  const getTrialStatus = (createdAtDate: string) => {
+    const created = new Date(createdAtDate)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - created.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    // Logic: created at is day 0? exact logic matters. Using ceil diff.
+    // If trial is 14 days. Diff needs to be <= 14.
+    const remaining = trialPeriodDays - diffDays
+
+    return {
+      daysUsed: diffDays,
+      daysRemaining: remaining > 0 ? remaining : 0,
+      isExpired: remaining <= 0,
+      startDate: created.toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' })
+    }
+  }
+
+  const myTrialStatus = currentUser ? getTrialStatus(currentUser.created_at) : null
 
   // UI State
   const [isEditing, setIsEditing] = useState(false)
@@ -93,11 +114,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
     }
   }, [initialProfile])
 
-  /* 
-     fetchBackups definition moved inside useEffect or kept external? 
-     It relies on 'supabase' from closure. 
-     The previous edit duplicated it.
-  */
   const fetchBackups = async () => {
     setLoadingBackups(true)
     const { data, error } = await supabase.storage.from('backups').list('', {
@@ -289,7 +305,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
     }
   }
 
-  // Handle Input Change for DataField
   const handleInputChange = (field: string, val: string) => {
     setFormData(prev => ({ ...prev, [field]: val }))
   }
@@ -308,7 +323,7 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
             <Shield className="w-4 h-4 mr-2" /> Profil Saya
           </TabsTrigger>
-          {role === 'admin' && (
+          {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
             <TabsTrigger value="backup" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
@@ -316,6 +331,11 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           {role === 'superadmin' && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            </TabsTrigger>
+          )}
+          {(role === 'admin' || role === 'staff') && (
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
             </TabsTrigger>
           )}
         </TabsList>
@@ -344,7 +364,52 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
             )}
           </div>
 
+
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl">
+            {/* Status Card */}
+            {myTrialStatus && (
+              <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden lg:col-span-3 bg-gradient-to-r from-blue-50 to-white">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-primary font-serif flex items-center gap-2">
+                    <Shield className="w-5 h-5" /> Status Akaun & Langganan
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col md:flex-row gap-6 md:gap-12 items-start md:items-center">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Tarikh Mula Percubaan</p>
+                      <p className="font-mono text-lg font-medium">{myTrialStatus.startDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Status Semasa</p>
+                      <div className="flex items-center gap-2">
+                        {role === 'admin' || role === 'staff' || role === 'superadmin' ? (
+                          <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold border border-purple-200">
+                            Full System Access
+                          </span>
+                        ) : myTrialStatus.isExpired ? (
+                          <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold border border-red-200">
+                            Tamat Tempoh Percubaan ({trialPeriodDays} Hari)
+                          </span>
+                        ) : (
+                          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
+                            Aktif: Percubaan ({myTrialStatus.daysRemaining} hari lagi)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {(role === 'tenant' || role === 'organizer') && !myTrialStatus.isExpired && (
+                      <div className="md:ml-auto">
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-primary">{myTrialStatus.daysRemaining}</p>
+                          <p className="text-xs text-muted-foreground">Hari Baki</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Main Info */}
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden lg:col-span-2">
@@ -412,7 +477,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                   <CardTitle className="text-primary font-serif text-lg">Dokumen Sokongan</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-
                   {/* SSM */}
                   <div className="space-y-2">
                     <Label className="text-xs">Sijil SSM (PDF/Gambar)</Label>
@@ -429,7 +493,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                           {urls.ssm ? "Fail dimuat naik" : "Tiada fail"}
                         </div>
                       )}
-
                       {urls.ssm && (
                         <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.ssm, '_blank')}>
                           <FileText size={14} />
@@ -454,7 +517,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                           {urls.food ? "Fail dimuat naik" : "Tiada fail"}
                         </div>
                       )}
-
                       {urls.food && (
                         <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.food, '_blank')}>
                           <FileText size={14} />
@@ -479,7 +541,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                           {urls.other ? "Fail dimuat naik" : "Tiada fail"}
                         </div>
                       )}
-
                       {urls.other && (
                         <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.other, '_blank')}>
                           <FileText size={14} />
@@ -487,15 +548,24 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                       )}
                     </div>
                   </div>
-
                 </CardContent>
               </Card>
             </div>
           </div>
         </TabsContent>
 
-        {role === 'admin' && (
+        {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
           <TabsContent value="backup" className="space-y-6">
+            {/* Payment Settings (Admin/Superadmin Only) */}
+            {(role === 'admin' || role === 'superadmin') && (
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-serif font-semibold">Tetapan Pembayaran & Percubaan</h2>
+                </div>
+                <PaymentSettings />
+              </div>
+            )}
+
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
                 <div className="flex justify-between items-center">
@@ -567,16 +637,16 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           </TabsContent>
         )}
 
-        {role === 'superadmin' && (
+        {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-serif text-2xl flex items-center gap-2">
-                      <Users className="text-primary w-6 h-6" /> Pengurusan Pengguna (Superadmin)
+                      <Users className="text-primary w-6 h-6" /> Pengurusan Pengguna
                     </CardTitle>
-                    <CardDescription>Urus peranan pengguna sistem</CardDescription>
+                    <CardDescription>Semakan dan urus peranan pengguna ({usersList.length} Pengguna)</CardDescription>
                   </div>
                   <Button onClick={fetchUsers} disabled={loadingUsers} variant="outline" size="sm">
                     <RefreshCw className={cn("w-4 h-4 mr-2", loadingUsers && "animate-spin")} /> Refresh
@@ -590,7 +660,8 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                       <TableHead className="pl-6">Email</TableHead>
                       <TableHead>Nama</TableHead>
                       <TableHead>Role Semasa</TableHead>
-                      <TableHead className="text-right pr-6">Tukar Role</TableHead>
+                      <TableHead>Trial / Tarikh Mula</TableHead>
+                      {role === 'superadmin' && <TableHead className="text-right pr-6">Tukar Role</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -610,22 +681,36 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
                             {usr.role}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right pr-6">
-                          <div className="flex justify-end gap-2">
-                            <select
-                              className="text-xs border rounded p-1"
-                              value={usr.role}
-                              onChange={(e) => handleUpdateRole(usr.id, e.target.value)}
-                              disabled={usr.email === 'admin@permit.com' || (usr.role === 'superadmin' && usr.email === 'rafisha92@gmail.com')}
-                            >
-                              <option value="tenant">Tenant</option>
-                              <option value="organizer">Organizer</option>
-                              <option value="staff">Staff</option>
-                              <option value="admin">Admin</option>
-                              <option value="superadmin">Superadmin</option>
-                            </select>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-mono text-muted-foreground">{new Date(usr.created_at).toLocaleDateString('ms-MY')}</span>
+                            {(() => {
+                              const status = getTrialStatus(usr.created_at)
+                              if (['admin', 'superadmin', 'staff'].includes(usr.role)) return <span className="text-[10px] text-green-600 font-bold">Privileged</span>
+                              return status.isExpired
+                                ? <span className="text-[10px] text-red-600 font-bold">Expired ({Math.abs(status.daysRemaining)}d ago)</span>
+                                : <span className="text-[10px] text-blue-600 font-bold">{status.daysRemaining} days left</span>
+                            })()}
                           </div>
                         </TableCell>
+                        {role === 'superadmin' && (
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              <select
+                                className="text-xs border rounded p-1"
+                                value={usr.role}
+                                onChange={(e) => handleUpdateRole(usr.id, e.target.value)}
+                                disabled={usr.email === 'admin@permit.com' || (usr.role === 'superadmin' && usr.email === 'rafisha92@gmail.com')}
+                              >
+                                <option value="tenant">Tenant</option>
+                                <option value="organizer">Organizer</option>
+                                <option value="staff">Staff</option>
+                                <option value="admin">Admin</option>
+                                <option value="superadmin">Superadmin</option>
+                              </select>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -679,7 +764,6 @@ export function SettingsModule({ initialProfile, initialBackups }: { initialProf
           </TabsContent>
         )}
       </Tabs>
-    </div >
+    </div>
   )
 }
-// Settings Module Component Verification

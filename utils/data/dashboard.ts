@@ -283,7 +283,8 @@ export async function fetchDashboardData() {
         myLocations,
         availableLocations,
         userProfile,
-        role
+        role,
+        user // Added user for context (created_at etc)
     }
 }
 
@@ -323,18 +324,19 @@ export async function fetchLocations() {
 export async function fetchSettingsData() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { profile: null, backups: [] }
+    if (!user) return { profile: null, backups: [], role: null, trialPeriodDays: 14, user: null }
 
     const { data: profile } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
-
-    // Check if admin for backups
     const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
 
     let backups: any[] = []
-    if (userProfile?.role === 'admin') {
+    if (['admin', 'superadmin', 'staff'].includes(userProfile?.role || '')) {
         const { data: b } = await supabase.storage.from('backups').list('', { sortBy: { column: 'created_at', order: 'desc' } })
         if (b) backups = b
     }
 
-    return { profile, backups, role: userProfile?.role }
+    const { data: systemSettings } = await supabase.from('system_settings').select('trial_period_days').single()
+    const trialPeriodDays = systemSettings?.trial_period_days || 14
+
+    return { profile, backups, role: userProfile?.role, trialPeriodDays, user }
 }

@@ -70,8 +70,33 @@ export async function initiatePayment(params: {
         console.log("[Payment] Result:", result)
 
         if (result && result.url) {
-            // Optionally store the transaction in DB as 'pending' before redirecting
-            // For now, we assume the redirect handles flow or we just return the URL
+            // Fetch Tenant ID
+            const { data: tenant } = await supabase
+                .from('tenants')
+                .select('id')
+                .eq('profile_id', user.id)
+                .single()
+
+            if (tenant) {
+                // Insert Pending Transaction
+                const { error: txError } = await supabase.from('transactions').insert({
+                    tenant_id: tenant.id,
+                    date: new Date().toISOString(),
+                    amount: params.amount,
+                    type: 'expense', // From tenant perspective
+                    category: 'Sewa',
+                    description: `${params.description} (Ref: ${result.id})`,
+                    status: 'pending',
+                    receipt_url: result.url, // Store payment link
+                })
+
+                if (txError) {
+                    console.error("[Payment] Failed to record pending tx:", txError)
+                } else {
+                    console.log("[Payment] Recorded pending transaction.")
+                }
+            }
+
             return { success: true, url: result.url }
         } else {
             return { error: "Gagal mendapatkan URL pembayaran." }

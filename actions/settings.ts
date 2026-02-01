@@ -37,7 +37,30 @@ export async function updatePaymentMode(mode: 'sandbox' | 'real') {
 
     if (error) throw new Error(error.message)
 
-    revalidatePath('/admin')
     revalidatePath('/dashboard')
+    return { success: true }
+}
+
+export async function getTrialPeriod() {
+    const supabase = await createClient()
+    const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'trial_period_days')
+        .single()
+    return parseInt(data?.value || '14')
+}
+
+export async function updateTrialPeriod(days: number) {
+    const supabase = await createClient()
+    const { error } = await supabase
+        .from('system_settings')
+        .upsert({
+            key: 'trial_period_days',
+            value: days.toString(),
+            updated_at: new Date().toISOString()
+        })
+    if (error) throw new Error(error.message)
+    revalidatePath('/admin')
     return { success: true }
 }

@@ -3,18 +3,55 @@ import { Users, MapPin, TrendingUp, AlertCircle, ArrowRight, Plus } from "lucide
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { checkAkaunAccess } from "@/utils/access-control"
+
+// ... existing imports
 
 export default async function OrganizerDashboardPage() {
     const dashboardData = await fetchDashboardData()
     const locations = await fetchLocations()
 
-    const { tenants, overdueTenants, userProfile, role } = dashboardData
-    const displayRole = "Penganjur"
+    const { tenants, overdueTenants, userProfile, role, user } = dashboardData
 
+    // Check Access
+    const access = await checkAkaunAccess(user, role)
+
+    const displayRole = "Penganjur"
     const activeTenantsCount = tenants.filter((t: any) => t.status === 'active').length
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Trial Banner */}
+            {access.reason === 'trial_active' && (
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between text-blue-900 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 rounded-full"><TrendingUp size={20} /></div>
+                        <div>
+                            <p className="font-bold text-sm">Percubaan Percuma 'Akaun' Aktif</p>
+                            <p className="text-xs opacity-80">Anda mempunyai <span className="font-bold text-lg">{access.daysRemaining}</span> hari lagi sebelum perlu melanggan.</p>
+                        </div>
+                    </div>
+                    <Link href="/dashboard/subscription">
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Langgan Sekarang</Button>
+                    </Link>
+                </div>
+            )}
+
+            {access.reason === 'expired' && (
+                <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center justify-between text-red-900 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-red-100 rounded-full"><AlertCircle size={20} /></div>
+                        <div>
+                            <p className="font-bold text-sm">Tempoh Percubaan Tamat</p>
+                            <p className="text-xs opacity-80">Sila langgan untuk terus mengakses ciri-ciri Akaun.</p>
+                        </div>
+                    </div>
+                    <Link href="/dashboard/subscription">
+                        <Button size="sm" variant="destructive" className="rounded-lg">Langgan Sekarang</Button>
+                    </Link>
+                </div>
+            )}
+
             <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-4 border-b border-border/30">
                 <div className="space-y-2">
                     <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground tracking-tighter">
