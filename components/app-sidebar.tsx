@@ -85,6 +85,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     // Tenant
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
@@ -251,6 +252,7 @@ export function MobileNav() {
   } else {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
+      { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "rentals", label: "Sewa Saya", icon: Home, href: "/dashboard/rentals" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
