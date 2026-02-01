@@ -127,79 +127,81 @@ export function AccountingModule({ initialTransactions }: { initialTransactions?
 
   useEffect(() => {
     const init = async () => {
-      setIsLoading(true)
-      let currentRole = role || "tenant"
-      setUserRole(currentRole)
+      try {
+        setIsLoading(true)
+        if (!user || !role) {
+          setIsLoading(false)
+          return
+        }
 
-      // 1. Fetch 7-Tabung Config
-      if (user) {
+        let currentRole = role
+        setUserRole(currentRole)
+
+        // 1. Fetch 7-Tabung Config
         const { data: configData } = await supabase.from('accounting_config').select('percentages').eq('profile_id', user.id).maybeSingle()
         if (configData && configData.percentages) {
           setPercentages(configData.percentages)
         }
-      }
 
-      // 2. Fetch System Settings & Verify Access
-      // Default access
-      let accessGranted = true
-      let denyReason: "locked" | "trial_expired" | null = null
+        // 2. Fetch System Settings & Verify Access
+        let accessGranted = true
+        let denyReason: "locked" | "trial_expired" | null = null
 
-      if (currentRole === 'superadmin') {
-        accessGranted = true
-        // Fetch/Init system settings for editing
-        const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-        if (sysData) setSystemSettings(sysData.value)
-      } else {
-        // Normal checks
-        const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-        const settings = sysData?.value || { is_active: true, trial_duration_days: 14 }
-
-        if (!settings.is_active) {
-          // Module globally disabled
-          accessGranted = false
-          denyReason = 'locked'
+        if (currentRole === 'superadmin') {
+          accessGranted = true
+          const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
+          if (sysData) setSystemSettings(sysData.value)
         } else {
-          // Module Active Check
-          if (currentRole === 'tenant') {
-            // Tenant: Check specific "Akaun Status" (mapped to 'status' or 'subscription_status' if exists)
-            // Using 'status' field as requested ("Akaun status is Active")
-            const { data: tenant } = await supabase
-              .from('tenants')
-              .select('status')
-              .eq('profile_id', user?.id)
-              .maybeSingle()
+          const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
+          const settings = sysData?.value || { is_active: true, trial_duration_days: 14 }
 
-            // If not active, show Subscription (Langganan)
-            if (!tenant || tenant.status !== 'active') {
-              accessGranted = false
-              denyReason = 'trial_expired'
-            }
+          if (!settings.is_active) {
+            accessGranted = false
+            denyReason = 'locked'
           } else {
-            // Others (Staff/Admin/Organizer): Check Trial or allow
-            // Assuming Admin/Staff always have access, but keeping trial logic if previously intended
-            // Actually, usually Admins bypass this. But let's stick to the existing trial logic for non-tenants/non-superadmin.
-            const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user?.id).single()
-            if (profile) {
-              const startDate = new Date(profile.created_at)
-              const now = new Date()
-              const diffTime = Math.abs(now.getTime() - startDate.getTime())
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            // Module Active Check
+            if (currentRole === 'tenant') {
+              const { data: tenant, error } = await supabase
+                .from('tenants')
+                .select('status')
+                .eq('profile_id', user.id)
+                .maybeSingle()
 
-              if (diffDays > settings.trial_duration_days) {
+              if (error) console.error("Tenant status fetch error:", error)
+
+              // If not active, show Subscription
+              if (!tenant || tenant.status !== 'active') {
                 accessGranted = false
                 denyReason = 'trial_expired'
+              }
+            } else {
+              // Others (Staff/Admin/Organizer)
+              const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+              if (profile) {
+                const startDate = new Date(profile.created_at)
+                const now = new Date()
+                const diffTime = Math.abs(now.getTime() - startDate.getTime())
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+                if (diffDays > settings.trial_duration_days) {
+                  accessGranted = false
+                  denyReason = 'trial_expired'
+                }
               }
             }
           }
         }
-      }
 
-      setAccessDeniedStatus(denyReason)
-      setIsModuleVerified(accessGranted)
-      setIsLoading(false)
+        setAccessDeniedStatus(denyReason)
+        setIsModuleVerified(accessGranted)
+      } catch (e) {
+        console.error("Accounting Init Error:", e)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    if (role !== null) init()
+    init()
   }, [role, user])
 
   const handleSaveConfig = async () => {
