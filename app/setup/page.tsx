@@ -221,11 +221,25 @@ export default function SetupPage() {
           if (u.isTenant) {
             const { data: existingTenant } = await supabase
               .from('tenants')
-              .select('id')
+              .select('id, profile_id')
               .eq('email', u.email)
               .maybeSingle()
 
-            if (!existingTenant) {
+            if (existingTenant) {
+              // If tenant exists but doesn't have profile_id linked, link it now
+              if (!existingTenant.profile_id) {
+                const { error: updateError } = await supabase
+                  .from('tenants')
+                  .update({ profile_id: userId })
+                  .eq('id', existingTenant.id)
+
+                if (updateError) addLog(`   ⚠️ Failed to link tenant: ${updateError.message}`)
+                else addLog(`   🔗 Linked existing tenant to user profile`)
+              } else {
+                addLog(`   ✓ Tenant already linked`)
+              }
+            } else {
+              // Create new tenant record
               const { error: tenantError } = await supabase
                 .from('tenants')
                 .insert({
