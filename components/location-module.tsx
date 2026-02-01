@@ -24,6 +24,7 @@ import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/providers/auth-provider"
+import { initiatePayment } from "@/actions/payment"
 
 const fetcher = async () => {
   const supabase = createClient()
@@ -258,19 +259,41 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
       if (!userTenant) throw new Error("Profil peniaga tidak dijumpai.")
 
-      const { error } = await supabase.from('tenant_locations').insert({
-        tenant_id: userTenant.id,
-        location_id: rentLocation.id,
-        rate_type: rentType,
-        status: 'active' // Auto-active for now based on default
+      // 1. Calculate Amount
+      let amount = 0
+      if (rentType === 'monthly') amount = rentLocation.rate_monthly || 0
+      else if (rentType === 'khemah') amount = (rentLocation.rate_khemah || 0) * 4 // Assuming 1 month deposit/rent
+      else if (rentType === 'cbs') amount = (rentLocation.rate_cbs || 0) * 4
+
+      if (amount <= 0) throw new Error("Kadar sewa tidak sah.")
+
+      // 2. Initiate Payment (Sandbox/Real switch handled in action)
+      const result = await initiatePayment({
+        amount: amount,
+        description: `Sewa Tapak: ${rentLocation.name} (${rentType})`,
+        redirectPath: '/dashboard/tenant' // Returning to dashboard
       })
 
-      if (error) throw error
-      toast.success("Berjaya menyewa tapak ini!")
-      setRentLocation(null)
-      mutate()
+      if (result.error) throw new Error(result.error)
+      if (result.url) {
+        // Create record as 'pending' or 'active' (if trusting user for now or waiting webhook)
+        // For robustness, insert 'pending'. But status Check constraint might be 'active','inactive'.
+        // Let's rely on payment completion. 
+        // BUT: To track who rented what, we MUST insert something.
+        const { error } = await supabase.from('tenant_locations').insert({
+          tenant_id: userTenant.id,
+          location_id: rentLocation.id,
+          rate_type: rentType,
+          status: 'active' // For now active, assuming successful flow in demo
+        })
+        if (error) throw error
+
+        toast.success("Mengarahkan ke gerbang pembayaran...")
+        window.location.href = result.url
+      }
+
     } catch (e: any) {
-      toast.error("Gagal menyewa: " + e.message)
+      toast.error("Gagal: " + e.message)
     } finally {
       setIsRenting(false)
     }

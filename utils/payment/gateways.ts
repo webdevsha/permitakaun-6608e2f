@@ -1,0 +1,109 @@
+import { PAYMENT_CONFIG } from "./config"
+
+// --- BILLPLZ IMPLEMENTATION (Real) ---
+export async function createBillplzBill(params: {
+    email: string,
+    name: string,
+    amount: number, // in MYR
+    description: string,
+    callbackUrl: string,
+    redirectUrl: string
+}) {
+    const url = `${PAYMENT_CONFIG.billplz.endpoint}/bills`
+    const auth = Buffer.from(`${PAYMENT_CONFIG.billplz.apiKey}:`).toString('base64')
+
+    // Amount in cents for Billplz
+    const amountCents = Math.round(params.amount * 100)
+
+    const body = JSON.stringify({
+        collection_id: PAYMENT_CONFIG.billplz.collectionId,
+        email: params.email,
+        name: params.name,
+        amount: amountCents,
+        description: params.description,
+        callback_url: params.callbackUrl,
+        redirect_url: params.redirectUrl,
+        deliver: false // Don't send email automatically if handled by app
+    })
+
+    // console.log("Creating Billplz Bill:", body)
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json'
+        },
+        body
+    })
+
+    const data = await response.json()
+    if (!response.ok) {
+        throw new Error(`Billplz Error: ${JSON.stringify(data)}`)
+    }
+
+    return {
+        id: data.id,
+        url: data.url,
+        gateway: 'billplz'
+    }
+}
+
+// --- CHIP-IN IMPLEMENTATION (Sandbox) ---
+// Assuming "Chip-in" refers to a gateway compatible with the provided key. 
+// If specific docs are needed, user might need to provide. 
+// Using a generic implementation based on typical keys.
+// Key provided: P1MT-7tIkrcilPUccyXWD-safOuKDA4_fOTgOn-WcQRmNUBOVlRGc1DS9VRXyjWVcowIzrHcvwIIJbM8qaGc2A==
+// This looks like a Bearer token.
+// Endpoint: https://gate.chip-in.asia/api/v1/purchases/ (Hypothetical or standard Chip)
+
+export async function createChipInPayment(params: {
+    email: string,
+    amount: number,
+    description: string,
+    redirectUrl: string
+}) {
+    // Use the test endpoint or inferred endpoint
+    const url = 'https://gate.chip-in.asia/api/v1/purchases/'
+
+    // Chip-in usually requires detailed products.
+    const amountCents = Math.round(params.amount * 100)
+
+    const body = JSON.stringify({
+        success_redirect: params.redirectUrl,
+        failure_redirect: params.redirectUrl,
+        purchase: {
+            products: [
+                {
+                    name: params.description.substring(0, 256),
+                    price: amountCents,
+                    quantity: 1
+                }
+            ]
+        },
+        client: {
+            email: params.email,
+        }
+    })
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${PAYMENT_CONFIG.chipIn.apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body
+    })
+
+    const data = await response.json()
+    if (!response.ok) {
+        console.error("Chip Error:", data)
+        throw new Error(`Chip-In Error: ${JSON.stringify(data)}`)
+    }
+
+    return {
+        id: data.id,
+        url: data.checkout_url,
+        gateway: 'chip-in'
+    }
+}

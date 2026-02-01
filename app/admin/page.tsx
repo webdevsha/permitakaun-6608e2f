@@ -1,12 +1,14 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { Users, Building, Shield, UserPlus } from "lucide-react"
+import { Users, Building, Shield, UserPlus, CreditCard } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
+import { PaymentSettings } from "@/components/settings-toggle"
 
 export default async function AdminDashboardPage() {
+    // ... no changes to data fetching ...
     const data = await fetchDashboardData()
     const supabase = await createClient()
 
@@ -27,13 +29,14 @@ export default async function AdminDashboardPage() {
                         Admin Panel
                     </h1>
                     <p className="text-muted-foreground text-lg font-medium">
-                        Pusat kawalan sistem dan pengurusan staf.
+                        Pusat kawalan sistem, kewangan dan pengurusan staf.
                     </p>
                 </div>
             </header>
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* ... existing cards ... keep them */}
                 <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Jumlah Penganjur</CardDescription>
@@ -64,6 +67,16 @@ export default async function AdminDashboardPage() {
                         <AddStaffDialog />
                     </CardContent>
                 </Card>
+            </div>
+
+            {/* Payment Settings */}
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
+                        <CreditCard className="w-5 h-5" /> Tetapan Pembayaran
+                    </h2>
+                </div>
+                <PaymentSettings />
             </div>
 
             {/* Staff Management Section */}
