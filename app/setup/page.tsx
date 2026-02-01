@@ -19,7 +19,7 @@ export default function SetupPage() {
   const users = [
     { email: "admin@permit.com", pass: "pass1234", role: "admin", name: "Super Admin", isTenant: false },
     { email: "rafisha92@gmail.com", pass: "pass1234", role: "admin", name: "Super Admin Rafisha", isTenant: false },
-    { email: "admin@kumim.my", pass: "pass1234", role: "admin", name: "Hazman", isTenant: false },
+    { email: "admin@kumim.my", pass: "pass1234", role: "organizer", name: "Hazman", isTenant: false, orgCode: "ORG002", orgName: "Kumim Enterprise" },
     { email: "staff@permit.com", pass: "pass1234", role: "staff", name: "Staff Member", isTenant: false },
     { email: "manjaya.solution@gmail.com", pass: "pass1234", role: "staff", name: "Staff Encik Hazman", isTenant: false },
     { email: "organizer@permit.com", pass: "pass1234", role: "organizer", name: "Ketua Penganjur", isTenant: false, orgCode: "ORG001", orgName: "Persatuan Peniaga Gombak" },
@@ -28,7 +28,7 @@ export default function SetupPage() {
   ]
 
   const [selectedUsers, setSelectedUsers] = useState<string[]>(
-    users.filter(u => u.role === 'admin' || u.role === 'staff').map(u => u.email)
+    users.filter(u => u.role === 'admin').map(u => u.email)
   )
 
   const toggleUser = (email: string) => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { activateSubscription } from "@/actions/subscription"
 import { toast } from "sonner"
 
-export default function PaymentStatusPage() {
+function PaymentStatusContent() {
     const searchParams = useSearchParams()
     const router = useRouter()
     const [status, setStatus] = useState<'loading' | 'success' | 'failure'>('loading')
@@ -155,5 +155,21 @@ export default function PaymentStatusPage() {
                 </CardFooter>
             </Card>
         </div>
+    )
+}
+
+export default function PaymentStatusPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center p-4 bg-muted/20">
+                <Card className="w-full max-w-md shadow-lg border-border/50 rounded-[2rem] overflow-hidden">
+                    <CardContent className="flex items-center justify-center py-20">
+                        <Loader2 className="w-16 h-16 animate-spin text-primary" />
+                    </CardContent>
+                </Card>
+            </div>
+        }>
+            <PaymentStatusContent />
+        </Suspense>
     )
 }
