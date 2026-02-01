@@ -40,13 +40,29 @@ export async function fetchDashboardData() {
 
     // --- ADMIN & SUPERADMIN & SPECIAL ADMIN ORGANIZERS: Fetch ALL ---
     // admin@kumim.my is granted admin-level visibility while keeping organizer role
+    // --- ADMIN & SUPERADMIN & SPECIAL ADMIN ORGANIZERS: Fetch ALL ---
+    // admin@kumim.my is granted admin-level visibility while keeping organizer role
     if (role === 'admin' || role === 'superadmin' || user.email === 'admin@kumim.my') {
+
+        // Developer-Admin Logic: Only admin@permit.com sees Seed Data (ORG001)
+        const isDeveloperAdmin = user.email === 'admin@permit.com'
+        let orgFilter = ''
+        if (!isDeveloperAdmin) {
+            orgFilter = 'ORG001'
+        }
+
         // Fetch Tenants with Locations
-        const { data: t } = await supabase
+        let tQuery = supabase
             .from('tenants')
             .select('*, tenant_locations(*, locations(*)), profiles!inner(role)')
-            .eq('profiles.role', 'tenant')
+            .in('profiles.role', ['tenant', 'organizer'])
             .order('created_at', { ascending: false })
+
+        if (!isDeveloperAdmin) {
+            tQuery = tQuery.neq('organizer_code', 'ORG001')
+        }
+
+        const { data: t } = await tQuery
 
         // Enrich Tenants with Payment Status (Server-side simulation of client logic)
         if (t) {
@@ -75,13 +91,27 @@ export async function fetchDashboardData() {
             })
         }
 
-        const { data: tx } = await supabase
+
+        let txQuery = supabase
             .from('transactions')
-            .select('*, tenants(full_name, business_name)')
+            .select('*, tenants!inner(full_name, business_name, organizer_code)')
             .order('date', { ascending: false })
+
+        if (!isDeveloperAdmin) {
+            // Need to filter transactions where tenant's organizer_code is NOT ORG001
+            // The !inner join on tenants allows filtering by tenant fields
+            txQuery = txQuery.neq('tenants.organizer_code', 'ORG001')
+        }
+
+        const { data: tx } = await txQuery
         transactions = tx || []
 
-        const { data: org } = await supabase.from('organizers').select('*').order('created_at', { ascending: false })
+        let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
+        if (!isDeveloperAdmin) {
+            // Filter out ALL seed/demo organizer codes
+            orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
+        }
+        const { data: org } = await orgQuery
         organizers = org || []
 
         // --- ORGANIZER OR STAFF WITH ORGANIZER_CODE: Fetch Linked Data Only ---
@@ -344,6 +374,15 @@ export async function fetchLocations() {
         }
     }
     // Admins, staff, and admin organizers see all locations (no filter)
+
+    // Developer-Admin Logic: Hide ORG001 for everyone except admin@permit.com
+    if (user.email !== 'admin@permit.com') {
+        // Get ORG001 ID to exclude
+        const { data: seedOrg } = await supabase.from('organizers').select('id').eq('organizer_code', 'ORG001').maybeSingle()
+        if (seedOrg) {
+            query = query.neq('organizer_id', seedOrg.id)
+        }
+    }
 
     const { data: locations } = await query
     if (!locations) return []

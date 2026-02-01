@@ -8,15 +8,22 @@ export async function createBillplzBill(params: {
     description: string,
     callbackUrl: string,
     redirectUrl: string
-}) {
-    const url = `${PAYMENT_CONFIG.billplz.endpoint}/bills`
-    const auth = Buffer.from(`${PAYMENT_CONFIG.billplz.apiKey}:`).toString('base64')
+}, isSandbox = false) {
+    // Select Config (Real vs Sandbox)
+    const config = isSandbox ? PAYMENT_CONFIG.billplzSandbox : PAYMENT_CONFIG.billplz
+
+    if (!config.apiKey || !config.collectionId) {
+        throw new Error(`Billplz ${isSandbox ? 'Sandbox' : 'Real'} API Key or Collection ID missing.`)
+    }
+
+    const url = `${config.endpoint}/bills`
+    const auth = Buffer.from(`${config.apiKey}:`).toString('base64')
 
     // Amount in cents for Billplz
     const amountCents = Math.round(params.amount * 100)
 
     const body = JSON.stringify({
-        collection_id: PAYMENT_CONFIG.billplz.collectionId,
+        collection_id: config.collectionId,
         email: params.email,
         name: params.name,
         amount: amountCents,

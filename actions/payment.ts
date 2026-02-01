@@ -51,15 +51,16 @@ export async function initiatePayment(params: {
 
     try {
         if (mode === 'sandbox') {
-            console.log("[Payment] Calling Chip-In API...")
-            // Chip-In allows separate success/fail URLs
-            result = await createChipInPayment({
+            console.log("[Payment] Calling Billplz SANDBOX API...")
+            // Reuse Billplz logic but with isSandbox = true
+            result = await createBillplzBill({
                 email: user.email,
+                name: user.user_metadata?.full_name || 'User',
                 amount: params.amount,
                 description: params.description,
-                // We append status=... so our page knows result immediately
-                redirectUrl: `${statusPageUrl}?gateway=chip-in&next=${nextPathEncoded}${metadataQuery}`
-            })
+                callbackUrl: callbackUrl,
+                redirectUrl: `${statusPageUrl}?gateway=billplz&next=${nextPathEncoded}${metadataQuery}`
+            }, true) // <--- True for Sandbox
         } else {
             console.log("[Payment] Calling Billplz API...")
             // Billplz redirects to ONE url and appends billplz[...] params

@@ -18,6 +18,13 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
@@ -34,6 +41,12 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
   const [newOrg, setNewOrg] = useState({ name: '', code: '', email: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+
+  // Quick Add Location State
+  const [isLocDialogOpen, setIsLocDialogOpen] = useState(false)
+  const [selectedOrgForLoc, setSelectedOrgForLoc] = useState<any>(null)
+  const [newLoc, setNewLoc] = useState({ name: '', type: 'daily' as 'daily' | 'monthly' })
+  const [isAddingLoc, setIsAddingLoc] = useState(false)
 
   const supabase = createClient()
 
@@ -122,6 +135,45 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
     }
   }
 
+  // --- LOCATION ADD LOGIC ---
+  const handleOpenAddLoc = (org: any) => {
+    setSelectedOrgForLoc(org)
+    setNewLoc({ name: '', type: 'daily' })
+    setIsLocDialogOpen(true)
+  }
+
+  const handleAddLocation = async () => {
+    if (!newLoc.name) {
+      toast.error("Nama lokasi wajib diisi")
+      return
+    }
+
+    setIsAddingLoc(true)
+    try {
+      const { error } = await supabase.from('locations').insert({
+        name: newLoc.name,
+        type: newLoc.type,
+        organizer_id: selectedOrgForLoc.id,
+        // Defaults
+        operating_days: 'Sabtu & Ahad',
+        days_per_week: 2,
+        total_lots: 50,
+        rate_khemah: 0,
+        rate_cbs: 0,
+        rate_monthly: 0
+      })
+
+      if (error) throw error
+      toast.success(`Lokasi ditambah ke ${selectedOrgForLoc.name}`)
+      setIsLocDialogOpen(false)
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal tambah lokasi: " + e.message)
+    } finally {
+      setIsAddingLoc(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -165,6 +217,45 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* ADD LOCATION DIALOG */}
+      <Dialog open={isLocDialogOpen} onOpenChange={setIsLocDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah Lokasi Baru</DialogTitle>
+            <DialogDescription>
+              Menambah lokasi untuk penganjur: <span className="font-bold text-primary">{selectedOrgForLoc?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nama Lokasi/Jalan</Label>
+              <Input
+                value={newLoc.name}
+                onChange={(e) => setNewLoc({ ...newLoc, name: e.target.value })}
+                placeholder="Contoh: Tapak Pasar Malam Gombak"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Jenis Operasi</Label>
+              <Select value={newLoc.type} onValueChange={(v: any) => setNewLoc({ ...newLoc, type: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Mingguan (Pasar Malam/Pagi)</SelectItem>
+                  <SelectItem value="monthly">Bulanan (Uptown/Kiosk)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleAddLocation} disabled={isAddingLoc}>
+              {isAddingLoc ? "Sedang Tambah..." : "Tambah Lokasi"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card className="border-border/50 shadow-sm">
         <CardContent className="p-0">
@@ -218,7 +309,38 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
                     </div>
                   </TableCell>
                   <TableCell className="text-right pr-6">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 items-center">
+                      {/* Location Count & List Display */}
+                      <div className="mr-4 text-right">
+                        {org.locations && org.locations.length > 0 ? (
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="secondary" className="text-[10px] w-fit">
+                              {org.locations.length} Lokasi
+                            </Badge>
+                            <div className="flex flex-wrap justify-end gap-1 max-w-[150px]">
+                              {org.locations.map((l: any) => (
+                                <span key={l.id} className="text-[9px] bg-slate-100 px-1 rounded border border-slate-200 text-slate-600 truncate max-w-full">
+                                  {l.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Tiada Lokasi</span>
+                        )}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 border-dashed"
+                        onClick={() => handleOpenAddLoc(org)}
+                      >
+                        <Plus size={12} /> Lokasi
+                      </Button>
+
+                      <div className="h-4 w-px bg-border mx-1"></div>
+
                       <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(org)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
                         <Pencil size={15} />
                       </Button>
