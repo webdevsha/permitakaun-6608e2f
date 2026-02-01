@@ -58,7 +58,7 @@ export default async function OrganizerDashboardPage() {
                         Hai, <span className="text-primary italic">{userProfile?.full_name || "Penganjur"}</span>
                     </h1>
                     <p className="text-muted-foreground text-lg font-medium">
-                        Pantau lokasi dan penyewa di bawah seliaan anda.
+                        Selamat kembali ke papan pemuka anda.
                     </p>
                 </div>
                 <div className="hidden md:flex bg-white px-6 py-3 rounded-2xl text-primary font-bold border border-border/50 shadow-sm items-center gap-3 text-sm">

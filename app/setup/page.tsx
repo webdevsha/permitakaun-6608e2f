@@ -21,7 +21,7 @@ export default function SetupPage() {
     { email: "rafisha92@gmail.com", pass: "pass1234", role: "admin", name: "Super Admin Rafisha", isTenant: false },
     { email: "admin@kumim.my", pass: "pass1234", role: "organizer", name: "Hazman", isTenant: false, orgCode: "ORG002", orgName: "Kumim Enterprise" },
     { email: "staff@permit.com", pass: "pass1234", role: "staff", name: "Staff Member", isTenant: false },
-    { email: "manjaya.solution@gmail.com", pass: "pass1234", role: "staff", name: "Staff Encik Hazman", isTenant: false },
+    { email: "manjaya.solution@gmail.com", pass: "pass1234", role: "staff", name: "Staff Encik Hazman", isTenant: false, orgCode: "ORG002" },
     { email: "organizer@permit.com", pass: "pass1234", role: "organizer", name: "Ketua Penganjur", isTenant: false, orgCode: "ORG001", orgName: "Persatuan Peniaga Gombak" },
     { email: "siti@permit.com", pass: "pass1234", role: "tenant", name: "Siti Aminah", isTenant: true, business: "Siti Hijab Collection", phone: "0123456789" },
     { email: "ahmad@permit.com", pass: "pass1234", role: "tenant", name: "Ahmad Albab", isTenant: true, business: "Ahmad Burger", phone: "0198765432" },
@@ -154,6 +154,20 @@ export default function SetupPage() {
               await supabase.from('profiles').update({ role: u.role }).eq('id', userId)
             } else {
               addLog(`   Updated role to ${u.role}`)
+            }
+
+            // 2.5. Set organizer_code for staff members
+            if (u.role === 'staff' && u.orgCode) {
+              const { error: orgCodeError } = await supabase
+                .from('profiles')
+                .update({ organizer_code: u.orgCode })
+                .eq('id', userId)
+
+              if (orgCodeError) {
+                addLog(`   ⚠️ Failed to set organizer_code: ${orgCodeError.message}`)
+              } else {
+                addLog(`   🔗 Linked staff to organizer ${u.orgCode}`)
+              }
             }
           }
 

@@ -7,10 +7,17 @@ export async function fetchDashboardData() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single()
 
     // Fallback: Force admin for specific email if profile missing
     let role = profile?.role
+    let organizerCode = profile?.organizer_code
+
+    // Set userProfile with basic info from profiles table
+    let userProfile: any = profile ? {
+        full_name: profile.full_name,
+        email: profile.email
+    } : null
 
     // Force Superadmin Override (Hardcoded Security)
     if (user.email === 'rafisha92@gmail.com') {
@@ -30,10 +37,9 @@ export async function fetchDashboardData() {
     let organizers: any[] = []
     let myLocations: any[] = []
     let availableLocations: any[] = []
-    let userProfile: any = null
 
-    // --- ADMIN & STAFF & SUPERADMIN: Fetch ALL ---
-    if (role === 'admin' || role === 'staff' || role === 'superadmin') {
+    // --- ADMIN & SUPERADMIN: Fetch ALL ---
+    if (role === 'admin' || role === 'superadmin') {
         // Fetch Tenants with Locations
         const { data: t } = await supabase
             .from('tenants')
@@ -77,16 +83,22 @@ export async function fetchDashboardData() {
         const { data: org } = await supabase.from('organizers').select('*').order('created_at', { ascending: false })
         organizers = org || []
 
-        // --- ORGANIZER: Fetch Linked Data Only ---
-    } else if (role === 'organizer') {
-        const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
+        // --- ORGANIZER OR STAFF WITH ORGANIZER_CODE: Fetch Linked Data Only ---
+    } else if (role === 'organizer' || (role === 'staff' && organizerCode)) {
+        // For staff, use their organizer_code; for organizer, fetch from organizers table
+        let orgCode = organizerCode
 
-        if (org && org.organizer_code) {
+        if (role === 'organizer') {
+            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
+            orgCode = org?.organizer_code
+        }
+
+        if (orgCode) {
             // Fetch Tenants for this organizer
             const { data: t } = await supabase
                 .from('tenants')
                 .select('*, tenant_locations(*, locations(*))')
-                .eq('organizer_code', org.organizer_code)
+                .eq('organizer_code', orgCode)
 
             // Enrich Tenants (similar logic)
             if (t) {
