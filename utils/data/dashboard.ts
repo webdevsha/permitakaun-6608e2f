@@ -120,8 +120,13 @@ export async function fetchDashboardData() {
         let orgCode = organizerCode
 
         if (role === 'organizer') {
-            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
+            // Organizer table uses 'id' as the FK to profiles (same UUID)
+            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('id', user.id).single()
             orgCode = org?.organizer_code
+
+            if (org) {
+                organizers = [org] // Populate for UI Header
+            }
 
             // Fetch My Locations (Organizer's Locations)
             if (org) {
@@ -143,29 +148,37 @@ export async function fetchDashboardData() {
 
         // Combine logic: Fetch tenants by Code OR by Location Rental
         if (orgCode || (myLocations && myLocations.length > 0)) {
+            console.log(`[Dashboard DEBUG] Discovery Start. OrgCode: ${orgCode}, Locs: ${myLocations?.length}`)
             let tenantIds = new Set<string>();
 
             // 1. Get Tenants by Organizer Code
             if (orgCode) {
-                const { data: tByCode } = await supabase
+                const { data: tByCode, error: tErr } = await supabase
                     .from('tenants')
                     .select('id')
                     .eq('organizer_code', orgCode)
+                if (tErr) console.error('[Dashboard DEBUG] Error fetching tenants by code:', tErr)
                 tByCode?.forEach(x => tenantIds.add(x.id))
+                console.log(`[Dashboard DEBUG] Tenants by Code: ${tByCode?.length || 0}`)
             }
 
             // 2. Get Tenants by Location Rentals
             // (Even if they don't have my organizer_code, they are my tenants if they rent my spot)
             if (myLocations && myLocations.length > 0) {
                 const locIds = myLocations.map((l: any) => l.id)
-                const { data: rentalTenants } = await supabase
+                console.log(`[Dashboard DEBUG] Checking rentals for Location IDs:`, locIds)
+                const { data: rentalTenants, error: rErr } = await supabase
                     .from('tenant_locations')
                     .select('tenant_id')
                     .in('location_id', locIds)
                     .eq('status', 'active')
 
+                if (rErr) console.error('[Dashboard DEBUG] Error fetching rental tenants:', rErr)
                 rentalTenants?.forEach(r => tenantIds.add(r.tenant_id))
+                console.log(`[Dashboard DEBUG] Tenants by Rentals: ${rentalTenants?.length || 0}`)
             }
+
+            console.log(`[Dashboard DEBUG] Total Tenant IDs:`, Array.from(tenantIds))
 
             // Fetch Full Data for these Tenants
             if (tenantIds.size > 0) {
@@ -203,12 +216,15 @@ export async function fetchDashboardData() {
                 }
 
                 // Fetch Transactions for these tenants
-                const { data: tx } = await supabase
+                console.log(`[Dashboard DEBUG] Fetching transactions for IDs:`, tIds)
+                const { data: tx, error: txErr } = await supabase
                     .from('transactions')
                     .select('*, tenants(full_name, business_name)')
                     .in('tenant_id', tIds)
                     .order('date', { ascending: false })
 
+                if (txErr) console.error('[Dashboard DEBUG] Transaction Fetch Error:', txErr)
+                console.log(`[Dashboard DEBUG] Transactions Found: ${tx?.length || 0}`)
                 transactions = tx || []
 
             } else {
