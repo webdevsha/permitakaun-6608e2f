@@ -20,45 +20,97 @@ export async function initiatePayment(params: {
     }
 
     // Dynamic Mode Check
-    const mode = await getPaymentMode()
+    let mode = 'sandbox'
+    try {
+        mode = await getPaymentMode()
+    } catch (e) {
+        console.error("Error fetching payment mode, defaulting to sandbox:", e)
+    }
 
-    // ... rest of logic ...
-    const fullRedirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${params.redirectPath}`
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payment/callback`
+    console.log(`[Payment] Initiating payment in ${mode} mode for ${user.email}`)
+    console.log(`[Payment] Config:`, {
+        billplzKey: PAYMENT_CONFIG.billplz.apiKey ? 'Set' : 'Missing',
+        chipKey: PAYMENT_CONFIG.chipIn.apiKey ? 'Set' : 'Missing'
+    })
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const statusPageUrl = `${baseUrl}/payment/status`
+    // Encode the path to return to after status page
+    const nextPathEncoded = encodeURIComponent(params.redirectPath)
+
+    // Encode metadata if present (for subscription features)
+    let metadataQuery = ''
+    if (params.metadata) {
+        if (params.metadata.planType) metadataQuery += `&planType=${params.metadata.planType}`
+        if (params.metadata.isSubscription) metadataQuery += `&isSubscription=true`
+    }
+
+    const callbackUrl = `${baseUrl}/api/payment/callback`
 
     let result;
 
     try {
         if (mode === 'sandbox') {
-            // Use Chip-In
+            console.log("[Payment] Calling Chip-In API...")
+            // Chip-In allows separate success/fail URLs
             result = await createChipInPayment({
                 email: user.email,
                 amount: params.amount,
                 description: params.description,
-                redirectUrl: fullRedirectUrl
+                // We append status=... so our page knows result immediately
+                redirectUrl: `${statusPageUrl}?gateway=chip-in&next=${nextPathEncoded}${metadataQuery}`
             })
         } else {
-            // Use Billplz
+            console.log("[Payment] Calling Billplz API...")
+            // Billplz redirects to ONE url and appends billplz[...] params
             result = await createBillplzBill({
                 email: user.email,
                 name: user.user_metadata?.full_name || 'User',
                 amount: params.amount,
                 description: params.description,
                 callbackUrl: callbackUrl,
-                redirectUrl: fullRedirectUrl
+                // Billplz will append data here
+                redirectUrl: `${statusPageUrl}?gateway=billplz&next=${nextPathEncoded}${metadataQuery}`
             })
         }
 
+        console.log("[Payment] Result:", result)
+
         if (result && result.url) {
-            // Optionally store the transaction in DB as 'pending' before redirecting
-            // For now, we assume the redirect handles flow or we just return the URL
+            // Fetch Tenant ID
+            const { data: tenant } = await supabase
+                .from('tenants')
+                .select('id')
+                .eq('profile_id', user.id)
+                .single()
+
+            if (tenant) {
+                // Insert Pending Transaction
+                const { error: txError } = await supabase.from('transactions').insert({
+                    tenant_id: tenant.id,
+                    date: new Date().toISOString(),
+                    amount: params.amount,
+                    type: 'expense', // From tenant perspective
+                    category: 'Sewa',
+                    description: `${params.description} (Ref: ${result.id})`,
+                    status: 'pending',
+                    receipt_url: result.url, // Store payment link
+                })
+
+                if (txError) {
+                    console.error("[Payment] Failed to record pending tx:", txError)
+                } else {
+                    console.log("[Payment] Recorded pending transaction.")
+                }
+            }
+
             return { success: true, url: result.url }
         } else {
             return { error: "Gagal mendapatkan URL pembayaran." }
         }
 
     } catch (e: any) {
-        console.error("Payment Init Error:", e)
+        console.error("[Payment] Init Error:", e)
         return { error: e.message || "Ralat semasa memulakan pembayaran." }
     }
 }

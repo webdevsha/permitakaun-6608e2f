@@ -245,6 +245,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
   const [isRenting, setIsRenting] = useState(false)
 
   const handleOpenRent = (loc: any) => {
+    console.log("[Client] Opening Rent Dialog for:", loc)
     setRentLocation(loc)
     // Default type based on location type
     if (loc.type === 'monthly') setRentType('monthly')
@@ -252,47 +253,65 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
   }
 
   const handleConfirmRent = async () => {
-    if (!rentLocation) return
+    console.log("[Client] Confirm Rent Clicked. Location:", rentLocation, "Type:", rentType)
+
+    if (!rentLocation) {
+      console.error("[Client] No rentLocation selected!")
+      return
+    }
+
     setIsRenting(true)
     try {
-      const { data: userTenant } = await supabase.from('tenants').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+      const user = (await supabase.auth.getUser()).data.user
+      console.log("[Client] Current User:", user)
 
-      if (!userTenant) throw new Error("Profil peniaga tidak dijumpai.")
+      const { data: userTenant, error: tenantError } = await supabase.from('tenants').select('id').eq('profile_id', user?.id).single()
+
+      if (tenantError || !userTenant) {
+        console.error("[Client] Tenant profile error:", tenantError)
+        throw new Error("Profil peniaga tidak dijumpai.")
+      }
 
       // 1. Calculate Amount
       let amount = 0
       if (rentType === 'monthly') amount = rentLocation.rate_monthly || 0
-      else if (rentType === 'khemah') amount = (rentLocation.rate_khemah || 0) * 4 // Assuming 1 month deposit/rent
+      else if (rentType === 'khemah') amount = (rentLocation.rate_khemah || 0) * 4
       else if (rentType === 'cbs') amount = (rentLocation.rate_cbs || 0) * 4
+
+      console.log("[Client] Calculated Amount:", amount)
 
       if (amount <= 0) throw new Error("Kadar sewa tidak sah.")
 
       // 2. Initiate Payment (Sandbox/Real switch handled in action)
+      console.log("[Client] Calling initiatePayment action...")
       const result = await initiatePayment({
         amount: amount,
         description: `Sewa Tapak: ${rentLocation.name} (${rentType})`,
         redirectPath: '/dashboard/tenant' // Returning to dashboard
       })
 
+      console.log("[Client] Payment Result:", result)
+
       if (result.error) throw new Error(result.error)
       if (result.url) {
-        // Create record as 'pending' or 'active' (if trusting user for now or waiting webhook)
-        // For robustness, insert 'pending'. But status Check constraint might be 'active','inactive'.
-        // Let's rely on payment completion. 
-        // BUT: To track who rented what, we MUST insert something.
+        // ... (existing logic)
         const { error } = await supabase.from('tenant_locations').insert({
           tenant_id: userTenant.id,
           location_id: rentLocation.id,
           rate_type: rentType,
-          status: 'active' // For now active, assuming successful flow in demo
+          status: 'active'
         })
-        if (error) throw error
+        if (error) {
+          console.error("[Client] DB Insert Error:", error)
+          throw error
+        }
 
         toast.success("Mengarahkan ke gerbang pembayaran...")
         window.location.href = result.url
       }
 
     } catch (e: any) {
+      console.error("[Client] Error in handleConfirmRent:", e)
       toast.error("Gagal: " + e.message)
     } finally {
       setIsRenting(false)

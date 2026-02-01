@@ -69,9 +69,13 @@ export async function createChipInPayment(params: {
     // Chip-in usually requires detailed products.
     const amountCents = Math.round(params.amount * 100)
 
+    // Check for existing query params to decide separator
+    const separator = params.redirectUrl.includes('?') ? '&' : '?'
+
     const body = JSON.stringify({
-        success_redirect: params.redirectUrl,
-        failure_redirect: params.redirectUrl,
+        brand_id: PAYMENT_CONFIG.chipIn.brandId,
+        success_redirect: `${params.redirectUrl}${separator}status=success`,
+        failure_redirect: `${params.redirectUrl}${separator}status=failure`,
         purchase: {
             products: [
                 {
@@ -86,6 +90,8 @@ export async function createChipInPayment(params: {
         }
     })
 
+    // console.log("[Chip-In] Request:", url, body)
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -95,10 +101,19 @@ export async function createChipInPayment(params: {
         body
     })
 
-    const data = await response.json()
+    const responseText = await response.text()
+    console.log("[Chip-In] Raw Response:", responseText)
+
+    let data
+    try {
+        data = JSON.parse(responseText)
+    } catch (e) {
+        throw new Error(`Invalid JSON from Chip-In: ${responseText.substring(0, 100)}...`)
+    }
+
     if (!response.ok) {
-        console.error("Chip Error:", data)
-        throw new Error(`Chip-In Error: ${JSON.stringify(data)}`)
+        console.error("Chip Error Data:", data)
+        throw new Error(`Chip-In Error (${response.status}): ${JSON.stringify(data)}`)
     }
 
     return {

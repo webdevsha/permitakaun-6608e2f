@@ -26,6 +26,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { initiatePayment } from "@/actions/payment"
 
 export function RentalModule({ initialTenant, initialLocations, initialHistory, initialAvailable }: any) {
   const { user } = useAuth()
@@ -66,6 +67,16 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     else if (viewParam === 'payment') setActiveTab('payment')
     else if (viewParam === 'status') setActiveTab('status')
   }, [viewParam])
+
+  // Auto-select first active location
+  useEffect(() => {
+    const active = (initialLocations || []).filter((l: any) => l.status === 'active')
+    if (active.length > 0 && !selectedLocationId) {
+      console.log("[Client] Auto-selecting active location:", active[0].id)
+      setSelectedLocationId(active[0].id.toString())
+      setPaymentAmount(active[0].display_price?.toString() || "")
+    }
+  }, [initialLocations, selectedLocationId])
 
   // Handle Billplz Return (Still needs client side check if param exists)
   useEffect(() => {
@@ -231,7 +242,16 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!tenant || !selectedLocationId) return
+    console.log("[Client] Handle Payment Clicked")
+    console.log("[Client] Tenant:", tenant?.id)
+    console.log("[Client] Selected Location ID:", selectedLocationId)
+
+    if (!tenant || !selectedLocationId) {
+      console.warn("[Client] Missing tenant or location ID. Aborting.")
+      toast.error("Sila pilih lokasi dahulu.")
+      return
+    }
+
     setIsProcessing(true)
 
     try {
@@ -254,43 +274,44 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
           const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName)
           receiptUrl = publicUrl
         }
-        billRef = `Bayaran Manual - ${selectedLoc?.location_name}`
-      } else if (paymentMethod === 'billplz') {
-        const { data: billData, error: billError } = await supabase.functions.invoke('payment-gateway', {
-          body: {
-            action: 'create_bill',
-            email: tenant.email,
-            name: tenant.full_name,
-            amount: finalAmount.toString(), // Send full amount including fee
-            description: `Sewa ${selectedLoc?.location_name} (Inc. Fee)`,
-            redirect_url: `${window.location.origin}/dashboard?module=rentals`
-          }
+        billRef = `Bayaran Manual - ${selectedLoc?.location_name || 'Sewa'}`
+
+        // Manual Flow: Direct Insert as 'pending'
+        const { error: rpcError } = await supabase.rpc('process_rental_payment', {
+          p_tenant_id: tenant.id,
+          p_amount: finalAmount,
+          p_date: payDate,
+          p_receipt_url: receiptUrl || "",
+          p_description: `Sewa - ${selectedLoc?.location_name} (Manual)`,
+          p_category: 'Servis',
+          p_remarks: billRef
         })
-        if (billError) throw new Error("Gagal menghubungi Billplz")
-        receiptUrl = billData.url
-        billRef = `Billplz Ref: ${billData.id}`
-      }
+        if (rpcError) throw new Error(rpcError.message)
 
-      const { error: rpcError } = await supabase.rpc('process_rental_payment', {
-        p_tenant_id: tenant.id,
-        p_amount: finalAmount, // Record full paid amount
-        p_date: payDate,
-        p_receipt_url: receiptUrl || "",
-        p_description: `Sewa - ${selectedLoc?.location_name} ${fee > 0 ? `(+RM${fee} Fee)` : ''}`,
-        p_category: 'Servis',
-        p_remarks: billRef
-      })
-
-      if (rpcError) throw new Error(rpcError.message)
-
-      if (paymentMethod === 'billplz' && receiptUrl) {
-        window.location.href = receiptUrl
-      } else {
-        toast.success("Bayaran direkodkan!")
+        toast.success("Bayaran manual direkodkan! Menunggu semakan.")
         setIsProcessing(false)
         setActiveTab("history")
         await fetchHistory(tenant.id)
+
+      } else if (paymentMethod === 'billplz') {
+        // Gateway Flow: Use initiatePayment action
+        const result = await initiatePayment({
+          amount: finalAmount,
+          description: `Bayaran Sewa: ${selectedLoc?.location_name || 'Uptown'}`,
+          redirectPath: '/dashboard?module=rentals&view=history'
+        })
+
+        if (result.error) throw new Error(result.error)
+        if (result.url) {
+          // We can optionally record a pending transaction here if needed, 
+          // but let's rely on the gateway call first.
+          // Ideally: Insert 'pending' tx into DB, then redirect.
+          // For now, redirecting.
+          toast.success("Mengarahkan ke gerbang pembayaran...")
+          window.location.href = result.url
+        }
       }
+
     } catch (err: any) {
       toast.error(err.message)
       setIsProcessing(false)
