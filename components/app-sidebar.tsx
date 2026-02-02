@@ -27,14 +27,24 @@ import { usePathname } from "next/navigation"
 interface SidebarProps {
   isCollapsed: boolean
   setIsCollapsed: (collapsed: boolean) => void
+  initialUser?: any
+  initialRole?: string | null
+  initialProfile?: any
 }
 
-export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
-  const { role, signOut, user, profile, isLoading } = useAuth()
+export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRole, initialProfile }: SidebarProps) {
+  const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading } = useAuth()
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
 
-  if (isLoading || !role) {
+  // Use initial data if available (server-side fetched), otherwise fallback to auth context
+  const user = authUser || initialUser
+  const role = authRole || initialRole
+  const profile = authProfile || initialProfile
+
+  const showSkeleton = isLoading && !role && !initialRole
+
+  if (showSkeleton) {
     // Return a skeleton sidebar matching the collapsed state to prevent layout shift
     return (
       <aside className={cn(
@@ -219,11 +229,19 @@ export function AppSidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   )
 }
 
-export function MobileNav() {
-  const { role, signOut, user } = useAuth()
+interface MobileNavProps {
+  initialUser?: any
+  initialRole?: string | null
+}
+
+export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
+  const { role: authRole, signOut, user: authUser } = useAuth()
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
   const [isMounted, setIsMounted] = React.useState(false)
+
+  const user = authUser || initialUser
+  const role = authRole || initialRole
   const userRole = role || "tenant"
 
   React.useEffect(() => {
