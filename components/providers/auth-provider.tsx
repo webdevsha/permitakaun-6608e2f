@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { User, Session } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { Profile } from '@/types/supabase-types'
+import { determineUserRole } from '@/utils/roles'
 
 type AuthContextType = {
   user: User | null
@@ -48,17 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('id', userId)
           .single()
 
-        let determinedRole = data?.role ?? 'tenant'
-
-        // Fallback for specific emails if profile is missing or role is tenant
-        if (userEmail) {
-          if (userEmail === 'admin@permit.com' && determinedRole !== 'admin') determinedRole = 'admin'
-          else if (userEmail === 'staff@permit.com' && determinedRole !== 'staff') determinedRole = 'staff'
-          else if (userEmail === 'manjaya.solution@gmail.com' && determinedRole !== 'staff') determinedRole = 'staff'
-          else if (userEmail === 'organizer@permit.com' && determinedRole !== 'organizer') determinedRole = 'organizer'
-          else if (userEmail === 'rafisha92@gmail.com' && determinedRole !== 'superadmin') determinedRole = 'superadmin'
-          else if (userEmail === 'admin@kumim.my' && determinedRole !== 'admin') determinedRole = 'admin'
-        }
+        const determinedRole = determineUserRole(data, userEmail)
 
         if (mounted) {
           // We might not have data if profile doesn't exist, but we still want to set the role if we found a fallback
