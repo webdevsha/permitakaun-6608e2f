@@ -31,10 +31,10 @@ export default function DashboardLayoutClient({
     // Prevent duplicate access checks
     const checkedRef = useRef(false)
 
-    // Use server-provided initial data as the source of truth
-    // This prevents flickering during client hydration
-    const currentUser = initialUser || authUser
-    const currentRole = initialRole || authRole
+    // Use server-provided initial data for SSR, but trust auth state once initialized
+    // This ensures logout works correctly without flashing dashboard
+    const currentUser = isInitialized ? authUser : (initialUser || authUser)
+    const currentRole = isInitialized ? authRole : (initialRole || authRole)
 
     useEffect(() => {
         // Only check access once after auth is initialized
@@ -43,7 +43,8 @@ export default function DashboardLayoutClient({
 
         const verifyAccess = async () => {
             if (!currentUser) {
-                router.push('/login')
+                // Use window.location for hard redirect on logout (clears all state)
+                window.location.href = '/login'
                 return
             }
 
@@ -75,8 +76,12 @@ export default function DashboardLayoutClient({
     }, [currentUser, currentRole, pathname, router, isInitialized])
 
     // Show loading state only during initial hydration
-    // Use server data to prevent layout shift
+    // Once initialized, if no user, redirect to login immediately
     if (!currentUser) {
+        if (isInitialized) {
+            // Auth initialized but no user = logged out, redirect immediately
+            window.location.href = '/login'
+        }
         return (
             <div className="flex h-screen items-center justify-center bg-background">
                 <div className="text-center">

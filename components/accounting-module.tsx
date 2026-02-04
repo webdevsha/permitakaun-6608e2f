@@ -129,106 +129,78 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         let currentRole = role
         setUserRole(currentRole)
 
-        // 1. Fetch 7-Tabung Config
-        const { data: configData } = await supabase.from('accounting_config').select('percentages, bank_names').eq('profile_id', user.id).maybeSingle()
-        if (configData) {
-          if (configData.percentages) {
-            setPercentages(configData.percentages)
-          }
-          if (configData.bank_names) {
-            setBankNames(configData.bank_names)
-          }
+        // FAST-PATH: Admin/Staff get immediate access without waiting for all checks
+        const isPrivilegedRole = currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff'
+        
+        // Fetch config and settings in parallel (always needed)
+        const [configResult, settingsResult] = await Promise.all([
+          supabase.from('accounting_config').select('percentages, bank_names').eq('profile_id', user.id).maybeSingle(),
+          supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
+        ])
+
+        // Apply config immediately
+        if (configResult.data) {
+          if (configResult.data.percentages) setPercentages(configResult.data.percentages)
+          if (configResult.data.bank_names) setBankNames(configResult.data.bank_names)
         }
 
-        // 2. Fetch System Settings & Verify Access
+        const settings = settingsResult.data?.value || { is_active: true, trial_duration_days: 14 }
+        if (settingsResult.data) setSystemSettings(settingsResult.data.value)
+
+        // Access Control Logic
         let accessGranted = true
         let denyReason: "locked" | "trial_expired" | null = null
 
-        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
+        if (isPrivilegedRole) {
+          // Admin/Staff/Superadmin: Grant access immediately (no additional checks needed)
           accessGranted = true
-          // Even if system is locked for tenants, staff/admin can access.
-          const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-          if (sysData) setSystemSettings(sysData.value)
-        } else {
-          const { data: sysData } = await supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-          const settings = sysData?.value || { is_active: true, trial_duration_days: 14 }
+        } else if (!settings.is_active) {
+          // Module locked for non-privileged users
+          accessGranted = false
+          denyReason = 'locked'
+        } else if (currentRole === 'tenant') {
+          // Tenants: Check tenant status
+          const { data: tenant, error } = await supabase
+            .from('tenants')
+            .select('id, accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
 
-          if (!settings.is_active) {
+          if (tenant) {
+            setNewTransaction(prev => ({ ...prev, tenant_id: tenant.id }))
+          }
+          if (error) console.error("Tenant status fetch error:", error)
+
+          if (!tenant || tenant.accounting_status !== 'active') {
             accessGranted = false
-            denyReason = 'locked'
+            denyReason = 'trial_expired'
+          }
+        } else if (currentRole === 'organizer') {
+          // Organizers: Check organizer status or trial
+          const { data: organizer } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('id', user.id)
+            .maybeSingle()
+
+          if (organizer && organizer.accounting_status === 'active') {
+            accessGranted = true
           } else {
-            // Module Active Check
-            if (currentRole === 'tenant') {
-              const { data: tenant, error } = await supabase
-                .from('tenants')
-                .select('id, accounting_status') // Fetch ID too
-                .eq('profile_id', user.id)
-                .maybeSingle()
-
-              // Auto-set tenant_id for tenants
-              if (tenant) {
-                setNewTransaction(prev => ({ ...prev, tenant_id: tenant.id }))
-              }
-
-              if (error) console.error("Tenant status fetch error:", error)
-
-              // If not active, show Subscription
-              if (!tenant || tenant.accounting_status !== 'active') {
+            // Trial check
+            const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+            if (profile) {
+              const diffDays = Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              if (diffDays > settings.trial_duration_days) {
                 accessGranted = false
                 denyReason = 'trial_expired'
               }
-            } else {
-              // Others (Staff/Admin/Organizer)
-
-              // Auto-Assign Self-Tenant for Organizers/Admins
-              if (tenants) {
-                const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
-                if (selfTenant) {
-                  setNewTransaction(prev => ({ ...prev, tenant_id: selfTenant.id }))
-                }
-              }
-
-              // Check Organizer accounting_status (if organizer role)
-              if (currentRole === 'organizer') {
-                const { data: organizer } = await supabase
-                  .from('organizers')
-                  .select('accounting_status')
-                  .eq('id', user.id)
-                  .maybeSingle()
-
-                if (organizer && organizer.accounting_status === 'active') {
-                  accessGranted = true
-                } else {
-                  // Fall back to trial duration check
-                  const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
-                  if (profile) {
-                    const startDate = new Date(profile.created_at)
-                    const now = new Date()
-                    const diffTime = Math.abs(now.getTime() - startDate.getTime())
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-                    if (diffDays > settings.trial_duration_days) {
-                      accessGranted = false
-                      denyReason = 'trial_expired'
-                    }
-                  }
-                }
-              } else {
-                // For Staff/Admin, check trial duration only
-                const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
-                if (profile) {
-                  const startDate = new Date(profile.created_at)
-                  const now = new Date()
-                  const diffTime = Math.abs(now.getTime() - startDate.getTime())
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-                  if (diffDays > settings.trial_duration_days) {
-                    accessGranted = false
-                    denyReason = 'trial_expired'
-                  }
-                }
-              }
             }
+          }
+
+          // Auto-assign self-tenant for organizers
+          if (tenants) {
+            const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
+            if (selfTenant) setNewTransaction(prev => ({ ...prev, tenant_id: selfTenant.id }))
           }
         }
 
