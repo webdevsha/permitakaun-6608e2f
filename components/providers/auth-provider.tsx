@@ -138,15 +138,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null)
       setRole(null)
       
-      // Redirect immediately to login
-      router.push('/login')
+      // Sign out from Supabase first (this clears cookies)
+      await supabase.auth.signOut()
       
-      // Then sign out from Supabase (fire and forget)
-      supabase.auth.signOut().catch(console.error)
+      // Force hard redirect to login (clears all state and cache)
+      window.location.href = '/login'
     } catch (error) {
       console.error('Sign out error:', error)
-      // Redirect to login even on error
-      router.push('/login')
+      // Force redirect even on error
+      window.location.href = '/login'
     }
   }
 
