@@ -8,6 +8,9 @@ import { redirect } from "next/navigation"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { PaymentSettings } from "@/components/settings-toggle"
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function AdminDashboardPage() {
     // ... no changes to data fetching ...
     const data = await fetchDashboardData()
