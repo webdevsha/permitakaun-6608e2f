@@ -237,9 +237,9 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-bold truncate text-foreground">
-                {businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+                {businessName || profile?.business_name || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
               </p>
-              {businessName && (
+              {(businessName || profile?.business_name) && (
                 <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
                   <Store className="w-3 h-3" /> {profile?.full_name || user?.email?.split('@')[0]}
                 </p>
@@ -251,24 +251,18 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
 
         <Button
           variant="ghost"
-          onClick={async () => {
-            setIsSigningOut(true)
-            try {
-              await signOut()
-            } catch (error) {
-              console.error('Logout error:', error)
-              setIsSigningOut(false)
-            }
+          onClick={() => {
+            // Immediate logout without waiting
+            signOut()
           }}
-          disabled={isSigningOut}
           className={cn(
             "w-full mt-2 text-muted-foreground hover:text-destructive hover:text-destructive/90 hover:bg-destructive/10",
             isCollapsed ? "h-10 w-10 p-0 justify-center mx-auto" : "justify-start px-4"
           )}
           title="Log Keluar"
         >
-          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3", isSigningOut && "animate-spin")} />
-          {!isCollapsed && (isSigningOut ? "Logging out..." : "Log Keluar")}
+          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+          {!isCollapsed && "Log Keluar"}
         </Button>
       </div>
     </aside>

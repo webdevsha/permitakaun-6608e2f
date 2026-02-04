@@ -1,16 +1,13 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { createClient } from '@/utils/supabase/client'
-import { User, Session } from '@supabase/supabase-js'
-import { useRouter, usePathname } from 'next/navigation'
-import { Profile } from '@/types/supabase-types'
-import { determineUserRole } from '@/utils/roles'
+import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { createClient } from "@/utils/supabase/client"
+import { useRouter, usePathname } from "next/navigation"
 
-type AuthContextType = {
-  user: User | null
-  session: Session | null
-  profile: Profile | null
+interface AuthContextType {
+  user: any | null
+  session: any | null
+  profile: any | null
   role: string | null
   isLoading: boolean
   isInitialized: boolean
@@ -29,123 +26,101 @@ const AuthContext = createContext<AuthContextType>({
   refreshAuth: async () => { },
 })
 
-export const useAuth = () => useContext(AuthContext)
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const supabase = createClient()
+  const router = useRouter()
+  const pathname = usePathname()
+  
+  const [user, setUser] = useState<any | null>(null)
+  const [session, setSession] = useState<any | null>(null)
+  const [profile, setProfile] = useState<any | null>(null)
   const [role, setRole] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
-  
-  // Prevent duplicate initialization
-  const initializingRef = useRef(false)
-  
-  // Create the client once and reuse it (Singleton-like behavior for the provider)
-  const [supabase] = useState(() => createClient())
-  const router = useRouter()
-  const pathname = usePathname()
 
-  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      const determinedRole = determineUserRole(data, userEmail)
-
-      // We might not have data if profile doesn't exist, but we still want to set the role if we found a fallback
-      setProfile(data || null)
-      setRole(determinedRole)
-      
-      return { profile: data || null, role: determinedRole }
-    } catch (error) {
-      console.error("Profile fetch error:", error)
-      return { profile: null, role: null }
+  // Function to determine role from profile
+  const determineRole = useCallback((profileData: any, userEmail?: string) => {
+    if (!profileData) return null
+    
+    // Priority: 1. Explicit role from profile, 2. Email-based fallback
+    let determinedRole = profileData.role
+    
+    if (!determinedRole && userEmail) {
+      if (userEmail === 'admin@permit.com') determinedRole = 'admin'
+      else if (userEmail === 'staff@permit.com') determinedRole = 'staff'
+      else if (userEmail === 'organizer@permit.com') determinedRole = 'organizer'
+      else if (userEmail === 'rafisha92@gmail.com') determinedRole = 'superadmin'
+      else if (userEmail === 'admin@kumim.my') determinedRole = 'admin'
     }
-  }, [supabase])
+    
+    return determinedRole || 'tenant'
+  }, [])
 
+  // Fetch profile data
+  const fetchProfile = useCallback(async (userId: string) => {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    
+    if (profileData) {
+      setProfile(profileData)
+      const determinedRole = determineRole(profileData, user?.email)
+      setRole(determinedRole)
+    }
+  }, [supabase, determineRole, user?.email])
+
+  // Refresh auth state
   const refreshAuth = useCallback(async () => {
-    try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-      
-      if (currentSession?.user) {
-        setSession(currentSession)
-        setUser(currentSession.user)
-        await fetchProfile(currentSession.user.id, currentSession.user.email)
-      } else {
-        setSession(null)
-        setUser(null)
-        setProfile(null)
-        setRole(null)
-      }
-    } catch (error) {
-      console.error("Auth refresh error:", error)
+    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    
+    if (currentSession?.user) {
+      setUser(currentSession.user)
+      setSession(currentSession)
+      await fetchProfile(currentSession.user.id)
+    } else {
+      setUser(null)
+      setSession(null)
+      setProfile(null)
+      setRole(null)
     }
   }, [supabase, fetchProfile])
 
   useEffect(() => {
-    // Prevent duplicate initialization in StrictMode
-    if (initializingRef.current) return
-    initializingRef.current = true
-
     let mounted = true
 
+    // Initial auth check
     const initAuth = async () => {
-      try {
-        // Check for active session
-        const { data: { session: initialSession } } = await supabase.auth.getSession()
+      const { data: { session: initialSession } } = await supabase.auth.getSession()
+      
+      if (!mounted) return
 
-        if (!mounted) return
-
-        if (initialSession) {
-          setSession(initialSession)
-          setUser(initialSession.user)
-          await fetchProfile(initialSession.user.id, initialSession.user.email)
-        }
-      } catch (error) {
-        console.error("Auth init error:", error)
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
-          setIsInitialized(true)
-        }
+      if (initialSession?.user) {
+        setUser(initialSession.user)
+        setSession(initialSession)
+        await fetchProfile(initialSession.user.id)
       }
+      
+      setIsLoading(false)
+      setIsInitialized(true)
     }
 
     initAuth()
 
-    // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return
 
-      // Don't update state during navigation to prevent flickering
-      if (pathname === '/login' || pathname === '/signup') {
-        if (event === 'SIGNED_IN') {
-          // Wait for session to be fully established
-          return
-        }
-      }
-
-      setSession(currentSession)
-      setUser(currentSession?.user ?? null)
-
-      if (currentSession?.user) {
-        // Fetch profile on sign-in or token refresh to ensure role is up to date
-        await fetchProfile(currentSession.user.id, currentSession.user.email)
-      } else {
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setSession(null)
         setProfile(null)
         setRole(null)
-      }
-
-      setIsLoading(false)
-
-      if (event === 'SIGNED_OUT') {
-        router.refresh()
-        router.push('/')
+      } else if (newSession?.user) {
+        setUser(newSession.user)
+        setSession(newSession)
+        await fetchProfile(newSession.user.id)
       }
     })
 
@@ -157,17 +132,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut()
-      // Clear local state immediately
+      // Clear local state immediately for instant feedback
       setUser(null)
       setSession(null)
       setProfile(null)
       setRole(null)
-      // Redirect to login page after logout
+      
+      // Redirect immediately to login
       router.push('/login')
+      
+      // Then sign out from Supabase (fire and forget)
+      supabase.auth.signOut().catch(console.error)
     } catch (error) {
       console.error('Sign out error:', error)
-      // Even if there's an error, try to redirect to login
+      // Redirect to login even on error
       router.push('/login')
     }
   }
@@ -178,3 +156,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   )
 }
+
+export const useAuth = () => useContext(AuthContext)
