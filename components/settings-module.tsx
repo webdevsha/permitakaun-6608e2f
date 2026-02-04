@@ -9,12 +9,8 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-<<<<<<< HEAD
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity } from "lucide-react"
-=======
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
->>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -635,7 +631,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
-<<<<<<< HEAD
+          {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" /> Pengurusan Staff
+            </TabsTrigger>
+          )}
           {(role === 'admin' || role === 'superadmin') && (
             <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <UserPlus className="w-4 h-4 mr-2" /> Pengurusan Pengguna
@@ -646,14 +646,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Activity className="w-4 h-4 mr-2" /> Audit Logs
             </TabsTrigger>
           )}
-          {role === 'superadmin' && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
-=======
-          {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Pengurusan Staff
->>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
             </TabsTrigger>
           )}
           {(role === 'admin' || role === 'organizer') && (
@@ -1029,7 +1021,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-<<<<<<< HEAD
         {(role === 'admin' || role === 'superadmin') && (
           <TabsContent value="staff" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
@@ -1146,10 +1137,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {(role === 'superadmin' || role === 'admin') && (
-=======
         {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
->>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">

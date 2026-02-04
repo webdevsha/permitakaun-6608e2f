@@ -236,18 +236,14 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           </div>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
-<<<<<<< HEAD
-              <p className="text-sm font-bold truncate text-foreground">{profile?.business_name || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
-=======
               <p className="text-sm font-bold truncate text-foreground">
-                {businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+                {businessName || profile?.business_name || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
               </p>
-              {businessName && (
+              {(businessName || profile?.business_name) && (
                 <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
                   <Store className="w-3 h-3" /> {profile?.full_name || user?.email?.split('@')[0]}
                 </p>
               )}
->>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
               <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{role}</p>
             </div>
           )}
