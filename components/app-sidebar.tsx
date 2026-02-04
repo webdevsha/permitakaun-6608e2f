@@ -205,24 +205,18 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
 
         <Button
           variant="ghost"
-          onClick={async () => {
-            setIsSigningOut(true)
-            try {
-              await signOut()
-            } catch (error) {
-              console.error('Logout error:', error)
-              setIsSigningOut(false)
-            }
+          onClick={() => {
+            // Immediate logout without waiting
+            signOut()
           }}
-          disabled={isSigningOut}
           className={cn(
             "w-full mt-2 text-muted-foreground hover:text-destructive hover:text-destructive/90 hover:bg-destructive/10",
             isCollapsed ? "h-10 w-10 p-0 justify-center mx-auto" : "justify-start px-4"
           )}
           title="Log Keluar"
         >
-          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3", isSigningOut && "animate-spin")} />
-          {!isCollapsed && (isSigningOut ? "Logging out..." : "Log Keluar")}
+          <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+          {!isCollapsed && "Log Keluar"}
         </Button>
       </div>
     </aside>
