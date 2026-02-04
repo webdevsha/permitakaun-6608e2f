@@ -21,7 +21,7 @@ export async function activateSubscription(params: {
         .eq('profile_id', user.id)
         .single()
 
-    if (!tenant) return { success: false, error: "Tenenat not found" }
+    if (!tenant) return { success: false, error: "Tenant not found" }
 
     // 2. Calculate Validity
     const now = new Date()
@@ -44,14 +44,22 @@ export async function activateSubscription(params: {
         return { success: false, error: "Gagal mengaktifkan langganan." }
     }
 
-    // 4. Update Transaction Status (if exists)
-    // We try to find the pending transaction by description/amount roughly or just insert a new one if not linked
-    // Ideally we link via ID but for now we trust the flow.
-    // Let's mark latest pending expense as approved if it matches? 
-    // Simplified: Just revalidate
+    // 4. Update tenant accounting_status to active
+    const { error: tenantUpdateError } = await supabase
+        .from('tenants')
+        .update({ accounting_status: 'active' })
+        .eq('id', tenant.id)
 
+    if (tenantUpdateError) {
+        console.error("Tenant status update error:", tenantUpdateError)
+        // Don't fail the whole operation, but log it
+    }
+
+    // Revalidate all relevant paths
     revalidatePath('/dashboard')
+    revalidatePath('/dashboard/accounting')
     revalidatePath('/dashboard/settings')
+    revalidatePath('/dashboard/subscription')
 
     return { success: true }
 }

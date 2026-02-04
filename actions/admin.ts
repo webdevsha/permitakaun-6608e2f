@@ -7,6 +7,7 @@ export async function createStaffAccount(formData: FormData) {
     const email = formData.get('email') as string
     const fullName = formData.get('fullName') as string
     const password = formData.get('password') as string
+    const organizerCode = formData.get('organizerCode') as string || null
 
     if (!email || !fullName || !password) {
         return { error: "Semua medan wajib diisi." }
@@ -22,7 +23,8 @@ export async function createStaffAccount(formData: FormData) {
             email_confirm: true,
             user_metadata: {
                 full_name: fullName,
-                role: 'staff'
+                role: 'staff',
+                organizer_code: organizerCode
             }
         })
 
@@ -30,8 +32,23 @@ export async function createStaffAccount(formData: FormData) {
 
         // 2. Profile creation is handled by Trigger (handle_new_user)
         // The trigger will read metadata role='staff' and insert into profiles properly.
+        // However, we should update the profile with organizer_code if provided
+        if (organizerCode && user?.user?.id) {
+            const { error: updateError } = await supabaseAdmin
+                .from('profiles')
+                .update({ organizer_code: organizerCode })
+                .eq('id', user.user.id)
+            
+            if (updateError) {
+                console.error("Profile organizer_code update error:", updateError)
+                // Don't fail the whole operation
+            }
+        }
 
+        // Revalidate all relevant paths
         revalidatePath('/admin')
+        revalidatePath('/dashboard/staff')
+        
         return { success: true, message: "Akaun staf berjaya dicipta." }
 
     } catch (error: any) {

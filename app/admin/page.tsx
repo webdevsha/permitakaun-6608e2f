@@ -1,9 +1,10 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { Users, Building, Shield, UserPlus, CreditCard } from "lucide-react"
+import { Users, Building, Shield, CreditCard } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
+import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { PaymentSettings } from "@/components/settings-toggle"
@@ -11,27 +12,56 @@ import { PaymentSettings } from "@/components/settings-toggle"
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+/**
+ * Admin Dashboard Page
+ * 
+ * Restricted to admin, superadmin, and staff roles.
+ * Server-side role verification prevents unauthorized access.
+ */
 export default async function AdminDashboardPage() {
-    // ... no changes to data fetching ...
+    // Verify user and role server-side
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+        redirect('/login')
+    }
+    
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, organizer_code, full_name, email')
+        .eq('id', user.id)
+        .single()
+    
+    const role = determineUserRole(profile, user.email)
+    
+    // Only admin, superadmin, and staff can access this page
+    if (!['admin', 'superadmin', 'staff'].includes(role)) {
+        // Redirect non-admin users to their respective dashboards
+        if (role === 'organizer') {
+            redirect('/dashboard/organizer')
+        } else {
+            redirect('/dashboard/tenant')
+        }
+    }
+
     const data = await fetchDashboardData()
 
     // Auth Check: If data fetch returned no user context, it means we are logged out/invalid
-    // Redirect to login to fix "Invalid Refresh Token" causing empty UI
     if (!data.user) {
         redirect('/login')
     }
 
     const { role: currentUserRole } = data
-    const supabase = await createClient()
 
     // Get current user to determine their organization
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
 
     // Determine the organizer code for the current admin
     let adminOrgCode = null
-    if (user?.email === 'admin@permit.com') {
+    if (currentUser?.email === 'admin@permit.com') {
         adminOrgCode = 'ORG001'
-    } else if (user?.email === 'admin@kumim.my') {
+    } else if (currentUser?.email === 'admin@kumim.my') {
         adminOrgCode = 'ORG002'
     }
 
@@ -66,7 +96,6 @@ export default async function AdminDashboardPage() {
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* ... existing cards ... keep them */}
                 <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Jumlah Penganjur</CardDescription>
@@ -109,7 +138,6 @@ export default async function AdminDashboardPage() {
                 <PaymentSettings />
             </div>
 
-            {/* Staff Management Section */}
             {/* Staff Management Section - Hide for Staff */}
             {currentUserRole !== 'staff' && (
                 <div className="space-y-6">

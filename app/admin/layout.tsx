@@ -1,25 +1,56 @@
-"use client"
+import { createClient } from "@/utils/supabase/server"
+import { determineUserRole } from "@/utils/roles"
+import { redirect } from "next/navigation"
+import DashboardLayoutClient from "@/components/dashboard-layout-client"
 
-import { useState } from "react"
-import { AppSidebar, MobileNav } from "@/components/app-sidebar"
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+/**
+ * Admin Layout - Server Component
+ * 
+ * This layout is used for admin pages (/admin/*).
+ * It ensures only admins can access these routes.
+ */
+export default async function AdminLayout({
+    children,
+}: {
+    children: React.ReactNode
+}) {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+        redirect("/login")
+    }
+
+    // Fetch profile and determine role
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single()
+
+    const userRole = determineUserRole(profile, user.email)
+
+    // Restrict access to admin roles only
+    if (!['admin', 'superadmin', 'staff'].includes(userRole)) {
+        // Non-admin users should be redirected to their respective dashboards
+        if (userRole === 'organizer') {
+            redirect('/dashboard/organizer')
+        } else {
+            redirect('/dashboard/tenant')
+        }
+    }
 
     return (
-        <div className="flex h-screen bg-background font-sans overflow-hidden">
-            <AppSidebar
-                isCollapsed={isSidebarCollapsed}
-                setIsCollapsed={setIsSidebarCollapsed}
-            />
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
-                <MobileNav />
-                <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 scroll-smooth">
-                    <div className="max-w-7xl mx-auto space-y-10 pb-20">
-                        {children}
-                    </div>
-                </main>
-            </div>
-        </div>
+        <DashboardLayoutClient
+            initialUser={user}
+            initialRole={userRole}
+            initialProfile={profile}
+        >
+            {children}
+        </DashboardLayoutClient>
     )
 }

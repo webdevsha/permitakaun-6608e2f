@@ -33,16 +33,18 @@ interface SidebarProps {
 }
 
 export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRole, initialProfile }: SidebarProps) {
-  const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading } = useAuth()
+  const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading, isInitialized } = useAuth()
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
 
-  // Use initial data if available (server-side fetched), otherwise fallback to auth context
-  const user = authUser || initialUser
-  const role = authRole || initialRole
-  const profile = authProfile || initialProfile
+  // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
+  // Only fall back to auth context if initial data is not available
+  const user = initialUser || authUser
+  const role = initialRole || authRole
+  const profile = initialProfile || authProfile
 
-  const showSkeleton = isLoading && !role && !initialRole
+  // Only show skeleton if we have NO role data at all and auth is still initializing
+  const showSkeleton = !role && isLoading && !isInitialized
 
   if (showSkeleton) {
     // Return a skeleton sidebar matching the collapsed state to prevent layout shift
@@ -69,11 +71,9 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
-      { id: "staff", label: "Pengurusan Staf", icon: Users, href: "/dashboard/staff" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
-      { id: "logs", label: "Audit Logs", icon: Receipt, href: "/dashboard/logs" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (role === 'organizer') {
@@ -121,7 +121,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         {!isCollapsed && (
           <div className="relative w-40 h-16 animate-in fade-in duration-300">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="Permit Akaun"
               fill
               className="object-contain object-left"
@@ -132,7 +132,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         {isCollapsed && (
           <div className="relative w-10 h-10">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="PA"
               fill
               className="object-cover object-left"
@@ -237,13 +237,14 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
-  const { role: authRole, signOut, user: authUser } = useAuth()
+  const { role: authRole, signOut, user: authUser, isInitialized } = useAuth()
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
   const [isMounted, setIsMounted] = React.useState(false)
 
-  const user = authUser || initialUser
-  const role = authRole || initialRole
+  // CRITICAL: Use server-provided initial data as source of truth
+  const user = initialUser || authUser
+  const role = initialRole || authRole
   const userRole = role || "tenant"
 
   React.useEffect(() => {
@@ -307,7 +308,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
           </Button>
           <div className="relative w-28 h-8">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="Permit Akaun"
               fill
               className="object-contain object-left"
@@ -336,7 +337,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
             <SheetHeader className="p-6 border-b border-border/50 bg-secondary/10">
               <div className="relative w-40 h-12 mb-2">
                 <Image
-                  src="/logo.png"
+                  src="https://permitakaun.kumim.my/logo.png"
                   alt="Permit Akaun"
                   fill
                   className="object-contain object-left"
@@ -391,7 +392,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
         </Sheet>
         <div className="relative w-28 h-8">
           <Image
-            src="/logo.png"
+            src="https://permitakaun.kumim.my/logo.png"
             alt="Permit Akaun"
             fill
             className="object-contain object-left"

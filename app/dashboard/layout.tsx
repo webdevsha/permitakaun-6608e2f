@@ -3,6 +3,15 @@ import DashboardLayoutClient from "@/components/dashboard-layout-client"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+/**
+ * Dashboard Layout - Server Component
+ * 
+ * Fetches user data server-side to prevent client-side flickering.
+ * All role-based decisions are made here before rendering.
+ */
 export default async function DashboardLayout({
     children,
 }: {
@@ -10,29 +19,26 @@ export default async function DashboardLayout({
 }) {
     const supabase = await createClient()
 
-    // 1. Fetch Session
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
+    // Fetch User and Profile in parallel for better performance
+    const [{ data: { user } }, { data: profile }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+            .from("profiles")
+            .select("*")
+            .single()
+    ])
 
-    if (!session) {
-        redirect("/")
+    if (!user) {
+        redirect("/login")
     }
 
-    // 2. Fetch Profile (Parallel to session check not possible, need user ID)
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .single()
+    // Determine Role using consistent shared utility
+    const userRole = determineUserRole(profile, user.email)
 
-    // 3. Determine Role using shared utility
-    const userRole = determineUserRole(profile, session.user.email)
-
-    // 4. Pass data to client component
+    // Pass data to client component for hydration
     return (
         <DashboardLayoutClient
-            initialUser={session.user}
+            initialUser={user}
             initialRole={userRole}
             initialProfile={profile}
         >

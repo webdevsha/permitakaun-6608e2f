@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server"
+import { determineUserRole } from "@/utils/roles"
 
 export async function fetchDashboardData() {
     const supabase = await createClient()
@@ -9,28 +10,15 @@ export async function fetchDashboardData() {
 
     const { data: profile } = await supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single()
 
-    // Fallback: Force admin for specific email if profile missing
-    let role = profile?.role
-    let organizerCode = profile?.organizer_code
+    // Use shared role determination logic for consistency
+    const role = determineUserRole(profile, user.email)
+    const organizerCode = profile?.organizer_code
 
     // Set userProfile with basic info from profiles table
     let userProfile: any = profile ? {
         full_name: profile.full_name,
         email: profile.email
     } : null
-
-    // Force Superadmin Override (Hardcoded Security)
-    if (user.email === 'rafisha92@gmail.com') {
-        role = 'superadmin'
-    } else if (!role && user.email === 'admin@permit.com') {
-        role = 'admin'
-    } else if (!role && user.email === 'organizer@permit.com') {
-        role = 'organizer'
-    } else if (!role && user.email === 'staff@permit.com') {
-        role = 'staff'
-    }
-
-    role = role || 'tenant'
 
     let tenants: any[] = []
     let transactions: any[] = []
