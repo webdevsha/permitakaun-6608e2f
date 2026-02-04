@@ -52,6 +52,13 @@ const fetchTenants = async () => {
    const enrichedTenants = await Promise.all(tenants.map(async (tenant: any) => {
       const { data: locs } = await supabase.from('tenant_locations').select('*, locations(*)').eq('tenant_id', tenant.id)
       const { data: payments } = await supabase.from('tenant_payments').select('*').eq('tenant_id', tenant.id).eq('status', 'approved').order('payment_date', { ascending: false }).limit(1)
+      
+      // Fetch organizer name
+      let organizerName = '-'
+      if (tenant.organizer_code) {
+         const { data: org } = await supabase.from('organizers').select('name').eq('organizer_code', tenant.organizer_code).single()
+         if (org) organizerName = org.name
+      }
 
       const lastPayment = payments?.[0]
       let paymentStatus = 'active'
@@ -69,7 +76,8 @@ const fetchTenants = async () => {
          lastPaymentDate: dateDisplay,
          lastPaymentAmount: lastPayment?.amount || 0,
          paymentStatus,
-         overdueLabel
+         overdueLabel,
+         organizerName
       }
    }))
    return enrichedTenants
@@ -439,6 +447,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                            />
                         </TableHead>
                         <TableHead className="text-foreground font-bold">Nama Peniaga</TableHead>
+                        <TableHead className="text-foreground font-bold">Penganjur</TableHead>
                         <TableHead className="text-foreground font-bold">Lokasi Tapak</TableHead>
                         <TableHead className="text-foreground font-bold text-center">Status Umum</TableHead>
                         <TableHead className="text-foreground font-bold text-center">Module Akaun</TableHead>
@@ -475,6 +484,11 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                     </div>
                                     <div className="text-xs text-muted-foreground font-mono">{tenant.business_name}</div>
                                  </div>
+                              </div>
+                           </TableCell>
+                           <TableCell>
+                              <div className="text-xs font-medium text-muted-foreground">
+                                 {tenant.organizerName || '-'}
                               </div>
                            </TableCell>
                            <TableCell>

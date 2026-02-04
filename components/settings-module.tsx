@@ -9,12 +9,13 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PaymentSettings } from "@/components/settings-toggle"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { clearAllSetupData } from "@/app/setup/actions"
+import { AddStaffDialog } from "@/components/add-staff-dialog"
 
 // Helper component defined outside to prevent re-renders causing focus loss
 const DataField = ({
@@ -246,6 +247,9 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   // --- USER MANAGEMENT (SUPERADMIN ONLY) ---
   const [usersList, setUsersList] = useState<any[]>([])
   const [loadingUsers, setLoadingUsers] = useState(false)
+  
+  // --- LOGS STATE ---
+  const [logs, setLogs] = useState<any[]>([])
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
@@ -291,6 +295,15 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   useEffect(() => {
     if (role === 'superadmin' || role === 'admin' || role === 'staff') {
       fetchUsers()
+    }
+  }, [role])
+  
+  // Fetch logs for admin/superadmin
+  useEffect(() => {
+    if (role === 'admin' || role === 'superadmin') {
+      supabase.from('action_logs').select('*, profiles(email, full_name, role)').order('created_at', { ascending: false }).limit(100).then(({ data }) => {
+        if (data) setLogs(data)
+      })
     }
   }, [role])
 
@@ -409,7 +422,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6">
+        <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6 flex-wrap">
           <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
             <Shield className="w-4 h-4 mr-2" /> Profil Saya
           </TabsTrigger>
@@ -418,9 +431,19 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
+          {(role === 'admin' || role === 'superadmin') && (
+            <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <UserPlus className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            </TabsTrigger>
+          )}
+          {(role === 'admin' || role === 'superadmin') && (
+            <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Activity className="w-4 h-4 mr-2" /> Audit Logs
+            </TabsTrigger>
+          )}
           {role === 'superadmin' && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+              <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
             </TabsTrigger>
           )}
           {(role === 'admin') && (
@@ -793,6 +816,122 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+        )}
+
+        {(role === 'admin' || role === 'superadmin') && (
+          <TabsContent value="staff" className="space-y-6">
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                      <Shield className="text-primary w-6 h-6" /> Pengurusan Pengguna (Staf)
+                    </CardTitle>
+                    <CardDescription>Urus akses dan akaun staf untuk organisasi anda.</CardDescription>
+                  </div>
+                  <AddStaffDialog />
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {usersList.filter((u: any) => u.role === 'staff').length > 0 ? (
+                  <div className="divide-y divide-border/30">
+                    {usersList.filter((u: any) => u.role === 'staff').map((staff: any) => (
+                      <div key={staff.id} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
+                            {staff.email.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm">{staff.full_name || staff.email}</p>
+                            <p className="text-xs text-muted-foreground">{staff.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Aktif</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <div className="w-16 h-16 bg-secondary/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Users className="w-8 h-8 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-lg font-medium">Tiada staf didaftarkan.</p>
+                    <p className="text-sm">Klik "Tambah Staf" untuk mula mendaftar staf baru.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {(role === 'admin' || role === 'superadmin') && (
+          <TabsContent value="logs" className="space-y-6">
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                      <Activity className="text-primary w-6 h-6" /> Audit Logs
+                    </CardTitle>
+                    <CardDescription>Rekod aktiviti pengguna dan sistem.</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    const { data } = await supabase.from('action_logs').select('*, profiles(email, full_name, role)').order('created_at', { ascending: false }).limit(100)
+                    setLogs(data || [])
+                  }}>
+                    <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-secondary/20">
+                    <TableRow>
+                      <TableHead className="pl-6">Masa</TableHead>
+                      <TableHead>Pengguna</TableHead>
+                      <TableHead>Tindakan</TableHead>
+                      <TableHead>Resource</TableHead>
+                      <TableHead>Butiran</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {logs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Tiada rekod aktiviti.</TableCell>
+                      </TableRow>
+                    ) : (
+                      logs.map((log: any) => (
+                        <TableRow key={log.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap pl-6">
+                            {new Date(log.created_at).toLocaleString('ms-MY')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-xs">{log.profiles?.full_name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground">{log.profiles?.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider">
+                              {log.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="capitalize text-sm font-medium text-foreground/80">
+                            {log.resource} <span className="text-xs text-muted-foreground ml-1">#{log.resource_id}</span>
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs font-mono text-slate-500">
+                            {JSON.stringify(log.details)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
 

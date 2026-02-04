@@ -69,11 +69,9 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
-      { id: "staff", label: "Pengurusan Staf", icon: Users, href: "/dashboard/staff" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
-      { id: "logs", label: "Audit Logs", icon: Receipt, href: "/dashboard/logs" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (role === 'organizer') {
@@ -199,7 +197,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           </div>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold truncate text-foreground">{profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
+              <p className="text-sm font-bold truncate text-foreground">{profile?.business_name || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
               <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{role}</p>
             </div>
           )}
