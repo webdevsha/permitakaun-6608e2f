@@ -39,8 +39,7 @@ export async function fetchDashboardData() {
         // Fetch Tenants with Locations
         let tQuery = supabase
             .from('tenants')
-            .select('*, tenant_locations(*, locations(*)), profiles!inner(role)')
-            .eq('profiles.role', 'tenant') // Only show actual tenants, not organizers
+            .select('*, tenant_locations(*, locations(*))')
             .order('created_at', { ascending: false })
 
         if (adminOrgCode) {
