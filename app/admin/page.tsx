@@ -4,12 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
+import { redirect } from "next/navigation"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { PaymentSettings } from "@/components/settings-toggle"
 
 export default async function AdminDashboardPage() {
     // ... no changes to data fetching ...
     const data = await fetchDashboardData()
+
+    // Auth Check: If data fetch returned no user context, it means we are logged out/invalid
+    // Redirect to login to fix "Invalid Refresh Token" causing empty UI
+    if (!data.user) {
+        redirect('/login')
+    }
+
     const { role: currentUserRole } = data
     const supabase = await createClient()
 

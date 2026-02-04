@@ -2,45 +2,54 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export const updateSession = async (request: NextRequest) => {
-  try {
-    // Create an unmodified response
-    let response = NextResponse.next({
-      request: {
-        headers: request.headers,
-      },
-    })
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-            response = NextResponse.next({
-              request,
-            })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
-            )
-          },
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
         },
-      }
-    )
-
-    // This will refresh session if needed - required for Server Components
-    await supabase.auth.getUser()
-
-    return response
-  } catch (e) {
-    // If you are here, a Supabase client could not be created!
-    return NextResponse.next({
-      request: {
-        headers: request.headers,
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          response = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
       },
-    })
+    }
+  )
+
+  // This will refresh session if needed - required for Server Components
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  // PROTECTED ROUTES LOGIC
+  // If no user (or error), and trying to access protected routes, redirect to login
+  const path = request.nextUrl.pathname
+  const isProtectedRoute = path.startsWith('/dashboard') || path.startsWith('/admin')
+  const isAuthRoute = path === '/login' || path === '/signup' || path === '/setup'
+
+  if ((!user || error) && isProtectedRoute) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
+
+  // Optional: If user IS logged in and tries to go to /login, redirect to /dashboard
+  if (user && isAuthRoute) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
+  return response
 }
