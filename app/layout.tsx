@@ -14,9 +14,9 @@ export const metadata: Metadata = {
   title: "Sistem Pengurusan Akaun & Acara | Permit Akaun",
   description: "Sistem pengurusan akaun dan acara untuk peniaga kecil. Urus rekod bayaran, akaun perniagaan dan pendaftaran acara secara digital",
   icons: {
-    icon: "https://ik.imagekit.io/cbctech/977ab6e6-c7d7-44cf-961d-b926ace8d43e.png",
-    shortcut: "https://ik.imagekit.io/cbctech/977ab6e6-c7d7-44cf-961d-b926ace8d43e.png",
-    apple: "https://ik.imagekit.io/cbctech/977ab6e6-c7d7-44cf-961d-b926ace8d43e.png",
+    icon: "https://permitakaun.kumim.my/logo.png",
+    shortcut: "https://permitakaun.kumim.my/logo.png",
+    apple: "https://permitakaun.kumim.my/logo.png",
   },
 }
 
