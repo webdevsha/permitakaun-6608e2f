@@ -11,8 +11,8 @@ const _geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 const _playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-serif" })
 
 export const metadata: Metadata = {
-  title: "Permit Akaun - Sistem Pengurusan Pasar Malam",
-  description: "Sistem pengurusan permit, sewa, dan akaun bersepadu untuk peniaga pasar malam dan Uptown.",
+  title: "Sistem Pengurusan Akaun & Acara | Permit Akaun",
+  description: "Sistem pengurusan akaun dan acara untuk peniaga kecil. Urus rekod bayaran, akaun perniagaan dan pendaftaran acara secara digital",
   icons: {
     icon: "https://ik.imagekit.io/cbctech/977ab6e6-c7d7-44cf-961d-b926ace8d43e.png",
     shortcut: "https://ik.imagekit.io/cbctech/977ab6e6-c7d7-44cf-961d-b926ace8d43e.png",
