@@ -10,11 +10,12 @@ async function checkDatabase() {
 
   // 1. Check admin@kumim.my profile
   console.log('1. admin@kumim.my PROFILE:');
-  const { data: adminProfile } = await supabase
+  const { data: adminProfile, error: adminError } = await supabase
     .from('profiles')
     .select('*')
     .eq('email', 'admin@kumim.my')
     .single();
+  if (adminError) console.error('Error fetching admin profile:', adminError);
   console.log(adminProfile);
   console.log('');
 
@@ -90,7 +91,7 @@ async function checkDatabase() {
     .from('tenants')
     .select('id')
     .eq('organizer_code', 'ORG002');
-  
+
   if (org002Tenants && org002Tenants.length > 0) {
     const tenantIds = org002Tenants.map(t => t.id);
     const { data: tx002 } = await supabase
