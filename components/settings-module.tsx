@@ -460,7 +460,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   }
 
   // --- AUDIT LOGS (ADMIN/STAFF ONLY) ---
-  const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(false)
 
   const fetchLogs = async () => {
@@ -644,8 +643,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           {(role === 'admin' || role === 'superadmin') && (
             <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Activity className="w-4 h-4 mr-2" /> Audit Logs
-            </TabsTrigger>
-          )}
             </TabsTrigger>
           )}
           {(role === 'admin' || role === 'organizer') && (
