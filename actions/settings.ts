@@ -37,7 +37,10 @@ export async function updatePaymentMode(mode: 'sandbox' | 'real') {
 
     if (error) throw new Error(error.message)
 
+    // Revalidate all relevant paths
     revalidatePath('/dashboard')
+    revalidatePath('/admin')
+    revalidatePath('/dashboard/settings')
     return { success: true }
 }
 

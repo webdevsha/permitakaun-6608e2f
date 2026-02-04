@@ -110,6 +110,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     rate_khemah: "0",
     rate_cbs: "0",
     rate_monthly: "0",
+    rate_monthly_khemah: "0",
+    rate_monthly_cbs: "0",
     organizer_id: "" // Added organizer_id
   })
 
@@ -140,6 +142,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       rate_khemah: "0",
       rate_cbs: "0",
       rate_monthly: "0",
+      rate_monthly_khemah: "0",
+      rate_monthly_cbs: "0",
       organizer_id: ""
     })
     setIsEditMode(false)
@@ -163,6 +167,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       rate_khemah: loc.rate_khemah?.toString() || "0",
       rate_cbs: loc.rate_cbs?.toString() || "0",
       rate_monthly: loc.rate_monthly?.toString() || "0",
+      rate_monthly_khemah: loc.rate_monthly_khemah?.toString() || "0",
+      rate_monthly_cbs: loc.rate_monthly_cbs?.toString() || "0",
       organizer_id: loc.organizer_id?.toString() || ""
     })
     setIsEditMode(true)
@@ -187,6 +193,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
+        rate_monthly_khemah: parseFloat(formData.rate_monthly_khemah) || 0,
+        rate_monthly_cbs: parseFloat(formData.rate_monthly_cbs) || 0,
         organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null,
       }
 
@@ -233,7 +241,13 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       resetForm()
 
     } catch (e: any) {
-      toast.error("Gagal simpan: " + e.message)
+      console.error('Location save error:', e)
+      const errorMsg = e.message || ''
+      if (errorMsg.includes('row-level security') || errorMsg.includes('RLS') || errorMsg.includes('permission denied')) {
+        toast.error("Akses ditolak: Anda tidak mempunyai kebenaran untuk tindakan ini. Sila pastikan anda log masuk sebagai Admin.")
+      } else {
+        toast.error("Gagal simpan: " + e.message)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -556,14 +570,37 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                       </div>
                     </div>
                   ) : (
-                    <div>
-                      <Label className="text-xs">Kadar Sewa Bulanan</Label>
-                      <Input
-                        type="number"
-                        value={formData.rate_monthly}
-                        onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })}
-                        className="bg-white"
-                      />
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs">Kadar Bulanan (Khemah)</Label>
+                          <Input
+                            type="number"
+                            value={formData.rate_monthly_khemah}
+                            onChange={(e) => setFormData({ ...formData, rate_monthly_khemah: e.target.value })}
+                            className="h-9 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Kadar Bulanan (CBS/Lori)</Label>
+                          <Input
+                            type="number"
+                            value={formData.rate_monthly_cbs}
+                            onChange={(e) => setFormData({ ...formData, rate_monthly_cbs: e.target.value })}
+                            className="h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Kadar Sewa Bulanan (Standard)</Label>
+                        <Input
+                          type="number"
+                          value={formData.rate_monthly}
+                          onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })}
+                          className="bg-white"
+                          placeholder="Kadar umum jika tidak specify jenis"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -602,8 +639,18 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
               </div>
             )}
             {rentLocation?.type === 'monthly' && (
-              <div className="p-4 bg-secondary/20 rounded-xl">
-                <p className="text-sm font-bold">Kadar Bulanan: RM {rentLocation.rate_monthly}</p>
+              <div className="space-y-2">
+                <Label>Pilih Jenis Sewaan</Label>
+                <Select value={rentType} onValueChange={(v: any) => setRentType(v)}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly_khemah">Khemah (RM {rentLocation.rate_monthly_khemah || rentLocation.rate_monthly})</SelectItem>
+                    <SelectItem value="monthly_cbs">CBS / Lori (RM {rentLocation.rate_monthly_cbs || rentLocation.rate_monthly})</SelectItem>
+                    <SelectItem value="monthly">Standard (RM {rentLocation.rate_monthly})</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>

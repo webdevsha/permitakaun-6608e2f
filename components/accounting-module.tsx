@@ -101,6 +101,16 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     savings: 4,
     emergency: 3.5
   })
+  // Individual bank names for each of the 7 tabungs
+  const [bankNames, setBankNames] = useState({
+    operating: "",
+    tax: "",
+    zakat: "",
+    investment: "",
+    dividend: "",
+    savings: "",
+    emergency: ""
+  })
 
   // Superadmin Settings State
   const [systemSettings, setSystemSettings] = useState({ is_active: true, trial_duration_days: 14 })
@@ -120,9 +130,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setUserRole(currentRole)
 
         // 1. Fetch 7-Tabung Config
-        const { data: configData } = await supabase.from('accounting_config').select('percentages').eq('profile_id', user.id).maybeSingle()
-        if (configData && configData.percentages) {
-          setPercentages(configData.percentages)
+        const { data: configData } = await supabase.from('accounting_config').select('percentages, bank_names').eq('profile_id', user.id).maybeSingle()
+        if (configData) {
+          if (configData.percentages) {
+            setPercentages(configData.percentages)
+          }
+          if (configData.bank_names) {
+            setBankNames(configData.bank_names)
+          }
         }
 
         // 2. Fetch System Settings & Verify Access
@@ -242,7 +257,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     try {
       const { error } = await supabase.from('accounting_config').upsert({
         profile_id: user.id,
-        percentages: percentages
+        percentages: percentages,
+        bank_names: bankNames
       }, { onConflict: 'profile_id' })
 
       if (error) throw error
@@ -332,7 +348,6 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const cashBalance = (totalCapital + operatingRevenue) - totalExpenses
 
   // 7-TABUNG ALLOCATION (Based on Operating Revenue)
-  // 7-TABUNG ALLOCATION (Based on Operating Revenue)
   const accounts = [
     {
       name: "Operating Account",
@@ -340,7 +355,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.operating / 100),
       color: "bg-brand-blue/10 text-brand-blue border-brand-blue/20",
       icon: Wallet,
-      tag: "Actionable"
+      tag: "Actionable",
+      bankKey: "operating",
+      bankLabel: "Operating"
     },
     {
       name: "Tax",
@@ -348,7 +365,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.tax / 100),
       color: "bg-orange-50 text-orange-600 border-orange-100",
       icon: Building,
-      tag: "Liability"
+      tag: "Liability",
+      bankKey: "tax",
+      bankLabel: "Cukai"
     },
     {
       name: "Zakat",
@@ -356,7 +375,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.zakat / 100),
       color: "bg-brand-green/10 text-brand-green border-brand-green/20",
       icon: Heart,
-      tag: "Do Not Touch"
+      tag: "Do Not Touch",
+      bankKey: "zakat",
+      bankLabel: "Zakat"
     },
     {
       name: "Investment",
@@ -364,7 +385,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.investment / 100),
       color: "bg-blue-50 text-blue-600 border-blue-100",
       icon: TrendingUp,
-      tag: "Growth"
+      tag: "Growth",
+      bankKey: "investment",
+      bankLabel: "Pelaburan"
     },
     {
       name: "Dividend",
@@ -372,7 +395,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.dividend / 100),
       color: "bg-indigo-50 text-indigo-600 border-indigo-100",
       icon: Landmark,
-      tag: "Growth"
+      tag: "Growth",
+      bankKey: "dividend",
+      bankLabel: "Dividen"
     },
     {
       name: "Savings",
@@ -380,7 +405,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.savings / 100),
       color: "bg-purple-50 text-purple-600 border-purple-100",
       icon: PiggyBank,
-      tag: "Growth"
+      tag: "Growth",
+      bankKey: "savings",
+      bankLabel: "Simpanan"
     },
     {
       name: "Emergency",
@@ -388,7 +415,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.emergency / 100),
       color: "bg-yellow-50 text-yellow-600 border-yellow-100",
       icon: ShieldAlert,
-      tag: "Safety Net"
+      tag: "Safety Net",
+      bankKey: "emergency",
+      bankLabel: "Kecemasan"
     },
   ]
 
@@ -750,6 +779,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Badge className="bg-brand-green/10 text-brand-green border-none px-4 py-1 rounded-full font-bold">
                     100% DIAGIH
                   </Badge>
+                  {/* Show count of configured banks */}
+                  {(() => {
+                    const configuredBanks = Object.values(bankNames).filter(b => b && b.trim() !== '').length;
+                    if (configuredBanks > 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {configuredBanks}/7 Bank ditetapkan
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   {userRole === 'superadmin' && (
                     <Dialog open={isSuperadminConfigOpen} onOpenChange={setIsSuperadminConfigOpen}>
                       <DialogTrigger asChild>
@@ -795,46 +836,75 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         <Settings className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Konfigurasi 7-Tabung</DialogTitle>
-                        <DialogDescription>Tetapkan peratusan agihan untuk setiap tabung.</DialogDescription>
+                        <DialogDescription>Tetapkan peratusan agihan dan nama bank untuk setiap tabung.</DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Operating (%)</Label>
-                          <Input type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
+                        {/* Header row */}
+                        <div className="grid grid-cols-12 gap-2 items-center text-xs font-medium text-muted-foreground border-b pb-2">
+                          <div className="col-span-3">Tabung</div>
+                          <div className="col-span-3">Peratus (%)</div>
+                          <div className="col-span-6">Nama Bank / Akaun</div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Tax (%)</Label>
-                          <Input type="number" value={percentages.tax} onChange={(e) => setPercentages({ ...percentages, tax: Number(e.target.value) })} />
+                        
+                        {/* Operating */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Operating</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.operating} onChange={(e) => setBankNames({ ...bankNames, operating: e.target.value })} placeholder="Contoh: Maybank Business" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Zakat (%)</Label>
-                          <Input type="number" value={percentages.zakat} onChange={(e) => setPercentages({ ...percentages, zakat: Number(e.target.value) })} />
+                        
+                        {/* Tax */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Tax</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.tax} onChange={(e) => setPercentages({ ...percentages, tax: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.tax} onChange={(e) => setBankNames({ ...bankNames, tax: e.target.value })} placeholder="Contoh: LHDN / Bank Pembayar Cukai" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Investment (%)</Label>
-                          <Input type="number" value={percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
+                        
+                        {/* Zakat */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Zakat</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.zakat} onChange={(e) => setPercentages({ ...percentages, zakat: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.zakat} onChange={(e) => setBankNames({ ...bankNames, zakat: e.target.value })} placeholder="Contoh: Pusat Pungutan Zakat" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Dividend (%)</Label>
-                          <Input type="number" value={percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
+                        
+                        {/* Investment */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Investment</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.investment} onChange={(e) => setBankNames({ ...bankNames, investment: e.target.value })} placeholder="Contoh: CIMB Investment Account" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Savings (%)</Label>
-                          <Input type="number" value={percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
+                        
+                        {/* Dividend */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Dividend</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.dividend} onChange={(e) => setBankNames({ ...bankNames, dividend: e.target.value })} placeholder="Contoh: RHB Dividend Account" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4 items-center">
-                          <Label>Emergency (%)</Label>
-                          <Input type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
+                        
+                        {/* Savings */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Savings</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.savings} onChange={(e) => setBankNames({ ...bankNames, savings: e.target.value })} placeholder="Contoh: Tabung Haji / ASB" />
                         </div>
-                        <div className="flex justify-end pt-2">
+                        
+                        {/* Emergency */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <Label className="col-span-3 text-sm">Emergency</Label>
+                          <Input className="col-span-3 h-9" type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
+                          <Input className="col-span-6 h-9" type="text" value={bankNames.emergency} onChange={(e) => setBankNames({ ...bankNames, emergency: e.target.value })} placeholder="Contoh: Maybank Savings" />
+                        </div>
+                        
+                        <div className="flex justify-between items-center pt-4 border-t">
                           <p className={cn("text-xs font-bold",
                             (percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency) === 100 ? "text-green-600" : "text-red-600"
                           )}>
                             Jumlah: {(percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency).toFixed(1)}%
                           </p>
+                          <Button onClick={handleSaveConfig} size="sm">Simpan</Button>
                         </div>
                       </div>
                     </DialogContent>
@@ -858,34 +928,43 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-                  {accounts.map((acc) => (
-                    <div key={acc.name} className="space-y-3 group">
-                      <div
-                        className={cn(
-                          "w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 shadow-sm border",
-                          acc.color,
-                        )}
-                      >
-                        <acc.icon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border uppercase", acc.color.replace('bg-', 'bg-white/50 '))}>
-                            {acc.percent}
-                          </span>
+                  {accounts.map((acc) => {
+                    const bankName = bankNames[acc.bankKey as keyof typeof bankNames];
+                    return (
+                      <div key={acc.name} className="space-y-3 group">
+                        <div
+                          className={cn(
+                            "w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 shadow-sm border",
+                            acc.color,
+                          )}
+                        >
+                          <acc.icon className="h-5 w-5" />
                         </div>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
-                          {acc.name}
-                        </p>
-                        <p className="text-lg font-bold text-foreground mt-0.5">
-                          RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </p>
-                        <p className="text-[9px] text-muted-foreground/60 italic">
-                          {acc.tag}
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border uppercase", acc.color.replace('bg-', 'bg-white/50 '))}>
+                              {acc.percent}
+                            </span>
+                          </div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                            {acc.name}
+                          </p>
+                          <p className="text-lg font-bold text-foreground mt-0.5">
+                            RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </p>
+                          {/* Show bank name if set */}
+                          {bankName && (
+                            <p className="text-[9px] text-primary font-medium truncate" title={bankName}>
+                              {bankName}
+                            </p>
+                          )}
+                          <p className="text-[9px] text-muted-foreground/60 italic">
+                            {acc.tag}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

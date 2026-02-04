@@ -53,7 +53,7 @@ export function LoginForm() {
       <CardHeader className="text-center space-y-2 pt-10 pb-6 bg-secondary/20 border-b border-border/30">
         <div className="relative w-48 h-20 mx-auto mb-2">
           <Image
-            src="/logo.png"
+            src="https://permitakaun.kumim.my/logo.png"
             alt="Permit Akaun"
             fill
             className="object-contain"

@@ -5,6 +5,9 @@ export async function middleware(request: NextRequest) {
   return await updateSession(request)
 }
 
+// Note: Role-based redirects are handled in individual pages to ensure
+// consistent server-side rendering and prevent flickering.
+
 export const config = {
   matcher: [
     /*

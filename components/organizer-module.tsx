@@ -36,11 +36,26 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
 
+const fetchOrganizers = async () => {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('organizers')
+    .select('*, locations(*)')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
 export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any[] }) {
-  const organizers = initialOrganizers || []
   const router = useRouter()
-  const mutate = () => router.refresh()
   const { role } = useAuth() // Get role
+  
+  // Use SWR for fresh data after mutations
+  const { data: organizersData, mutate } = useSWR('organizers', fetchOrganizers, {
+    fallbackData: initialOrganizers,
+    revalidateOnMount: false
+  })
+  const organizers = organizersData || initialOrganizers || []
 
   const [isOpen, setIsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -121,7 +136,13 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
       resetForm()
       mutate()
     } catch (e: any) {
-      toast.error("Gagal: " + e.message)
+      console.error('Organizer save error:', e)
+      const errorMsg = e.message || ''
+      if (errorMsg.includes('row-level security') || errorMsg.includes('RLS') || errorMsg.includes('permission denied')) {
+        toast.error("Akses ditolak: Anda tidak mempunyai kebenaran untuk tindakan ini. Sila pastikan anda log masuk sebagai Admin.")
+      } else {
+        toast.error("Gagal: " + e.message)
+      }
     } finally {
       setIsSubmitting(false)
     }

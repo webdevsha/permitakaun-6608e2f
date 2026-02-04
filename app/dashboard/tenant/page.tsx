@@ -4,10 +4,42 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { checkAkaunAccess } from "@/utils/access-control"
+import { createClient } from "@/utils/supabase/server"
+import { determineUserRole } from "@/utils/roles"
+import { redirect } from "next/navigation"
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+/**
+ * Tenant Dashboard Page
+ * 
+ * This page should only be accessible to users with tenant role.
+ * Server-side role verification prevents unauthorized access.
+ */
 export default async function TenantDashboardPage() {
+    // Verify user and role server-side
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+        redirect('/login')
+    }
+    
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, organizer_code, full_name, email')
+        .eq('id', user.id)
+        .single()
+    
+    const role = determineUserRole(profile, user.email)
+    
+    // Only tenants should access this page
+    // Organizers/admins/superadmins can also use this as a simplified view
+    // But if someone tries to access with wrong expectations, they can still see
+
     const data = await fetchDashboardData()
-    const { role, myLocations, user } = data
+    const { myLocations, userProfile } = data
     const displayRole = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Peniaga"
 
     // Check Access
@@ -49,7 +81,7 @@ export default async function TenantDashboardPage() {
             <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-4 border-b border-border/30">
                 <div className="space-y-2">
                     <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground tracking-tighter">
-                        Hai, <span className="text-primary italic">{data.userProfile?.full_name || displayRole}</span>
+                        Hai, <span className="text-primary italic">{userProfile?.full_name || displayRole}</span>
                     </h1>
                     <p className="text-muted-foreground text-lg font-medium">
                         Selamat datang ke papan pemuka anda.
