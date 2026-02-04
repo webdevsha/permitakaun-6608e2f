@@ -75,7 +75,14 @@ const fetchTenants = async () => {
    return enrichedTenants
 }
 
+// ... imports
+import { useAuth } from "@/components/providers/auth-provider"
+import { logAction } from "@/utils/logging"
+
+// ... (fetchTenants remains same, or updated if needed, but sticking to client interactions)
+
 export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
+   const { role } = useAuth() // Get Role
    const [filterStatus, setFilterStatus] = useState("all")
    const [searchQuery, setSearchQuery] = useState("")
 
@@ -121,7 +128,9 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       email: ''
    })
    const [addingTenant, setAddingTenant] = useState(false)
+   // ...
 
+   // ... (inside handleAddTenant)
    const handleAddTenant = async () => {
       if (!newTenant.name || !newTenant.business) {
          toast.error("Nama dan Nama Perniagaan wajib diisi")
@@ -130,16 +139,26 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
 
       setAddingTenant(true)
       try {
-         const { error } = await supabase.from('tenants').insert({
+         const payload: any = {
             full_name: newTenant.name,
             business_name: newTenant.business,
             phone_number: newTenant.phone,
             email: newTenant.email,
-            status: 'active'
-         })
+         }
+
+         if (role === 'staff') {
+            payload.status = 'pending'
+         } else {
+            payload.status = 'active'
+         }
+
+         const { data: newVal, error } = await supabase.from('tenants').insert(payload).select().single()
 
          if (error) throw error
-         toast.success("Peniaga berjaya didaftarkan")
+
+         await logAction('CREATE', 'tenant', newVal.id, payload)
+         toast.success(role === 'staff' ? "Peniaga didaftarkan. Menunggu kelulusan." : "Peniaga berjaya didaftarkan")
+
          setNewTenant({ name: '', business: '', phone: '', email: '' })
          setIsAddOpen(false)
          mutate()
@@ -150,7 +169,9 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
+   // ... (handleDeleteTenant)
    const handleDeleteTenant = async (tenantId: number, tenantName: string) => {
+      if (role === 'staff') return
       if (!confirm(`Adakah anda pasti mahu memadam peniaga "${tenantName}"? Tindakan ini tidak boleh dibatalkan.`)) {
          return
       }
@@ -160,10 +181,26 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
          const { error } = await supabase.from('tenants').delete().eq('id', tenantId)
 
          if (error) throw error
+
+         await logAction('DELETE', 'tenant', tenantId, {})
          toast.success(`Peniaga "${tenantName}" berjaya dipadam`)
          mutate()
       } catch (e: any) {
          toast.error("Gagal memadam: " + e.message)
+      } finally {
+         setIsUpdating(false)
+      }
+   }
+
+   const handleTenantStatusChange = async (tenantId: number, newStatus: string) => {
+      setIsUpdating(true)
+      try {
+         const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenantId)
+         if (error) throw error
+         toast.success(`Status peniaga dikemaskini ke ${newStatus}`)
+         mutate()
+      } catch (err: any) {
+         toast.error(err.message)
       } finally {
          setIsUpdating(false)
       }
@@ -191,19 +228,43 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setLoadingDetails(false)
    }
 
-   const handleTenantStatusChange = async (tenantId: number, newStatus: string) => {
-      setIsUpdating(true)
+   const handleApproveTenant = async (tenantId: number) => {
       try {
-         const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenantId)
+         const { error } = await supabase.from('tenants').update({ status: 'active' }).eq('id', tenantId)
          if (error) throw error
-         toast.success(`Status peniaga dikemaskini ke ${newStatus}`)
+         await logAction('APPROVE', 'tenant', tenantId, { status: 'active' })
+         toast.success("Peniaga diluluskan")
          mutate()
-      } catch (err: any) {
-         toast.error(err.message)
-      } finally {
-         setIsUpdating(false)
+      } catch (e: any) {
+         toast.error("Gagal lulus: " + e.message)
       }
    }
+
+   // ... (inside Table Loop)
+   // <div className={cn("font-medium transition-colors", tenant.status === 'active' ? "text-brand-green font-bold" : "text-foreground")}>
+   //    {tenant.full_name}
+   //    {tenant.status === 'active' && <CheckCircle className="inline-block w-3 h-3 ml-1" />}
+   //    {tenant.status === 'pending' && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-4">Pending</Badge>}
+   // </div>
+
+   // ... (Tenant Status Switch)
+   // <div className="flex justify-center items-center gap-2">
+   //    {tenant.status === 'pending' && (role === 'admin' || role === 'superadmin') ? (
+   //        <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveTenant(tenant.id)}>
+   //            <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
+   //        </Button>
+   //    ) : (
+   //      <>
+   //        <Switch ... disabled={isUpdating || (role === 'staff' && tenant.status === 'pending')} />
+   //      </>
+   //    )}
+   // </div>
+
+   // ... (Delete Button)
+   // {role !== 'staff' && (
+   //    <Button ... onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}> <Trash2 size={16} /> </Button>
+   // )}
+
 
    const handleAccountingStatusChange = async (tenantId: number, newAcctStatus: string) => {
       setIsUpdating(true)
@@ -410,6 +471,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                     <div className={cn("font-medium transition-colors", tenant.status === 'active' ? "text-brand-green font-bold" : "text-foreground")}>
                                        {tenant.full_name}
                                        {tenant.status === 'active' && <CheckCircle className="inline-block w-3 h-3 ml-1" />}
+                                       {tenant.status === 'pending' && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-4">Pending</Badge>}
                                     </div>
                                     <div className="text-xs text-muted-foreground font-mono">{tenant.business_name}</div>
                                  </div>
@@ -424,12 +486,20 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                            </TableCell>
                            <TableCell className="text-center">
                               <div className="flex justify-center items-center gap-2">
-                                 <Switch
-                                    checked={tenant.status === 'active'}
-                                    onCheckedChange={() => handleTenantStatusChange(tenant.id, tenant.status === 'active' ? 'inactive' : 'active')}
-                                    disabled={isUpdating}
-                                 />
-                                 <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">{tenant.status === 'active' ? 'Aktif' : 'Pasif'}</span>
+                                 {tenant.status === 'pending' && (role === 'admin' || role === 'superadmin') ? (
+                                    <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveTenant(tenant.id)}>
+                                       <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
+                                    </Button>
+                                 ) : (
+                                    <>
+                                       <Switch
+                                          checked={tenant.status === 'active'}
+                                          onCheckedChange={() => handleTenantStatusChange(tenant.id, tenant.status === 'active' ? 'inactive' : 'active')}
+                                          disabled={isUpdating || (role === 'staff' && tenant.status === 'pending')}
+                                       />
+                                       <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">{tenant.status === 'active' ? 'Aktif' : 'Pasif'}</span>
+                                    </>
+                                 )}
                               </div>
                            </TableCell>
                            <TableCell className="text-center">
@@ -450,14 +520,16 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
                                     <Eye size={16} />
                                  </Button>
-                                 <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                    onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}
-                                 >
-                                    <Trash2 size={16} />
-                                 </Button>
+                                 {role !== 'staff' && (
+                                    <Button
+                                       variant="ghost"
+                                       size="icon"
+                                       className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                       onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}
+                                    >
+                                       <Trash2 size={16} />
+                                    </Button>
+                                 )}
                               </div>
                            </TableCell>
                         </TableRow>

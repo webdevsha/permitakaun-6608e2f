@@ -38,10 +38,8 @@ export async function fetchDashboardData() {
     let myLocations: any[] = []
     let availableLocations: any[] = []
 
-    // --- ADMIN & SUPERADMIN & SPECIAL ADMIN ORGANIZERS: Fetch ALL ---
-    // admin@kumim.my is granted admin-level visibility while keeping organizer role
-    // --- ADMIN & SUPERADMIN & SPECIAL ADMIN ORGANIZERS: Fetch ALL ---
-    // admin@kumim.my is granted admin-level visibility while keeping organizer role
+    // --- ADMIN & SUPERADMIN (Organization Owners) ---
+    // Only fetch ALL if explicitly Admin/Superadmin. Staff handled separately to enforce mirroring.
     if (role === 'admin' || role === 'superadmin' || user.email === 'admin@kumim.my') {
 
         // Developer-Admin Logic: Only admin@permit.com sees Seed Data (ORG001)
@@ -78,7 +76,6 @@ export async function fetchDashboardData() {
                 const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
                 let paymentStatus = 'active'
                 if (!lastPayment) paymentStatus = 'new'
-
                 return {
                     ...tenant,
                     locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
@@ -114,9 +111,10 @@ export async function fetchDashboardData() {
         const { data: org } = await orgQuery
         organizers = org || []
 
-        // --- ORGANIZER OR STAFF WITH ORGANIZER_CODE: Fetch Linked Data Only ---
-    } else if (role === 'organizer' || (role === 'staff' && organizerCode)) {
-        // For staff, use their organizer_code; for organizer, fetch from organizers table
+        // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
+    } else if (role === 'organizer' || role === 'staff') {
+        // Enforce STRICT mirroring: Staff MUST have an organizer_code.
+        // If staff has no code, they see NOTHING.
         let orgCode = organizerCode
         let orgId = null
 
@@ -129,8 +127,13 @@ export async function fetchDashboardData() {
             if (org) {
                 organizers = [org] // Populate for UI Header
             }
-        } else if (role === 'staff' && orgCode) {
-            // Staff: Find the organizer by code to get their ID
+        } else if (role === 'staff') {
+            if (!orgCode) {
+                // If staff has no link, RETURN EMPTY to prevent leak
+                return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role, userProfile }
+            }
+
+            // Staff: Find the organizer by code to get their ID (Mirroring Admin's Org)
             const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('organizer_code', orgCode).single()
             orgId = org?.id
 
