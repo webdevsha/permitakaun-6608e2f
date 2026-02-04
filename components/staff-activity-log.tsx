@@ -21,22 +21,54 @@ export function StaffActivityLog({ staffIds }: StaffActivityLogProps) {
     const fetchStaffActivity = async () => {
         setIsLoading(true)
         try {
-            let query = supabase
+            // First get staff user IDs from profiles
+            let staffUserIds: string[] = []
+            
+            if (staffIds && staffIds.length > 0) {
+                staffUserIds = staffIds
+            } else {
+                // Get all staff user IDs
+                const { data: staffProfiles, error: staffError } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('role', 'staff')
+                
+                if (!staffError && staffProfiles) {
+                    staffUserIds = staffProfiles.map(p => p.id)
+                }
+            }
+            
+            // If no staff found, return empty
+            if (staffUserIds.length === 0) {
+                setLogs([])
+                setIsLoading(false)
+                return
+            }
+            
+            // Fetch logs for staff users
+            const { data, error } = await supabase
                 .from('action_logs')
-                .select('*, profiles(email, full_name, role)')
-                .eq('profiles.role', 'staff')
+                .select('*')
+                .in('user_id', staffUserIds)
                 .order('created_at', { ascending: false })
                 .limit(50)
 
-            // If specific staff IDs provided, filter by them
-            if (staffIds && staffIds.length > 0) {
-                query = query.in('user_id', staffIds)
-            }
-
-            const { data, error } = await query
-
             if (error) throw error
-            setLogs(data || [])
+            
+            // Fetch profiles separately for the display names
+            const userIds = data?.map(log => log.user_id) || []
+            const { data: profilesData } = await supabase
+                .from('profiles')
+                .select('id, email, full_name, role')
+                .in('id', userIds)
+            
+            // Merge logs with profiles
+            const enrichedLogs = data?.map(log => ({
+                ...log,
+                profiles: profilesData?.find(p => p.id === log.user_id) || null
+            })) || []
+            
+            setLogs(enrichedLogs)
         } catch (error) {
             console.error("Error fetching staff activity:", error)
             toast.error("Gagal memuatkan log aktiviti")

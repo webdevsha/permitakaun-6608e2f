@@ -331,10 +331,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category === 'Modal')
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
-  // 2. Operating Revenue (Income excluding Modal)
+  // 2. Operating Revenue (Income excluding Modal, including negative amounts/cash out)
   const operatingRevenue = perspectiveTransactions
     ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category !== 'Modal')
-    .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+    .reduce((sum: number, t: any) => {
+      const amount = Number(t.amount)
+      // Include both positive income and negative amounts (cash out/refunds)
+      return sum + amount
+    }, 0) || 0
 
   // 3. Total Expenses
   const totalExpenses = perspectiveTransactions

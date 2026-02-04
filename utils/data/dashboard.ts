@@ -97,11 +97,8 @@ export async function fetchDashboardData() {
         transactions = tx || []
 
         let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-        if (adminOrgCode) {
-            // Specific admin only sees their own org
-            orgQuery = orgQuery.eq('organizer_code', adminOrgCode)
-        } else if (!isDeveloperAdmin) {
-            // Filter out ALL seed/demo organizer codes
+        if (!isDeveloperAdmin) {
+            // Filter out ALL seed/demo organizer codes for non-dev admins
             orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
         }
         const { data: org } = await orgQuery

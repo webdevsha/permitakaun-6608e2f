@@ -630,24 +630,9 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
-          {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+          {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Pengurusan Staff
-            </TabsTrigger>
-          )}
-          {(role === 'admin' || role === 'superadmin') && (
-            <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <UserPlus className="w-4 h-4 mr-2" /> Pengurusan Pengguna
-            </TabsTrigger>
-          )}
-          {(role === 'admin' || role === 'superadmin') && (
-            <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Activity className="w-4 h-4 mr-2" /> Audit Logs
-            </TabsTrigger>
-          )}
-          {(role === 'admin' || role === 'organizer') && (
-            <TabsTrigger value="add-user" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <PlusCircle className="w-4 h-4 mr-2" /> Tambah Pengguna
+              <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
             </TabsTrigger>
           )}
         </TabsList>
@@ -1015,11 +1000,78 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 </CardContent>
               </Card>
             )}
+
+            {/* Audit Logs Section */}
+            {(role === 'admin' || role === 'superadmin') && (
+              <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden mt-6">
+                <CardHeader className="bg-secondary/10 border-b border-border/30">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                        <Activity className="text-primary w-6 h-6" /> Audit Logs
+                      </CardTitle>
+                      <CardDescription>Rekod aktiviti pengguna dan sistem.</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={async () => {
+                      const { data } = await supabase.from('action_logs').select('*, profiles(email, full_name, role)').order('created_at', { ascending: false }).limit(100)
+                      setLogs(data || [])
+                    }}>
+                      <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-secondary/20">
+                      <TableRow>
+                        <TableHead className="pl-6">Masa</TableHead>
+                        <TableHead>Pengguna</TableHead>
+                        <TableHead>Tindakan</TableHead>
+                        <TableHead>Resource</TableHead>
+                        <TableHead>Butiran</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {logs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Tiada rekod aktiviti.</TableCell>
+                        </TableRow>
+                      ) : (
+                        logs.map((log: any) => (
+                          <TableRow key={log.id} className="hover:bg-slate-50/50">
+                            <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap pl-6">
+                              {new Date(log.created_at).toLocaleString('ms-MY')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-xs">{log.profiles?.full_name || "Unknown"}</span>
+                                <span className="text-[10px] text-muted-foreground">{log.profiles?.email}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider">
+                                {log.action}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="capitalize text-sm font-medium text-foreground/80">
+                              {log.resource} <span className="text-xs text-muted-foreground ml-1">#{log.resource_id}</span>
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate text-xs font-mono text-slate-500">
+                              {JSON.stringify(log.details)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
 
         {(role === 'admin' || role === 'superadmin') && (
-          <TabsContent value="staff" className="space-y-6">
+          <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
                 <div className="flex justify-between items-center">
@@ -1061,74 +1113,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                     <p className="text-sm">Klik "Tambah Staf" untuk mula mendaftar staf baru.</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-
-        {(role === 'admin' || role === 'superadmin') && (
-          <TabsContent value="logs" className="space-y-6">
-            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
-              <CardHeader className="bg-secondary/10 border-b border-border/30">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
-                      <Activity className="text-primary w-6 h-6" /> Audit Logs
-                    </CardTitle>
-                    <CardDescription>Rekod aktiviti pengguna dan sistem.</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={async () => {
-                    const { data } = await supabase.from('action_logs').select('*, profiles(email, full_name, role)').order('created_at', { ascending: false }).limit(100)
-                    setLogs(data || [])
-                  }}>
-                    <RefreshCw className="w-4 h-4 mr-2" /> Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-secondary/20">
-                    <TableRow>
-                      <TableHead className="pl-6">Masa</TableHead>
-                      <TableHead>Pengguna</TableHead>
-                      <TableHead>Tindakan</TableHead>
-                      <TableHead>Resource</TableHead>
-                      <TableHead>Butiran</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {logs.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Tiada rekod aktiviti.</TableCell>
-                      </TableRow>
-                    ) : (
-                      logs.map((log: any) => (
-                        <TableRow key={log.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap pl-6">
-                            {new Date(log.created_at).toLocaleString('ms-MY')}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-bold text-xs">{log.profiles?.full_name || "Unknown"}</span>
-                              <span className="text-[10px] text-muted-foreground">{log.profiles?.email}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider">
-                              {log.action}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="capitalize text-sm font-medium text-foreground/80">
-                            {log.resource} <span className="text-xs text-muted-foreground ml-1">#{log.resource_id}</span>
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate text-xs font-mono text-slate-500">
-                            {JSON.stringify(log.details)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1343,138 +1327,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {/* Tambah Pengguna Tab */}
-        {(role === 'admin' || role === 'organizer') && (
-          <TabsContent value="add-user" className="space-y-6">
-            <Card className={cn(
-              "bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden",
-              !canAddUsers && "opacity-75"
-            )}>
-              <CardHeader className="bg-secondary/10 border-b border-border/30">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
-                      <PlusCircle className="text-primary w-6 h-6" /> Tambah Pengguna
-                    </CardTitle>
-                    <CardDescription>Cipta akaun pengguna baru untuk pasukan anda</CardDescription>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Staf sedia ada: <span className={staffCount >= MAX_STAFF ? "text-amber-600 font-bold" : "font-medium"}>{staffCount}/{MAX_STAFF}</span>
-                    </p>
-                  </div>
-                  {checkingSubscription ? (
-                    <Badge variant="outline" className="text-xs">
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Memeriksa...
-                    </Badge>
-                  ) : canAddUsers ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">Aktif</Badge>
-                  ) : staffCount >= MAX_STAFF ? (
-                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">Had Dicapai</Badge>
-                  ) : (
-                    <Badge variant="destructive">Langganan Diperlukan</Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                {/* Staff limit reached warning */}
-                {staffCount >= MAX_STAFF && (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
-                    <p className="font-bold mb-1 flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4" /> Had Maksimum Staf
-                    </p>
-                    <p className="text-sm">Anda telah mencapai had maksimum {MAX_STAFF} staf. Untuk menambah staf baharu, sila hubungi penyelia sistem.</p>
-                  </div>
-                )}
-                
-                {/* Organizer subscription warning */}
-                {!canAddUsers && !checkingSubscription && role === 'organizer' && staffCount < MAX_STAFF && (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
-                    <p className="font-bold mb-1">Ciri Terhad</p>
-                    <p className="text-sm">Anda perlu melanggan pelan <strong>Sdn Bhd</strong> atau lebih tinggi untuk menambah pengguna.</p>
-                    <Button 
-                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white" 
-                      size="sm"
-                      onClick={() => window.location.href = '/dashboard/subscription'}
-                    >
-                      Naik Taraf Langganan
-                    </Button>
-                  </div>
-                )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Nama Penuh *</Label>
-                    <Input
-                      value={newUserForm.fullName}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, fullName: e.target.value })}
-                      placeholder="Nama penuh pengguna"
-                      disabled={!canAddUsers}
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Emel *</Label>
-                    <Input
-                      type="email"
-                      value={newUserForm.email}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                      placeholder="email@contoh.com"
-                      disabled={!canAddUsers}
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Kata Laluan *</Label>
-                    <Input
-                      type="password"
-                      value={newUserForm.password}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                      placeholder="Minima 6 aksara"
-                      disabled={!canAddUsers}
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Peranan *</Label>
-                    <Select
-                      value={newUserForm.role}
-                      onValueChange={(v: any) => setNewUserForm({ ...newUserForm, role: v })}
-                      disabled={!canAddUsers}
-                    >
-                      <SelectTrigger className="rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="staff">Staff</SelectItem>
-                        <SelectItem value="tenant">Tenant/Peniaga</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleCreateUser}
-                  disabled={!canAddUsers || creatingUser}
-                  className="w-full rounded-xl h-12 bg-primary text-white font-bold"
-                >
-                  {creatingUser ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2 w-4 h-4" />}
-                  {creatingUser ? "Mencipta..." : "Tambah Pengguna"}
-                </Button>
-
-                <div className="text-xs text-muted-foreground bg-slate-50 p-4 rounded-xl">
-                  <p className="font-bold mb-1">Nota:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Pengguna baru akan menerima emel pengesahan.</li>
-                    <li>Staff boleh mengakses data baca-sahaja.</li>
-                    <li>Admin/Organizer boleh menguruskan staff mereka.</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   )
