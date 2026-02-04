@@ -13,7 +13,7 @@ export function SubscriptionPlans() {
 
   const plans = [
     {
-      name: "Asas (Basic)",
+      name: "Enterprise",
       price: "19",
       description: "Untuk peniaga kecil yang baru bermula",
       features: [
@@ -24,10 +24,12 @@ export function SubscriptionPlans() {
       ],
       popular: false,
       color: "bg-white",
-      buttonVariant: "outline" as const
+      buttonVariant: "outline" as const,
+      buttonText: "Langgan Sekarang",
+      isContact: false
     },
     {
-      name: "Standard",
+      name: "Sdn Bhd",
       price: "39",
       description: "Pilihan terbaik untuk perniagaan berkembang",
       features: [
@@ -39,10 +41,12 @@ export function SubscriptionPlans() {
       ],
       popular: true,
       color: "bg-primary text-primary-foreground",
-      buttonVariant: "secondary" as const
+      buttonVariant: "secondary" as const,
+      buttonText: "Langgan Sekarang",
+      isContact: false
     },
     {
-      name: "Premium",
+      name: "SdnBhd/ Berhad",
       price: "99",
       description: "Untuk syarikat atau francais",
       features: [
@@ -54,7 +58,9 @@ export function SubscriptionPlans() {
       ],
       popular: false,
       color: "bg-white",
-      buttonVariant: "default" as const
+      buttonVariant: "default" as const,
+      buttonText: "Hubungi Kami",
+      isContact: true
     }
   ]
 
@@ -146,10 +152,10 @@ export function SubscriptionPlans() {
               <Button
                 variant={plan.buttonVariant}
                 className="w-full h-12 rounded-xl font-bold text-md shadow-sm"
-                onClick={() => handleSubscribe(plan.name, plan.price)}
-                disabled={!!loadingPlan}
+                onClick={() => plan.isContact ? window.location.href = 'mailto:support@permitakaun.kumim.my?subject=Permintaan Langganan SdnBhd/Berhad' : handleSubscribe(plan.name, plan.price)}
+                disabled={!!loadingPlan && !plan.isContact}
               >
-                {loadingPlan === plan.name ? <Loader2 className="animate-spin" /> : "Langgan Sekarang"}
+                {loadingPlan === plan.name && !plan.isContact ? <Loader2 className="animate-spin" /> : plan.buttonText}
               </Button>
             </CardFooter>
           </Card>

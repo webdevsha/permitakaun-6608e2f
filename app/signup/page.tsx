@@ -139,7 +139,7 @@ export default function SignupPage() {
           </Link>
           <div className="relative w-40 h-16 mx-auto mb-2">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="Permit Akaun"
               fill
               className="object-contain"

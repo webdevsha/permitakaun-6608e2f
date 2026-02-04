@@ -9,7 +9,8 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PaymentSettings } from "@/components/settings-toggle"
@@ -294,6 +295,54 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     }
   }, [role])
 
+  // --- AUDIT LOGS (ADMIN/STAFF ONLY) ---
+  const [logs, setLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true)
+    const { data, error } = await supabase
+      .from('action_logs')
+      .select('*, profiles(email, full_name, role)')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (!error && data) {
+      setLogs(data)
+    }
+    setLoadingLogs(false)
+  }
+
+  const handleDeleteLog = async (id: number) => {
+    if (role !== 'admin' && role !== 'superadmin') return
+    if (!confirm("Padam log ini?")) return
+
+    const { error } = await supabase.from('action_logs').delete().eq('id', id)
+    if (error) {
+      toast.error("Gagal padam log")
+    } else {
+      toast.success("Log dipadam")
+      fetchLogs()
+    }
+  }
+
+  const getActionIcon = (action: string) => {
+    switch (action) {
+      case 'CREATE': return <CheckCircle className="text-green-500 w-4 h-4" />
+      case 'UPDATE': return <PencilIcon className="text-blue-500 w-4 h-4" />
+      case 'DELETE': return <Trash2 className="text-red-500 w-4 h-4" />
+      case 'APPROVE': return <CheckCircle className="text-green-600 w-4 h-4" />
+      default: return <ScrollText className="text-gray-500 w-4 h-4" />
+    }
+  }
+
+  // Fetch logs when tab becomes active
+  useEffect(() => {
+    if (role === 'superadmin' || role === 'admin' || role === 'staff') {
+      fetchLogs()
+    }
+  }, [role])
+
   const handleFileUpload = async (file: File, prefix: string) => {
     const fileExt = file.name.split('.').pop()
     const fileName = `${prefix}-${user?.id}-${Date.now()}.${fileExt}`
@@ -418,14 +467,9 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
-          {role === 'superadmin' && (
+          {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
-            </TabsTrigger>
-          )}
-          {(role === 'admin') && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
+              <Users className="w-4 h-4 mr-2" /> Pengurusan Staff
             </TabsTrigger>
           )}
         </TabsList>
@@ -796,14 +840,14 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {(role === 'superadmin' || role === 'admin') && (
+        {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-serif text-2xl flex items-center gap-2">
-                      <Users className="text-primary w-6 h-6" /> Pengurusan Pengguna
+                      <Users className="text-primary w-6 h-6" /> Pengurusan Staff
                     </CardTitle>
                     <CardDescription>Semakan dan urus peranan pengguna ({usersList.length} Pengguna)</CardDescription>
                   </div>
@@ -918,6 +962,88 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                   <p>Resolved Role: {role}</p>
                   <p>User ID: {user?.id}</p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Audit Logs Section */}
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                      <ScrollText className="text-primary w-6 h-6" /> Audit Logs
+                    </CardTitle>
+                    <CardDescription>Rekod aktiviti pengguna dan sistem</CardDescription>
+                  </div>
+                  <Button onClick={fetchLogs} disabled={loadingLogs} variant="outline" size="sm">
+                    <RefreshCw className={cn("w-4 h-4 mr-2", loadingLogs && "animate-spin")} /> Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-secondary/20">
+                    <TableRow>
+                      <TableHead className="pl-6">Masa</TableHead>
+                      <TableHead>Pengguna</TableHead>
+                      <TableHead>Tindakan</TableHead>
+                      <TableHead>Resource</TableHead>
+                      <TableHead className="text-right pr-6">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingLogs ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8">
+                          <Loader2 className="animate-spin inline mr-2" /> Memuatkan log...
+                        </TableCell>
+                      </TableRow>
+                    ) : logs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          Tiada rekod aktiviti.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      logs.map((log) => (
+                        <TableRow key={log.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap pl-6">
+                            {new Date(log.created_at).toLocaleString('ms-MY')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-xs">{log.profiles?.full_name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground">{log.profiles?.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getActionIcon(log.action)}
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider">
+                                {log.action}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="capitalize text-sm font-medium text-foreground/80">
+                            {log.resource} <span className="text-xs text-muted-foreground ml-1">#{log.resource_id}</span>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            {(role === 'admin' || role === 'superadmin') && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-6 w-6 text-muted-foreground hover:text-red-500" 
+                                onClick={() => handleDeleteLog(log.id)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
