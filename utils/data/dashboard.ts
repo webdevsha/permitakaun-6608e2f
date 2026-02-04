@@ -52,11 +52,14 @@ export async function fetchDashboardData() {
         // Fetch Tenants with Locations
         let tQuery = supabase
             .from('tenants')
-            .select('*, tenant_locations(*, locations(*)), profiles!inner(role)')
-            .eq('profiles.role', 'tenant') // Only show actual tenants, not organizers
+            .select('*, tenant_locations(*, locations(*))')
             .order('created_at', { ascending: false })
 
-        if (!isDeveloperAdmin) {
+        if (user.email === 'admin@kumim.my') {
+            // admin@kumim.my only sees ORG002 data
+            tQuery = tQuery.eq('organizer_code', 'ORG002')
+        } else if (!isDeveloperAdmin) {
+            // Other non-dev admins exclude ORG001 but see all other orgs
             tQuery = tQuery.neq('organizer_code', 'ORG001')
         }
 
@@ -94,7 +97,10 @@ export async function fetchDashboardData() {
             .select('*, tenants!inner(full_name, business_name, organizer_code)')
             .order('date', { ascending: false })
 
-        if (!isDeveloperAdmin) {
+        if (user.email === 'admin@kumim.my') {
+            // admin@kumim.my only sees ORG002 transactions
+            txQuery = txQuery.eq('tenants.organizer_code', 'ORG002')
+        } else if (!isDeveloperAdmin) {
             // Need to filter transactions where tenant's organizer_code is NOT ORG001
             // The !inner join on tenants allows filtering by tenant fields
             txQuery = txQuery.neq('tenants.organizer_code', 'ORG001')
@@ -104,7 +110,10 @@ export async function fetchDashboardData() {
         transactions = tx || []
 
         let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-        if (!isDeveloperAdmin) {
+        if (user.email === 'admin@kumim.my') {
+            // admin@kumim.my only sees their own organizer
+            orgQuery = orgQuery.eq('organizer_code', 'ORG002')
+        } else if (!isDeveloperAdmin) {
             // Filter out ALL seed/demo organizer codes
             orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
         }
