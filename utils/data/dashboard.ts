@@ -32,10 +32,9 @@ export async function fetchDashboardData() {
 
         // Developer-Admin Logic: Only admin@permit.com sees Seed Data (ORG001)
         const isDeveloperAdmin = user.email === 'admin@permit.com'
-        let orgFilter = ''
-        if (!isDeveloperAdmin) {
-            orgFilter = 'ORG001'
-        }
+        
+        // Specific admin organization codes - these admins ONLY see their own org data
+        const adminOrgCode = user.email === 'admin@kumim.my' ? 'ORG002' : null
 
         // Fetch Tenants with Locations
         let tQuery = supabase
@@ -44,7 +43,11 @@ export async function fetchDashboardData() {
             .eq('profiles.role', 'tenant') // Only show actual tenants, not organizers
             .order('created_at', { ascending: false })
 
-        if (!isDeveloperAdmin) {
+        if (adminOrgCode) {
+            // Specific admin (e.g., admin@kumim.my) only sees their org data
+            tQuery = tQuery.eq('organizer_code', adminOrgCode)
+        } else if (!isDeveloperAdmin) {
+            // Other non-dev admins exclude ORG001 but see all other orgs
             tQuery = tQuery.neq('organizer_code', 'ORG001')
         }
 
@@ -82,7 +85,10 @@ export async function fetchDashboardData() {
             .select('*, tenants!inner(full_name, business_name, organizer_code)')
             .order('date', { ascending: false })
 
-        if (!isDeveloperAdmin) {
+        if (adminOrgCode) {
+            // Specific admin only sees their org transactions
+            txQuery = txQuery.eq('tenants.organizer_code', adminOrgCode)
+        } else if (!isDeveloperAdmin) {
             // Need to filter transactions where tenant's organizer_code is NOT ORG001
             // The !inner join on tenants allows filtering by tenant fields
             txQuery = txQuery.neq('tenants.organizer_code', 'ORG001')
@@ -92,7 +98,10 @@ export async function fetchDashboardData() {
         transactions = tx || []
 
         let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-        if (!isDeveloperAdmin) {
+        if (adminOrgCode) {
+            // Specific admin only sees their own org
+            orgQuery = orgQuery.eq('organizer_code', adminOrgCode)
+        } else if (!isDeveloperAdmin) {
             // Filter out ALL seed/demo organizer codes
             orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
         }

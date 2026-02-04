@@ -241,7 +241,13 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       resetForm()
 
     } catch (e: any) {
-      toast.error("Gagal simpan: " + e.message)
+      console.error('Location save error:', e)
+      const errorMsg = e.message || ''
+      if (errorMsg.includes('row-level security') || errorMsg.includes('RLS') || errorMsg.includes('permission denied')) {
+        toast.error("Akses ditolak: Anda tidak mempunyai kebenaran untuk tindakan ini. Sila pastikan anda log masuk sebagai Admin.")
+      } else {
+        toast.error("Gagal simpan: " + e.message)
+      }
     } finally {
       setIsSaving(false)
     }
