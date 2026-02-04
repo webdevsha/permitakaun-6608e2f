@@ -4,14 +4,47 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { checkAkaunAccess } from "@/utils/access-control"
+import { createClient } from "@/utils/supabase/server"
+import { determineUserRole } from "@/utils/roles"
+import { redirect } from "next/navigation"
 
-// ... existing imports
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
+/**
+ * Organizer Dashboard Page
+ * 
+ * This page should only be accessible to users with organizer role.
+ * Server-side role verification prevents unauthorized access.
+ */
 export default async function OrganizerDashboardPage() {
+    // Verify user and role server-side
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+        redirect('/login')
+    }
+    
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, organizer_code, full_name, email')
+        .eq('id', user.id)
+        .single()
+    
+    const role = determineUserRole(profile, user.email)
+    
+    // Only organizers should access this page
+    // Admins/superadmins can view but should primarily use /admin
+    // Tenants should be redirected to their dashboard
+    if (role === 'tenant') {
+        redirect('/dashboard/tenant')
+    }
+
     const dashboardData = await fetchDashboardData()
     const locations = await fetchLocations()
 
-    const { tenants, overdueTenants, userProfile, role, user, organizers } = dashboardData
+    const { tenants, overdueTenants, userProfile, organizers } = dashboardData
 
     // Check Access
     const access = await checkAkaunAccess(user, role)
@@ -122,7 +155,7 @@ export default async function OrganizerDashboardPage() {
                     <CardContent>
                         <div className="flex items-center gap-2 text-xs text-orange-700/80 bg-orange-100/50 px-3 py-1 rounded-full w-fit">
                             <AlertCircle size={14} />
-                            <span>RM {overdueTenants.reduce((acc: number, t: any) => acc + t.arrears, 0).toLocaleString()} Lewat</span>
+                            <span>RM {displayOverdue.reduce((acc: number, t: any) => acc + (t.arrears || 0), 0).toLocaleString()} Lewat</span>
                         </div>
                     </CardContent>
                 </Card>

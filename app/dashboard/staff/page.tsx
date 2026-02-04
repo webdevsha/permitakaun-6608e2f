@@ -1,11 +1,14 @@
 import { createClient } from "@/utils/supabase/server"
-import { Shield, UserPlus } from "lucide-react"
+import { Shield, UserPlus, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { redirect } from "next/navigation"
+import { Badge } from "@/components/ui/badge"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+const MAX_STAFF = 2
 
 export default async function StaffPage() {
     const supabase = await createClient()
@@ -47,6 +50,8 @@ export default async function StaffPage() {
     }
 
     const { data: staffList } = await staffQuery
+    const staffCount = staffList?.length || 0
+    const hasReachedLimit = staffCount >= MAX_STAFF
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -59,9 +64,32 @@ export default async function StaffPage() {
                     <p className="text-muted-foreground text-lg font-medium">
                         Urus akses dan akaun staf untuk organisasi anda.
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                        Had maksimum: <span className={hasReachedLimit ? "text-amber-600 font-bold" : "font-medium"}>{staffCount}/{MAX_STAFF} staf</span>
+                    </p>
                 </div>
-                <AddStaffDialog />
+                <div className="flex items-center gap-4">
+                    {hasReachedLimit && (
+                        <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
+                            <AlertCircle className="w-3 h-3 mr-1" /> Had dicapai
+                        </Badge>
+                    )}
+                    <AddStaffDialog currentStaffCount={staffCount} maxStaff={MAX_STAFF} />
+                </div>
             </header>
+
+            {/* Staff Limit Warning */}
+            {hasReachedLimit && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                    <p className="font-bold flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" /> Had Maksimum Staf
+                    </p>
+                    <p className="text-sm mt-1">
+                        Anda telah mencapai had maksimum {MAX_STAFF} staf. Untuk menambah staf baharu, 
+                        sila padam staf sedia ada atau hubungi penyelia sistem.
+                    </p>
+                </div>
+            )}
 
             <div className="bg-white border border-border/50 rounded-3xl overflow-hidden shadow-sm">
                 <div className="p-6">
@@ -90,7 +118,7 @@ export default async function StaffPage() {
                                 <Users className="w-8 h-8 text-muted-foreground/50" />
                             </div>
                             <p className="text-lg font-medium">Tiada staf didaftarkan.</p>
-                            <p className="text-sm">Klik "Tambah Staf" untuk mula mendaftar staf baru.</p>
+                            <p className="text-sm">Klik &quot;Tambah Staf&quot; untuk mula mendaftar staf baru.</p>
                         </div>
                     )}
                 </div>

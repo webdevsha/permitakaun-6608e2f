@@ -1,7 +1,5 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
 import { RentalModule } from "@/components/rental-module"
-import { Redirect } from "next/navigation" // Wait, it's redirect
-import { redirect } from "next/navigation"
 
 export default async function RentalsPage() {
     const data = await fetchDashboardData()

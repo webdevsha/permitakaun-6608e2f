@@ -171,7 +171,13 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
          setIsAddOpen(false)
          mutate()
       } catch (e: any) {
-         toast.error("Gagal: " + e.message)
+         console.error('Tenant save error:', e)
+         const errorMsg = e.message || ''
+         if (errorMsg.includes('row-level security') || errorMsg.includes('RLS') || errorMsg.includes('permission denied')) {
+            toast.error("Akses ditolak: Anda tidak mempunyai kebenaran untuk tindakan ini. Sila pastikan anda log masuk sebagai Admin.")
+         } else {
+            toast.error("Gagal: " + e.message)
+         }
       } finally {
          setAddingTenant(false)
       }

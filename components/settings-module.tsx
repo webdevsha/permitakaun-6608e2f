@@ -9,9 +9,15 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
+<<<<<<< HEAD
 import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity } from "lucide-react"
+=======
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+>>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PaymentSettings } from "@/components/settings-toggle"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { clearAllSetupData } from "@/app/setup/actions"
@@ -307,6 +313,204 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     }
   }, [role])
 
+  // --- TAMBAH PENGGUNA (ADMIN/ORGANIZER ONLY) ---
+  const MAX_STAFF = 2
+  const [canAddUsers, setCanAddUsers] = useState(false)
+  const [checkingSubscription, setCheckingSubscription] = useState(true)
+  const [staffCount, setStaffCount] = useState(0)
+  const [newUserForm, setNewUserForm] = useState({
+    email: "",
+    password: "",
+    fullName: "",
+    role: "staff" as "staff" | "tenant"
+  })
+  const [creatingUser, setCreatingUser] = useState(false)
+
+  // Check subscription status and staff count
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (!user) {
+        setCheckingSubscription(false)
+        return
+      }
+
+      // Fetch current staff count for this admin/organizer
+      let staffQuery = supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'staff')
+      
+      if (role === 'organizer') {
+        // Get organizer code
+        const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).maybeSingle()
+        if (org?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', org.organizer_code)
+        }
+      } else if (role === 'admin') {
+        // For admin, check by their organizer_code or show all staff they manage
+        const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user.id).single()
+        if (profile?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', profile.organizer_code)
+        }
+      }
+      
+      const { count } = await staffQuery
+      setStaffCount(count || 0)
+      
+      // Check if reached limit
+      const hasReachedLimit = (count || 0) >= MAX_STAFF
+
+      // Admins, superadmins, and staff can always add users IF they haven't reached limit
+      if (role === 'admin' || role === 'superadmin' || role === 'staff') {
+        setCanAddUsers(!hasReachedLimit)
+        setCheckingSubscription(false)
+        return
+      }
+
+      // Organizers need to check subscription AND limit
+      if (role !== 'organizer') {
+        setCanAddUsers(false)
+        setCheckingSubscription(false)
+        return
+      }
+
+      if (hasReachedLimit) {
+        setCanAddUsers(false)
+        setCheckingSubscription(false)
+        return
+      }
+
+      // For organizers, check if they have Sdn Bhd or higher subscription
+      try {
+        const { data } = await supabase.from('organizers').select('id').eq('profile_id', user.id).maybeSingle()
+        const entityId = data?.id
+
+        if (!entityId) {
+          setCanAddUsers(false)
+          setCheckingSubscription(false)
+          return
+        }
+
+        // Check for active Sdn Bhd or higher subscription
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('tenant_id', entityId)
+          .eq('status', 'active')
+          .gt('end_date', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        // Allow if they have Standard (Sdn Bhd) or Premium (SdnBhd/Berhad) plan
+        const allowedPlans = ['standard', 'sdn bhd', 'premium', 'sdnbhd/ berhad', 'sdnbhd', 'berhad']
+        setCanAddUsers(subscription && allowedPlans.includes(subscription.plan_type?.toLowerCase()))
+      } catch (e) {
+        console.error("Subscription check error:", e)
+        setCanAddUsers(false)
+      } finally {
+        setCheckingSubscription(false)
+      }
+    }
+
+    checkAccess()
+  }, [user, role, supabase])
+
+  const handleCreateUser = async () => {
+    if (!canAddUsers) {
+      toast.error("Anda perlu melanggan pelan Sdn Bhd atau lebih tinggi untuk menambah pengguna.")
+      return
+    }
+
+    if (!newUserForm.email || !newUserForm.password || !newUserForm.fullName) {
+      toast.error("Sila isi semua medan wajib")
+      return
+    }
+
+    if (newUserForm.password.length < 6) {
+      toast.error("Kata laluan mesti sekurang-kurangnya 6 aksara")
+      return
+    }
+
+    setCreatingUser(true)
+    try {
+      // Get organizer code if admin/organizer
+      let organizerCode = null
+      if (role === 'organizer') {
+        const { data } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user?.id).maybeSingle()
+        organizerCode = data?.organizer_code
+      }
+
+      // Call the admin action to create user
+      const { createStaffAccount } = await import('@/actions/admin')
+      const formData = new FormData()
+      formData.append('email', newUserForm.email)
+      formData.append('password', newUserForm.password)
+      formData.append('fullName', newUserForm.fullName)
+      formData.append('role', newUserForm.role)
+      if (organizerCode) formData.append('organizerCode', organizerCode)
+
+      const result = await createStaffAccount(formData)
+
+      if (result.error) {
+        throw new Error(result.error)
+      }
+
+      toast.success("Pengguna berjaya ditambah!")
+      setNewUserForm({ email: "", password: "", fullName: "", role: "staff" })
+      fetchUsers() // Refresh user list
+    } catch (e: any) {
+      toast.error("Gagal menambah pengguna: " + e.message)
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  // --- AUDIT LOGS (ADMIN/STAFF ONLY) ---
+  const [logs, setLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true)
+    const { data, error } = await supabase
+      .from('action_logs')
+      .select('*, profiles(email, full_name, role)')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (!error && data) {
+      setLogs(data)
+    }
+    setLoadingLogs(false)
+  }
+
+  const handleDeleteLog = async (id: number) => {
+    if (role !== 'admin' && role !== 'superadmin') return
+    if (!confirm("Padam log ini?")) return
+
+    const { error } = await supabase.from('action_logs').delete().eq('id', id)
+    if (error) {
+      toast.error("Gagal padam log")
+    } else {
+      toast.success("Log dipadam")
+      fetchLogs()
+    }
+  }
+
+  const getActionIcon = (action: string) => {
+    switch (action) {
+      case 'CREATE': return <CheckCircle className="text-green-500 w-4 h-4" />
+      case 'UPDATE': return <PencilIcon className="text-blue-500 w-4 h-4" />
+      case 'DELETE': return <Trash2 className="text-red-500 w-4 h-4" />
+      case 'APPROVE': return <CheckCircle className="text-green-600 w-4 h-4" />
+      default: return <ScrollText className="text-gray-500 w-4 h-4" />
+    }
+  }
+
+  // Fetch logs when tab becomes active
+  useEffect(() => {
+    if (role === 'superadmin' || role === 'admin' || role === 'staff') {
+      fetchLogs()
+    }
+  }, [role])
+
   const handleFileUpload = async (file: File, prefix: string) => {
     const fileExt = file.name.split('.').pop()
     const fileName = `${prefix}-${user?.id}-${Date.now()}.${fileExt}`
@@ -431,6 +635,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
+<<<<<<< HEAD
           {(role === 'admin' || role === 'superadmin') && (
             <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <UserPlus className="w-4 h-4 mr-2" /> Pengurusan Pengguna
@@ -444,11 +649,16 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           {role === 'superadmin' && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
+=======
+          {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" /> Pengurusan Staff
+>>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
             </TabsTrigger>
           )}
-          {(role === 'admin') && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Senarai Pengguna
+          {(role === 'admin' || role === 'organizer') && (
+            <TabsTrigger value="add-user" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <PlusCircle className="w-4 h-4 mr-2" /> Tambah Pengguna
             </TabsTrigger>
           )}
         </TabsList>
@@ -819,6 +1029,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
+<<<<<<< HEAD
         {(role === 'admin' || role === 'superadmin') && (
           <TabsContent value="staff" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
@@ -936,13 +1147,16 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         )}
 
         {(role === 'superadmin' || role === 'admin') && (
+=======
+        {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+>>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-serif text-2xl flex items-center gap-2">
-                      <Users className="text-primary w-6 h-6" /> Pengurusan Pengguna
+                      <Users className="text-primary w-6 h-6" /> Pengurusan Staff
                     </CardTitle>
                     <CardDescription>Semakan dan urus peranan pengguna ({usersList.length} Pengguna)</CardDescription>
                   </div>
@@ -1056,6 +1270,221 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                   <p>User Email: {user?.email}</p>
                   <p>Resolved Role: {role}</p>
                   <p>User ID: {user?.id}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Audit Logs Section */}
+            <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                      <ScrollText className="text-primary w-6 h-6" /> Audit Logs
+                    </CardTitle>
+                    <CardDescription>Rekod aktiviti pengguna dan sistem</CardDescription>
+                  </div>
+                  <Button onClick={fetchLogs} disabled={loadingLogs} variant="outline" size="sm">
+                    <RefreshCw className={cn("w-4 h-4 mr-2", loadingLogs && "animate-spin")} /> Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-secondary/20">
+                    <TableRow>
+                      <TableHead className="pl-6">Masa</TableHead>
+                      <TableHead>Pengguna</TableHead>
+                      <TableHead>Tindakan</TableHead>
+                      <TableHead>Resource</TableHead>
+                      <TableHead className="text-right pr-6">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingLogs ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8">
+                          <Loader2 className="animate-spin inline mr-2" /> Memuatkan log...
+                        </TableCell>
+                      </TableRow>
+                    ) : logs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          Tiada rekod aktiviti.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      logs.map((log) => (
+                        <TableRow key={log.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap pl-6">
+                            {new Date(log.created_at).toLocaleString('ms-MY')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-xs">{log.profiles?.full_name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground">{log.profiles?.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getActionIcon(log.action)}
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider">
+                                {log.action}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="capitalize text-sm font-medium text-foreground/80">
+                            {log.resource} <span className="text-xs text-muted-foreground ml-1">#{log.resource_id}</span>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            {(role === 'admin' || role === 'superadmin') && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-6 w-6 text-muted-foreground hover:text-red-500" 
+                                onClick={() => handleDeleteLog(log.id)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Tambah Pengguna Tab */}
+        {(role === 'admin' || role === 'organizer') && (
+          <TabsContent value="add-user" className="space-y-6">
+            <Card className={cn(
+              "bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden",
+              !canAddUsers && "opacity-75"
+            )}>
+              <CardHeader className="bg-secondary/10 border-b border-border/30">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="font-serif text-2xl flex items-center gap-2">
+                      <PlusCircle className="text-primary w-6 h-6" /> Tambah Pengguna
+                    </CardTitle>
+                    <CardDescription>Cipta akaun pengguna baru untuk pasukan anda</CardDescription>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Staf sedia ada: <span className={staffCount >= MAX_STAFF ? "text-amber-600 font-bold" : "font-medium"}>{staffCount}/{MAX_STAFF}</span>
+                    </p>
+                  </div>
+                  {checkingSubscription ? (
+                    <Badge variant="outline" className="text-xs">
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Memeriksa...
+                    </Badge>
+                  ) : canAddUsers ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200">Aktif</Badge>
+                  ) : staffCount >= MAX_STAFF ? (
+                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">Had Dicapai</Badge>
+                  ) : (
+                    <Badge variant="destructive">Langganan Diperlukan</Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                {/* Staff limit reached warning */}
+                {staffCount >= MAX_STAFF && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                    <p className="font-bold mb-1 flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4" /> Had Maksimum Staf
+                    </p>
+                    <p className="text-sm">Anda telah mencapai had maksimum {MAX_STAFF} staf. Untuk menambah staf baharu, sila hubungi penyelia sistem.</p>
+                  </div>
+                )}
+                
+                {/* Organizer subscription warning */}
+                {!canAddUsers && !checkingSubscription && role === 'organizer' && staffCount < MAX_STAFF && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                    <p className="font-bold mb-1">Ciri Terhad</p>
+                    <p className="text-sm">Anda perlu melanggan pelan <strong>Sdn Bhd</strong> atau lebih tinggi untuk menambah pengguna.</p>
+                    <Button 
+                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white" 
+                      size="sm"
+                      onClick={() => window.location.href = '/dashboard/subscription'}
+                    >
+                      Naik Taraf Langganan
+                    </Button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nama Penuh *</Label>
+                    <Input
+                      value={newUserForm.fullName}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, fullName: e.target.value })}
+                      placeholder="Nama penuh pengguna"
+                      disabled={!canAddUsers}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Emel *</Label>
+                    <Input
+                      type="email"
+                      value={newUserForm.email}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                      placeholder="email@contoh.com"
+                      disabled={!canAddUsers}
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Kata Laluan *</Label>
+                    <Input
+                      type="password"
+                      value={newUserForm.password}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                      placeholder="Minima 6 aksara"
+                      disabled={!canAddUsers}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Peranan *</Label>
+                    <Select
+                      value={newUserForm.role}
+                      onValueChange={(v: any) => setNewUserForm({ ...newUserForm, role: v })}
+                      disabled={!canAddUsers}
+                    >
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="tenant">Tenant/Peniaga</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleCreateUser}
+                  disabled={!canAddUsers || creatingUser}
+                  className="w-full rounded-xl h-12 bg-primary text-white font-bold"
+                >
+                  {creatingUser ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2 w-4 h-4" />}
+                  {creatingUser ? "Mencipta..." : "Tambah Pengguna"}
+                </Button>
+
+                <div className="text-xs text-muted-foreground bg-slate-50 p-4 rounded-xl">
+                  <p className="font-bold mb-1">Nota:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Pengguna baru akan menerima emel pengesahan.</li>
+                    <li>Staff boleh mengakses data baca-sahaja.</li>
+                    <li>Admin/Organizer boleh menguruskan staff mereka.</li>
+                  </ul>
                 </div>
               </CardContent>
             </Card>

@@ -1,9 +1,9 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { User, Session } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Profile } from '@/types/supabase-types'
 import { determineUserRole } from '@/utils/roles'
 
@@ -13,7 +13,9 @@ type AuthContextType = {
   profile: Profile | null
   role: string | null
   isLoading: boolean
+  isInitialized: boolean
   signOut: () => Promise<void>
+  refreshAuth: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,7 +24,9 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   role: null,
   isLoading: true,
+  isInitialized: false,
   signOut: async () => { },
+  refreshAuth: async () => { },
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -33,51 +37,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [role, setRole] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-
+  const [isInitialized, setIsInitialized] = useState(false)
+  
+  // Prevent duplicate initialization
+  const initializingRef = useRef(false)
+  
   // Create the client once and reuse it (Singleton-like behavior for the provider)
   const [supabase] = useState(() => createClient())
   const router = useRouter()
+  const pathname = usePathname()
+
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      const determinedRole = determineUserRole(data, userEmail)
+
+      // We might not have data if profile doesn't exist, but we still want to set the role if we found a fallback
+      setProfile(data || null)
+      setRole(determinedRole)
+      
+      return { profile: data || null, role: determinedRole }
+    } catch (error) {
+      console.error("Profile fetch error:", error)
+      return { profile: null, role: null }
+    }
+  }, [supabase])
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      
+      if (currentSession?.user) {
+        setSession(currentSession)
+        setUser(currentSession.user)
+        await fetchProfile(currentSession.user.id, currentSession.user.email)
+      } else {
+        setSession(null)
+        setUser(null)
+        setProfile(null)
+        setRole(null)
+      }
+    } catch (error) {
+      console.error("Auth refresh error:", error)
+    }
+  }, [supabase, fetchProfile])
 
   useEffect(() => {
+    // Prevent duplicate initialization in StrictMode
+    if (initializingRef.current) return
+    initializingRef.current = true
+
     let mounted = true
-
-    const fetchProfile = async (userId: string, userEmail?: string) => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single()
-
-        const determinedRole = determineUserRole(data, userEmail)
-
-        if (mounted) {
-          // We might not have data if profile doesn't exist, but we still want to set the role if we found a fallback
-          setProfile(data || null)
-          setRole(determinedRole)
-        }
-      } catch (error) {
-        console.error("Profile fetch error:", error)
-      }
-    }
 
     const initAuth = async () => {
       try {
         // Check for active session
         const { data: { session: initialSession } } = await supabase.auth.getSession()
 
-        if (mounted) {
-          if (initialSession) {
-            setSession(initialSession)
-            setUser(initialSession.user)
-            await fetchProfile(initialSession.user.id, initialSession.user.email)
-          }
-          // If no session, user is null (default), we just stop loading
+        if (!mounted) return
+
+        if (initialSession) {
+          setSession(initialSession)
+          setUser(initialSession.user)
+          await fetchProfile(initialSession.user.id, initialSession.user.email)
         }
       } catch (error) {
         console.error("Auth init error:", error)
       } finally {
-        if (mounted) setIsLoading(false)
+        if (mounted) {
+          setIsLoading(false)
+          setIsInitialized(true)
+        }
       }
     }
 
@@ -86,6 +121,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!mounted) return
+
+      // Don't update state during navigation to prevent flickering
+      if (pathname === '/login' || pathname === '/signup') {
+        if (event === 'SIGNED_IN') {
+          // Wait for session to be fully established
+          return
+        }
+      }
 
       setSession(currentSession)
       setUser(currentSession?.user ?? null)
@@ -110,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [supabase, router])
+  }, [supabase, router, fetchProfile, pathname])
 
   const signOut = async () => {
     try {
@@ -119,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setProfile(null)
       setRole(null)
+<<<<<<< HEAD
       
       // Redirect immediately to login
       router.push('/login')
@@ -128,12 +172,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Sign out error:', error)
       // Redirect to login even on error
+=======
+      // Redirect to login page after logout
+      router.push('/login')
+    } catch (error) {
+      console.error('Sign out error:', error)
+      // Even if there's an error, try to redirect to login
+>>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
       router.push('/login')
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, isLoading, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, role, isLoading, isInitialized, signOut, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   )

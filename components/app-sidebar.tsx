@@ -14,12 +14,14 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronRight,
-  Building
+  Building,
+  Store
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "@/components/ui/sheet"
 import { useAuth } from "@/components/providers/auth-provider"
+import { createClient } from "@/utils/supabase/client"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -33,16 +35,53 @@ interface SidebarProps {
 }
 
 export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRole, initialProfile }: SidebarProps) {
-  const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading } = useAuth()
+  const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading, isInitialized } = useAuth()
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
+  const [businessName, setBusinessName] = React.useState<string>("")
 
-  // Use initial data if available (server-side fetched), otherwise fallback to auth context
-  const user = authUser || initialUser
-  const role = authRole || initialRole
-  const profile = authProfile || initialProfile
+  // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
+  // Only fall back to auth context if initial data is not available
+  const user = initialUser || authUser
+  const role = initialRole || authRole
+  const profile = initialProfile || authProfile
 
-  const showSkeleton = isLoading && !role && !initialRole
+  // Fetch business name from tenant/organizer profile
+  React.useEffect(() => {
+    const fetchBusinessName = async () => {
+      if (!user?.id) return
+      
+      const supabase = createClient()
+      
+      // Try to get business name from tenant profile
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('business_name')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (tenant?.business_name) {
+        setBusinessName(tenant.business_name)
+        return
+      }
+      
+      // Try organizer profile if no tenant
+      const { data: organizer } = await supabase
+        .from('organizers')
+        .select('business_name')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (organizer?.business_name) {
+        setBusinessName(organizer.business_name)
+      }
+    }
+    
+    fetchBusinessName()
+  }, [user?.id])
+
+  // Only show skeleton if we have NO role data at all and auth is still initializing
+  const showSkeleton = !role && isLoading && !isInitialized
 
   if (showSkeleton) {
     // Return a skeleton sidebar matching the collapsed state to prevent layout shift
@@ -119,7 +158,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         {!isCollapsed && (
           <div className="relative w-40 h-16 animate-in fade-in duration-300">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="Permit Akaun"
               fill
               className="object-contain object-left"
@@ -130,7 +169,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         {isCollapsed && (
           <div className="relative w-10 h-10">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="PA"
               fill
               className="object-cover object-left"
@@ -193,11 +232,22 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           isCollapsed ? "justify-center p-2 bg-transparent" : ""
         )}>
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm">
-            {(profile?.full_name || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
+            {(businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
           </div>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
+<<<<<<< HEAD
               <p className="text-sm font-bold truncate text-foreground">{profile?.business_name || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
+=======
+              <p className="text-sm font-bold truncate text-foreground">
+                {businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+              </p>
+              {businessName && (
+                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                  <Store className="w-3 h-3" /> {profile?.full_name || user?.email?.split('@')[0]}
+                </p>
+              )}
+>>>>>>> c63bb2b627de15a75f7c773fd788a9f24c674979
               <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{role}</p>
             </div>
           )}
@@ -229,13 +279,14 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
-  const { role: authRole, signOut, user: authUser } = useAuth()
+  const { role: authRole, signOut, user: authUser, isInitialized } = useAuth()
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
   const [isMounted, setIsMounted] = React.useState(false)
 
-  const user = authUser || initialUser
-  const role = authRole || initialRole
+  // CRITICAL: Use server-provided initial data as source of truth
+  const user = initialUser || authUser
+  const role = initialRole || authRole
   const userRole = role || "tenant"
 
   React.useEffect(() => {
@@ -299,7 +350,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
           </Button>
           <div className="relative w-28 h-8">
             <Image
-              src="/logo.png"
+              src="https://permitakaun.kumim.my/logo.png"
               alt="Permit Akaun"
               fill
               className="object-contain object-left"
@@ -328,7 +379,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
             <SheetHeader className="p-6 border-b border-border/50 bg-secondary/10">
               <div className="relative w-40 h-12 mb-2">
                 <Image
-                  src="/logo.png"
+                  src="https://permitakaun.kumim.my/logo.png"
                   alt="Permit Akaun"
                   fill
                   className="object-contain object-left"
@@ -383,7 +434,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
         </Sheet>
         <div className="relative w-28 h-8">
           <Image
-            src="/logo.png"
+            src="https://permitakaun.kumim.my/logo.png"
             alt="Permit Akaun"
             fill
             className="object-contain object-left"
