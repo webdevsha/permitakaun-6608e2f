@@ -4,21 +4,36 @@
 
 This SQL file contains all the database schema changes required for the recent feature updates.
 
-### Changes Included:
+---
 
-#### 1. **accounting_config table** - Add `bank_name` column
-- **Purpose:** Store the bank name where 7-tabung allocations go
-- **Type:** TEXT (nullable)
-- **Used in:** Accounting module configuration dialog
+## Changes Included:
 
-#### 2. **locations table** - Add monthly rate columns
+### 1. **accounting_config table** - Add `bank_names` JSONB column
+- **Purpose:** Store individual bank names for each of the 7 tabungs
+- **Type:** JSONB with default empty object
+- **Structure:** 
+  ```json
+  {
+    "operating": "Maybank Business",
+    "tax": "LHDN",
+    "zakat": "Pusat Pungutan Zakat",
+    "investment": "CIMB Investment",
+    "dividend": "RHB Bank",
+    "savings": "Tabung Haji",
+    "emergency": "Maybank Savings"
+  }
+  ```
+- **Used in:** Accounting module - each tabung can have its own bank destination
+- **Note:** Replaces the old single `bank_name` column (if it existed)
+
+### 2. **locations table** - Add monthly rate columns
 - **Columns added:**
   - `rate_monthly_khemah` (NUMERIC, default 0) - Monthly rate for Khemah stalls
   - `rate_monthly_cbs` (NUMERIC, default 0) - Monthly rate for CBS/Lori stalls
 - **Purpose:** Allow monthly locations to have different rates for different stall types
 - **Used in:** Location creation/edit dialog and rental flow
 
-#### 3. **RLS Policy Updates**
+### 3. **RLS Policy Updates**
 - Ensures `accounting_config` table has proper Row Level Security
 - Users can only access their own config
 - Admins can view all configs
@@ -63,12 +78,17 @@ supabase db execute --file sql/schema_update_2025_02_04.sql
 After running the SQL, verify the changes:
 
 ```sql
--- Check accounting_config table
+-- Check accounting_config columns
 SELECT column_name, data_type, is_nullable 
 FROM information_schema.columns 
 WHERE table_name = 'accounting_config';
 
--- Expected columns: id, profile_id, percentages, bank_name, created_at, updated_at
+-- Expected columns: id, profile_id, percentages, bank_names, created_at, updated_at
+
+-- Check bank_names sample data
+SELECT profile_id, bank_names 
+FROM accounting_config 
+LIMIT 5;
 
 -- Check locations table rate columns
 SELECT column_name, data_type, column_default
@@ -89,8 +109,21 @@ This is normal - the SQL uses `IF NOT EXISTS` checks, so it's safe to run multip
 ### Error: "permission denied"
 Make sure you're running as the `postgres` user or a user with schema modification privileges.
 
-### New columns show NULL for existing rows
-This is expected - new columns will be NULL or 0 for existing records. The application handles this with fallbacks.
+### Migrating from old single bank_name column
+If you previously ran the SQL with the single `bank_name` column, the script will:
+1. Drop the old `bank_name` column
+2. Create the new `bank_names` JSONB column
+
+You can uncomment the backfill section in the SQL to migrate old data:
+```sql
+UPDATE accounting_config 
+SET bank_names = jsonb_set(
+    COALESCE(bank_names, '{}'::jsonb),
+    '{operating}',
+    to_jsonb(bank_name)
+)
+WHERE bank_name IS NOT NULL;
+```
 
 ---
 
@@ -99,10 +132,12 @@ This is expected - new columns will be NULL or 0 for existing records. The appli
 These database changes support the following frontend changes:
 
 1. **Accounting Module** (`components/accounting-module.tsx`)
-   - Fetches and saves `bank_name` from `accounting_config`
+   - Fetches and saves `bank_names` JSONB from `accounting_config`
+   - Each of the 7 tabungs has its own editable bank name
+   - Display shows bank name under each tabung amount
    
 2. **Location Module** (`components/location-module.tsx`)
    - Uses `rate_monthly_khemah` and `rate_monthly_cbs` for monthly locations
    
-3. **Settings Module** (`components/settings-module.tsx`)
-   - "Tambah Pengguna" feature checks subscription status
+3. **Auth Provider** (`components/providers/auth-provider.tsx`)
+   - Logout now redirects to `/login` instead of `/`
