@@ -33,7 +33,8 @@ import {
   Filter,
   ChevronDown,
   Lock,
-  Settings
+  Settings,
+  CheckCircle
 } from "lucide-react"
 import {
   Dialog,
@@ -50,6 +51,7 @@ import { createClient } from "@/utils/supabase/client"
 import { cn } from "@/lib/utils"
 import { SubscriptionPlans } from "@/components/subscription-plans"
 import { useAuth } from "@/components/providers/auth-provider"
+import { logAction } from "@/utils/logging"
 
 
 export function AccountingModule({ initialTransactions, tenants }: { initialTransactions?: any[], tenants?: any[] }) {
@@ -451,7 +453,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
-        status: (userRole === 'admin' || userRole === 'staff') ? 'approved' : 'pending',
+        status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
         tenant_id: newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null,
         date: newTransaction.date,
         receipt_url: receiptUrl
@@ -477,14 +479,19 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           .from('transactions')
           .update(txData)
           .eq('id', editingTransaction.id)
+
         if (error) throw error
+        await logAction('UPDATE', 'transaction', editingTransaction.id, txData)
         toast.success("Transaksi berjaya dikemaskini")
       } else {
-        const { error } = await supabase
+        const { data: newTx, error } = await supabase
           .from('transactions')
           .insert(txData)
+          .select()
+          .single()
         if (error) throw error
-        toast.success("Transaksi berjaya ditambah")
+        await logAction('CREATE', 'transaction', newTx.id, txData)
+        toast.success(userRole === 'staff' ? "Transaksi direkod (Menunggu kelulusan)" : "Transaksi berjaya ditambah")
       }
 
       mutate()
@@ -499,8 +506,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   }
 
   const handleDelete = async (id: number) => {
-    if (userRole !== "admin" && userRole !== "staff") {
-      toast.error("Hanya Admin/Staff boleh memadam transaksi")
+    if (userRole !== "admin" && userRole !== "superadmin") {
+      toast.error("Hanya Admin boleh memadam transaksi")
       return
     }
 
@@ -508,10 +515,23 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       const { error } = await supabase.from('transactions').delete().eq('id', id)
       if (error) throw error
 
+      await logAction('DELETE', 'transaction', id, {})
       toast.success("Transaksi telah dipadam")
       mutate()
     } catch (error: any) {
       toast.error("Gagal memadam: " + error.message)
+    }
+  }
+
+  const handleApproveTransaction = async (id: number) => {
+    try {
+      const { error } = await supabase.from('transactions').update({ status: 'approved' }).eq('id', id)
+      if (error) throw error
+      await logAction('APPROVE', 'transaction', id, { status: 'approved' })
+      toast.success("Transaksi diluluskan")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal lulus: " + e.message)
     }
   }
 
@@ -1020,8 +1040,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               </Badge>
                             </TableCell>
                             <TableCell className="px-8 text-right">
-                              {(userRole === "admin" || userRole === "staff") && (
-                                <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-2">
+                                {(userRole === "admin" || userRole === "superadmin") && transaction.status === 'pending' && (
+                                  <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id)} title="Luluskan">
+                                    <CheckCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {(userRole === "admin" || userRole === "superadmin" || (userRole === "staff" && transaction.status === 'pending')) && (
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -1030,6 +1055,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                   >
                                     <Edit2 className="h-4 w-4" />
                                   </Button>
+                                )}
+                                {(userRole === "admin" || userRole === "superadmin") && (
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -1038,8 +1065,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         )

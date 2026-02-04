@@ -32,10 +32,15 @@ import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
+// ... imports
+import { useAuth } from "@/components/providers/auth-provider"
+import { logAction } from "@/utils/logging"
+
 export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any[] }) {
   const organizers = initialOrganizers || []
   const router = useRouter()
   const mutate = () => router.refresh()
+  const { role } = useAuth() // Get role
 
   const [isOpen, setIsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -81,24 +86,35 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
     try {
       if (isEditing && currentId) {
         // Update
-        const { error } = await supabase.from('organizers').update({
+        const payload = {
           name: newOrg.name,
           email: newOrg.email
-          // Code usually not editable to prevent breaking links, but can be if careful
-        }).eq('id', currentId)
+        }
+        const { error } = await supabase.from('organizers').update(payload).eq('id', currentId)
         if (error) throw error
-        toast.success("Penganjur dikemaskini")
+
+        await logAction('UPDATE', 'organizer', currentId, payload)
+        toast.success(role === 'staff' ? "Penganjur dikemaskini (Log direkod)" : "Penganjur dikemaskini")
       } else {
         // Create
-        const { error } = await supabase.from('organizers').insert({
+        const payload: any = {
           name: newOrg.name,
           organizer_code: newOrg.code.toUpperCase(),
           email: newOrg.email,
-          status: 'active',
           accounting_status: 'inactive'
-        })
+        }
+
+        if (role === 'staff') {
+          payload.status = 'pending'
+        } else {
+          payload.status = 'active'
+        }
+
+        const { data: newVal, error } = await supabase.from('organizers').insert(payload).select().single()
         if (error) throw error
-        toast.success("Penganjur berjaya ditambah")
+
+        await logAction('CREATE', 'organizer', newVal.id, payload)
+        toast.success(role === 'staff' ? "Penganjur ditambah. Menunggu kelulusan." : "Penganjur berjaya ditambah")
       }
 
       setIsOpen(false)
@@ -112,11 +128,19 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
   }
 
   const handleStatusChange = async (id: number, field: string, currentValue: string) => {
+    // Prevent Staff from toggling status freely if it's 'status' (Approval)
+    if (role === 'staff' && field === 'status') {
+      toast.error("Staf tidak boleh menukar status kelulusan.")
+      return
+    }
+
     setIsUpdating(true)
     const newValue = currentValue === 'active' ? 'inactive' : 'active'
     try {
       const { error } = await supabase.from('organizers').update({ [field]: newValue }).eq('id', id)
       if (error) throw error
+
+      await logAction('UPDATE', 'organizer', id, { [field]: newValue })
       toast.success("Status dikemaskini")
       mutate()
     } catch (e: any) {
@@ -127,14 +151,30 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
   }
 
   const handleDelete = async (id: number) => {
+    if (role === 'staff') return
+
     if (!confirm("Adakah anda pasti? Tindakan ini tidak boleh diundur.")) return
     try {
       const { error } = await supabase.from('organizers').delete().eq('id', id)
       if (error) throw error
+
+      await logAction('DELETE', 'organizer', id, {})
       toast.success("Penganjur dipadam")
       mutate()
     } catch (e: any) {
       toast.error("Gagal padam: " + e.message)
+    }
+  }
+
+  const handleApprove = async (id: number) => {
+    try {
+      const { error } = await supabase.from('organizers').update({ status: 'active' }).eq('id', id)
+      if (error) throw error
+      await logAction('APPROVE', 'organizer', id, { status: 'active' })
+      toast.success("Penganjur diluluskan")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal lulus: " + e.message)
     }
   }
 
@@ -153,7 +193,7 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
 
     setIsAddingLoc(true)
     try {
-      const { error } = await supabase.from('locations').insert({
+      const payload: any = {
         name: newLoc.name,
         type: newLoc.type,
         organizer_id: selectedOrgForLoc.id,
@@ -164,10 +204,20 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
         rate_khemah: 0,
         rate_cbs: 0,
         rate_monthly: 0
-      })
+      }
+
+      if (role === 'staff') {
+        payload.status = 'pending'
+      } else {
+        payload.status = 'active'
+      }
+
+      const { data: newL, error } = await supabase.from('locations').insert(payload).select().single()
 
       if (error) throw error
-      toast.success(`Lokasi ditambah ke ${selectedOrgForLoc.name}`)
+
+      await logAction('CREATE', 'location', newL.id, payload)
+      toast.success(role === 'staff' ? "Lokasi ditambah. Menunggu kelulusan." : `Lokasi ditambah ke ${selectedOrgForLoc.name}`)
       setIsLocDialogOpen(false)
       mutate()
     } catch (e: any) {
@@ -281,21 +331,33 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                         <Building size={16} />
                       </div>
-                      {org.name}
+                      <div>
+                        {org.name}
+                        {org.status === 'pending' && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-5">Pending</Badge>}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="font-mono">{org.organizer_code}</Badge></TableCell>
                   <TableCell>{org.email || '-'}</TableCell>
                   <TableCell className="text-center">
                     <div className="flex justify-center items-center gap-2">
-                      <Switch
-                        checked={org.status === 'active'}
-                        onCheckedChange={() => handleStatusChange(org.id, 'status', org.status)}
-                        disabled={isUpdating}
-                      />
-                      <span className={cn("text-[10px] font-bold uppercase w-12 text-left", org.status === 'active' ? "text-green-600" : "text-muted-foreground")}>
-                        {org.status}
-                      </span>
+                      {/* Only show switch if not pending, or if Admin */}
+                      {org.status === 'pending' && (role === 'admin' || role === 'superadmin') ? (
+                        <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApprove(org.id)}>
+                          <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
+                        </Button>
+                      ) : (
+                        <>
+                          <Switch
+                            checked={org.status === 'active'}
+                            onCheckedChange={() => handleStatusChange(org.id, 'status', org.status)}
+                            disabled={isUpdating || (role === 'staff' && org.status === 'pending')}
+                          />
+                          <span className={cn("text-[10px] font-bold uppercase w-12 text-left", org.status === 'active' ? "text-green-600" : "text-muted-foreground")}>
+                            {org.status}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
@@ -347,9 +409,12 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
                       <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(org)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
                         <Pencil size={15} />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(org.id)} className="h-8 w-8 text-red-600 hover:bg-red-50">
-                        <Trash2 size={15} />
-                      </Button>
+
+                      {role !== 'staff' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(org.id)} className="h-8 w-8 text-red-600 hover:bg-red-50">
+                          <Trash2 size={15} />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

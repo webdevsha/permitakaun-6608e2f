@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store, Pencil, Save, Building } from "lucide-react"
+import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store, Pencil, Save, Building, CheckCircle, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,6 +27,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/providers/auth-provider"
 import { initiatePayment } from "@/actions/payment"
+import { logAction } from "@/utils/logging"
 
 const fetcher = async () => {
   const supabase = createClient()
@@ -176,7 +177,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
     setIsSaving(true)
     try {
-      const payload = {
+      const payload: any = {
         name: formData.name,
         program_name: formData.program_name,
         type: formData.type,
@@ -186,36 +187,45 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
-        organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null
+        organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null,
       }
 
-      // Clean up null organizer_id if not admin (will be handled below for organizer role)
-      // But wait, update payload needs to be accurate.
+      // Staff: Default to pending, Admin: Active
+      if (role === 'staff') {
+        payload.status = 'pending'
+      } else {
+        payload.status = 'active'
+      }
 
       if (role === 'organizer') {
-        // Organizer role: remove organizer_id from payload (will be set automatically)
         const { organizer_id, ...rest } = payload
         Object.assign(payload, rest)
+        payload.status = 'active' // Organizers manage themselves freely? Or pending? Assume active for now.
       }
 
       if (isEditMode && formData.id) {
         const { error } = await supabase.from('locations').update(payload).eq('id', formData.id)
         if (error) throw error
-        toast.success("Lokasi berjaya dikemaskini")
+
+        await logAction('UPDATE', 'location', formData.id, payload)
+        toast.success(role === 'staff' ? "Lokasi dikemaskini. Menunggu kelulusan." : "Lokasi berjaya dikemaskini")
       } else {
         let organizerId = null;
-        // If user is organizer, get their ID
         if (role === 'organizer') {
           const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
           organizerId = orgData?.id
         }
 
-        const { error } = await supabase.from('locations').insert({
+        const finalPayload = {
           ...payload,
-          organizer_id: organizerId || payload.organizer_id // Use auto-detected or form-selected
-        })
+          organizer_id: organizerId || payload.organizer_id
+        }
+
+        const { data: newLoc, error } = await supabase.from('locations').insert(finalPayload).select().single()
         if (error) throw error
-        toast.success("Lokasi baru berjaya ditambah")
+
+        await logAction('CREATE', 'location', newLoc.id, finalPayload)
+        toast.success(role === 'staff' ? "Lokasi ditambah. Menunggu kelulusan Admin." : "Lokasi baru berjaya ditambah")
       }
 
       setIsDialogOpen(false)
@@ -226,6 +236,36 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       toast.error("Gagal simpan: " + e.message)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDeleteLocation = async (id: number) => {
+    if (role === 'staff') return // Safety check
+
+    if (!confirm("Adakah anda pasti?")) return
+
+    try {
+      const { error } = await supabase.from('locations').delete().eq('id', id)
+      if (error) throw error
+
+      await logAction('DELETE', 'location', id, {})
+      toast.success("Lokasi dipadam")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal padam: " + e.message)
+    }
+  }
+
+  const handleApproveLocation = async (id: number) => {
+    try {
+      const { error } = await supabase.from('locations').update({ status: 'active' }).eq('id', id)
+      if (error) throw error
+
+      await logAction('APPROVE', 'location', id, { status: 'active' })
+      toast.success("Lokasi diluluskan")
+      mutate()
+    } catch (e: any) {
+      toast.error("Gagal lulus: " + e.message)
     }
   }
 
@@ -580,17 +620,37 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         {locations?.map((loc: any) => {
           return (
             <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
+
+              // ... (in JSX)
+
               {role !== 'tenant' && (
-                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  {/* Admin Approval Button */}
+                  {(role === 'admin' || role === 'superadmin') && loc.status === 'pending' && (
+                    <Button size="icon" className="h-8 w-8 rounded-full shadow-sm bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApproveLocation(loc.id)} title="Luluskan">
+                      <CheckCircle className="w-4 h-4" />
+                    </Button>
+                  )}
+
                   <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm" onClick={() => handleOpenEdit(loc)}>
                     <Pencil className="w-4 h-4 text-primary" />
                   </Button>
+
+                  {/* Delete Button - Hide for Staff */}
+                  {role !== 'staff' && (
+                    <Button size="icon" variant="destructive" className="h-8 w-8 rounded-full shadow-sm" onClick={() => handleDeleteLocation(loc.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               )}
 
               <CardHeader className="bg-secondary/10 border-b border-border/30 pb-4">
                 <div className="flex flex-col gap-1">
-                  {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
+                  <div className="flex justify-between items-start">
+                    {loc.program_name && <span className="text-xs font-bold text-primary uppercase tracking-wider">{loc.program_name}</span>}
+                    {loc.status === 'pending' && <Badge className="bg-yellow-500 text-white hover:bg-yellow-600">Pending</Badge>}
+                  </div>
                   <CardTitle className="text-xl font-serif">{loc.name}</CardTitle>
                   {/* Organizer Name */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
