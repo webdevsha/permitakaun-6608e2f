@@ -38,10 +38,34 @@ import { logAction } from "@/utils/logging"
 
 const fetchOrganizers = async () => {
   const supabase = createClient()
-  const { data, error } = await supabase
+  
+  // Get current user's profile to determine organizer_code
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, organizer_code')
+    .eq('id', user.id)
+    .single()
+  
+  let query = supabase
     .from('organizers')
     .select('*, locations(*)')
     .order('created_at', { ascending: false })
+  
+  // For staff and organizers, filter by their organizer_code
+  if (profile?.role === 'staff' || profile?.role === 'organizer') {
+    if (profile?.organizer_code) {
+      query = query.eq('organizer_code', profile.organizer_code)
+    } else {
+      // If no organizer_code, return empty (they shouldn't see any organizers)
+      return []
+    }
+  }
+  // For admin/superadmin, they see all (or filtered by their org in page.tsx)
+  
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }

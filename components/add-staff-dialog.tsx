@@ -19,9 +19,10 @@ import { toast } from "sonner"
 interface AddStaffDialogProps {
     currentStaffCount?: number
     maxStaff?: number
+    organizerCode?: string | null
 }
 
-export function AddStaffDialog({ currentStaffCount = 0, maxStaff = 2 }: AddStaffDialogProps) {
+export function AddStaffDialog({ currentStaffCount = 0, maxStaff = 2, organizerCode }: AddStaffDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     
@@ -38,6 +39,11 @@ export function AddStaffDialog({ currentStaffCount = 0, maxStaff = 2 }: AddStaff
         setLoading(true)
 
         const formData = new FormData(e.currentTarget)
+        
+        // Add organizer code if provided
+        if (organizerCode) {
+            formData.append('organizerCode', organizerCode)
+        }
 
         try {
             const result = await createStaffAccount(formData)

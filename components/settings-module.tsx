@@ -255,6 +255,25 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
+    
+    // For staff, only show users from their organization
+    if (role === 'staff') {
+      const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user?.id).single()
+      if (profile?.organizer_code) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('organizer_code', profile.organizer_code)
+          .neq('role', 'superadmin')
+          .order('created_at', { ascending: false })
+        if (data) setUsersList(data)
+      } else {
+        setUsersList([])
+      }
+      setLoadingUsers(false)
+      return
+    }
+    
     let query = supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
 
     // SPECIAL RULE for Hazman (admin@kumim.my):
@@ -314,6 +333,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   const [canAddUsers, setCanAddUsers] = useState(false)
   const [checkingSubscription, setCheckingSubscription] = useState(true)
   const [staffCount, setStaffCount] = useState(0)
+  const [userOrgCode, setUserOrgCode] = useState<string | null>(null)
   const [newUserForm, setNewUserForm] = useState({
     email: "",
     password: "",
@@ -338,12 +358,14 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).maybeSingle()
         if (org?.organizer_code) {
           staffQuery = staffQuery.eq('organizer_code', org.organizer_code)
+          setUserOrgCode(org.organizer_code)
         }
       } else if (role === 'admin') {
         // For admin, check by their organizer_code or show all staff they manage
         const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user.id).single()
         if (profile?.organizer_code) {
           staffQuery = staffQuery.eq('organizer_code', profile.organizer_code)
+          setUserOrgCode(profile.organizer_code)
         }
       }
       
@@ -1081,7 +1103,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                     </CardTitle>
                     <CardDescription>Urus akses dan akaun staf untuk organisasi anda.</CardDescription>
                   </div>
-                  <AddStaffDialog />
+                  <AddStaffDialog organizerCode={userOrgCode} currentStaffCount={staffCount} maxStaff={MAX_STAFF} />
                 </div>
               </CardHeader>
               <CardContent className="p-6">

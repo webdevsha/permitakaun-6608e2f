@@ -266,13 +266,12 @@ export async function fetchDashboardData() {
                 }
 
                 // Fetch Transactions for these tenants
-                // For Organizers: Only show RENT payments (Sewa) from tenants, not their personal expenses
+                // For Staff/Organizers: Show ALL transactions (Sewa and others) for full visibility
                 console.log(`[Dashboard DEBUG] Fetching transactions for IDs:`, tIds)
                 const { data: tx, error: txErr } = await supabase
                     .from('transactions')
                     .select('*, tenants(full_name, business_name)')
                     .in('tenant_id', tIds)
-                    .eq('category', 'Sewa') // Only rent payments, not subscriptions or other personal expenses
                     .order('date', { ascending: false })
 
                 if (txErr) console.error('[Dashboard DEBUG] Transaction Fetch Error:', txErr)

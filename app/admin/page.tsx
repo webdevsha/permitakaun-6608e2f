@@ -166,11 +166,11 @@ export default async function AdminDashboardPage() {
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary/70 font-medium text-xs uppercase tracking-wider">Staf Berdaftar</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold text-primary">
-                            {staffCount}<span className="text-lg text-muted-foreground">/{maxStaff}</span>
+                            {staffCount}<span className="text-lg text-muted-foreground"> staf</span>
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <AddStaffDialog currentStaffCount={staffCount} maxStaff={maxStaff} />
+                        <AddStaffDialog currentStaffCount={staffCount} maxStaff={maxStaff} organizerCode={adminOrgCode} />
                     </CardContent>
                 </Card>
             </div>

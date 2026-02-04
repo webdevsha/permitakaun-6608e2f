@@ -28,16 +28,23 @@ CREATE TABLE IF NOT EXISTS public.action_logs (
 -- RLS for Logs
 ALTER TABLE public.action_logs ENABLE ROW LEVEL SECURITY;
 
--- Admins can view ALL logs
+-- Admins can view ALL logs (including staff in their organization)
 CREATE POLICY "Admins view all logs" ON public.action_logs
     FOR SELECT USING (
         exists (select 1 from profiles where id = auth.uid() and role IN ('admin', 'superadmin'))
     );
 
--- Staff can view THEIR OWN logs
+-- Staff can view logs from their own organization (same organizer_code)
 CREATE POLICY "Staff view own logs" ON public.action_logs
     FOR SELECT USING (
-        user_id = auth.uid()
+        user_id = auth.uid() OR
+        exists (
+            select 1 from profiles p1
+            join profiles p2 on p1.organizer_code = p2.organizer_code
+            where p1.id = auth.uid()
+            and p1.role = 'staff'
+            and p2.id = action_logs.user_id
+        )
     );
 
 -- All authenticated users can INSERT logs (System/App logic links this)

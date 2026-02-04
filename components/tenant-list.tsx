@@ -412,7 +412,8 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
 
             {/* Filters & Bulk Actions */}
             <div className="flex flex-col md:flex-row gap-4 mt-4 items-center justify-between bg-secondary/10 p-3 rounded-xl border border-border/50">
-               <div className="flex items-center gap-2 w-full md:w-auto">
+               {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+               <div className="flex items-center gap-2 w-full md:w-auto" suppressHydrationWarning>
                   <Input
                      placeholder="Cari nama..."
                      className="h-9 w-full md:w-[200px] bg-white"
