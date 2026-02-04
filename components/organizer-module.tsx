@@ -1,5 +1,7 @@
 "use client"
 
+import { useRouter } from "next/navigation"
+
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,7 +34,8 @@ import { cn } from "@/lib/utils"
 
 export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any[] }) {
   const organizers = initialOrganizers || []
-  const mutate = () => window.location.reload()
+  const router = useRouter()
+  const mutate = () => router.refresh()
 
   const [isOpen, setIsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
