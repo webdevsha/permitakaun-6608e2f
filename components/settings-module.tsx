@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -297,8 +297,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   }, [role])
 
   // --- TAMBAH PENGGUNA (ADMIN/ORGANIZER ONLY) ---
+  const MAX_STAFF = 2
   const [canAddUsers, setCanAddUsers] = useState(false)
   const [checkingSubscription, setCheckingSubscription] = useState(true)
+  const [staffCount, setStaffCount] = useState(0)
   const [newUserForm, setNewUserForm] = useState({
     email: "",
     password: "",
@@ -307,24 +309,61 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   })
   const [creatingUser, setCreatingUser] = useState(false)
 
-  // Check subscription status for Sdn Bhd plan
+  // Check subscription status and staff count
   useEffect(() => {
-    const checkSubscription = async () => {
-      if (!user || (role !== 'admin' && role !== 'organizer')) {
+    const checkAccess = async () => {
+      if (!user) {
         setCheckingSubscription(false)
         return
       }
 
-      try {
-        // Get tenant/organizer ID
-        let entityId = null
-        if (role === 'admin') {
-          const { data } = await supabase.from('tenants').select('id').eq('profile_id', user.id).maybeSingle()
-          entityId = data?.id
-        } else if (role === 'organizer') {
-          const { data } = await supabase.from('organizers').select('id').eq('profile_id', user.id).maybeSingle()
-          entityId = data?.id
+      // Fetch current staff count for this admin/organizer
+      let staffQuery = supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'staff')
+      
+      if (role === 'organizer') {
+        // Get organizer code
+        const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).maybeSingle()
+        if (org?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', org.organizer_code)
         }
+      } else if (role === 'admin') {
+        // For admin, check by their organizer_code or show all staff they manage
+        const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user.id).single()
+        if (profile?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', profile.organizer_code)
+        }
+      }
+      
+      const { count } = await staffQuery
+      setStaffCount(count || 0)
+      
+      // Check if reached limit
+      const hasReachedLimit = (count || 0) >= MAX_STAFF
+
+      // Admins, superadmins, and staff can always add users IF they haven't reached limit
+      if (role === 'admin' || role === 'superadmin' || role === 'staff') {
+        setCanAddUsers(!hasReachedLimit)
+        setCheckingSubscription(false)
+        return
+      }
+
+      // Organizers need to check subscription AND limit
+      if (role !== 'organizer') {
+        setCanAddUsers(false)
+        setCheckingSubscription(false)
+        return
+      }
+
+      if (hasReachedLimit) {
+        setCanAddUsers(false)
+        setCheckingSubscription(false)
+        return
+      }
+
+      // For organizers, check if they have Sdn Bhd or higher subscription
+      try {
+        const { data } = await supabase.from('organizers').select('id').eq('profile_id', user.id).maybeSingle()
+        const entityId = data?.id
 
         if (!entityId) {
           setCanAddUsers(false)
@@ -354,7 +393,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       }
     }
 
-    checkSubscription()
+    checkAccess()
   }, [user, role, supabase])
 
   const handleCreateUser = async () => {
@@ -1180,6 +1219,9 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                       <PlusCircle className="text-primary w-6 h-6" /> Tambah Pengguna
                     </CardTitle>
                     <CardDescription>Cipta akaun pengguna baru untuk pasukan anda</CardDescription>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Staf sedia ada: <span className={staffCount >= MAX_STAFF ? "text-amber-600 font-bold" : "font-medium"}>{staffCount}/{MAX_STAFF}</span>
+                    </p>
                   </div>
                   {checkingSubscription ? (
                     <Badge variant="outline" className="text-xs">
@@ -1187,13 +1229,26 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                     </Badge>
                   ) : canAddUsers ? (
                     <Badge className="bg-green-100 text-green-700 border-green-200">Aktif</Badge>
+                  ) : staffCount >= MAX_STAFF ? (
+                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">Had Dicapai</Badge>
                   ) : (
                     <Badge variant="destructive">Langganan Diperlukan</Badge>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
-                {!canAddUsers && !checkingSubscription && (
+                {/* Staff limit reached warning */}
+                {staffCount >= MAX_STAFF && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                    <p className="font-bold mb-1 flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4" /> Had Maksimum Staf
+                    </p>
+                    <p className="text-sm">Anda telah mencapai had maksimum {MAX_STAFF} staf. Untuk menambah staf baharu, sila hubungi penyelia sistem.</p>
+                  </div>
+                )}
+                
+                {/* Organizer subscription warning */}
+                {!canAddUsers && !checkingSubscription && role === 'organizer' && staffCount < MAX_STAFF && (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
                     <p className="font-bold mb-1">Ciri Terhad</p>
                     <p className="text-sm">Anda perlu melanggan pelan <strong>Sdn Bhd</strong> atau lebih tinggi untuk menambah pengguna.</p>

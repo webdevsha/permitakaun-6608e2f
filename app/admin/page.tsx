@@ -1,5 +1,5 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { Users, Building, Shield, CreditCard } from "lucide-react"
+import { Users, Building, Shield, CreditCard, PlusCircle, MapPin, UserPlus, FileText, Activity } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -8,6 +8,7 @@ import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { PaymentSettings } from "@/components/settings-toggle"
+import { StaffActivityLog } from "@/components/staff-activity-log"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -78,6 +79,8 @@ export default async function AdminDashboardPage() {
     }
 
     const { data: staffList } = await staffQuery
+    const staffCount = staffList?.length || 0
+    const maxStaff = 2
 
     const { tenants, organizers } = data
 
@@ -93,6 +96,41 @@ export default async function AdminDashboardPage() {
                     </p>
                 </div>
             </header>
+
+            {/* Quick Actions */}
+            {currentUserRole !== 'staff' && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
+                        <Activity className="w-5 h-5" /> Tindakan Pantas
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Link href="/dashboard/locations">
+                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
+                                <MapPin className="w-6 h-6 text-primary" />
+                                <span className="text-xs font-bold">Tambah Lokasi</span>
+                            </Button>
+                        </Link>
+                        <Link href="/dashboard/tenants">
+                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
+                                <UserPlus className="w-6 h-6 text-primary" />
+                                <span className="text-xs font-bold">Tambah Peniaga</span>
+                            </Button>
+                        </Link>
+                        <Link href="/dashboard/organizers">
+                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
+                                <Building className="w-6 h-6 text-primary" />
+                                <span className="text-xs font-bold">Tambah Penganjur</span>
+                            </Button>
+                        </Link>
+                        <Link href="/dashboard/accounting">
+                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
+                                <FileText className="w-6 h-6 text-primary" />
+                                <span className="text-xs font-bold">Rekod Transaksi</span>
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -115,15 +153,24 @@ export default async function AdminDashboardPage() {
                         <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Jumlah Peniaga</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold">{tenants.length}</CardTitle>
                     </CardHeader>
+                    <CardContent>
+                        <Link href="/dashboard/tenants">
+                            <Button variant="ghost" className="text-primary p-0 h-auto font-bold text-xs">
+                                Lihat Semua <ArrowRight className="ml-1 w-3 h-3" />
+                            </Button>
+                        </Link>
+                    </CardContent>
                 </Card>
 
                 <Card className="bg-primary/5 border-primary/20 shadow-sm rounded-[2rem]">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary/70 font-medium text-xs uppercase tracking-wider">Staf Berdaftar</CardDescription>
-                        <CardTitle className="text-4xl font-sans font-bold text-primary">{staffList?.length || 0}</CardTitle>
+                        <CardTitle className="text-4xl font-sans font-bold text-primary">
+                            {staffCount}<span className="text-lg text-muted-foreground">/{maxStaff}</span>
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <AddStaffDialog />
+                        <AddStaffDialog currentStaffCount={staffCount} maxStaff={maxStaff} />
                     </CardContent>
                 </Card>
             </div>
@@ -145,6 +192,11 @@ export default async function AdminDashboardPage() {
                         <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
                             <Shield className="w-5 h-5" /> Pengurusan Staf
                         </h2>
+                        <span className="text-xs text-muted-foreground">
+                            {staffCount >= maxStaff && (
+                                <span className="text-amber-600 font-medium">Had maksimum {maxStaff} staf dicapai</span>
+                            )}
+                        </span>
                     </div>
 
                     <div className="bg-white border border-border/50 rounded-3xl overflow-hidden shadow-sm">
@@ -175,6 +227,18 @@ export default async function AdminDashboardPage() {
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Staff Activity Log - Only for Admin/Superadmin */}
+            {(currentUserRole === 'admin' || currentUserRole === 'superadmin') && staffCount > 0 && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
+                            <Activity className="w-5 h-5" /> Log Aktiviti Staf
+                        </h2>
+                    </div>
+                    <StaffActivityLog staffIds={staffList?.map((s: any) => s.id)} />
                 </div>
             )}
         </div>
