@@ -14,12 +14,14 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronRight,
-  Building
+  Building,
+  Store
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "@/components/ui/sheet"
 import { useAuth } from "@/components/providers/auth-provider"
+import { createClient } from "@/utils/supabase/client"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -36,12 +38,47 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
   const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading, isInitialized } = useAuth()
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
+  const [businessName, setBusinessName] = React.useState<string>("")
 
   // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
   // Only fall back to auth context if initial data is not available
   const user = initialUser || authUser
   const role = initialRole || authRole
   const profile = initialProfile || authProfile
+
+  // Fetch business name from tenant/organizer profile
+  React.useEffect(() => {
+    const fetchBusinessName = async () => {
+      if (!user?.id) return
+      
+      const supabase = createClient()
+      
+      // Try to get business name from tenant profile
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('business_name')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (tenant?.business_name) {
+        setBusinessName(tenant.business_name)
+        return
+      }
+      
+      // Try organizer profile if no tenant
+      const { data: organizer } = await supabase
+        .from('organizers')
+        .select('business_name')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (organizer?.business_name) {
+        setBusinessName(organizer.business_name)
+      }
+    }
+    
+    fetchBusinessName()
+  }, [user?.id])
 
   // Only show skeleton if we have NO role data at all and auth is still initializing
   const showSkeleton = !role && isLoading && !isInitialized
@@ -195,11 +232,18 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           isCollapsed ? "justify-center p-2 bg-transparent" : ""
         )}>
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm">
-            {(profile?.full_name || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
+            {(businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
           </div>
           {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold truncate text-foreground">{profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
+              <p className="text-sm font-bold truncate text-foreground">
+                {businessName || profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+              </p>
+              {businessName && (
+                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                  <Store className="w-3 h-3" /> {profile?.full_name || user?.email?.split('@')[0]}
+                </p>
+              )}
               <p className="text-[10px] uppercase text-muted-foreground tracking-wider truncate">{role}</p>
             </div>
           )}

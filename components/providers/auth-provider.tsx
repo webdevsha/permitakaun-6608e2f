@@ -163,12 +163,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setProfile(null)
       setRole(null)
-      // Redirect to home
-      router.push('/')
+      // Redirect to login page after logout
+      router.push('/login')
     } catch (error) {
       console.error('Sign out error:', error)
-      // Even if there's an error, try to redirect
-      router.push('/')
+      // Even if there's an error, try to redirect to login
+      router.push('/login')
     }
   }
 

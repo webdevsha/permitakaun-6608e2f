@@ -101,6 +101,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     savings: 4,
     emergency: 3.5
   })
+  const [bankName, setBankName] = useState("")
 
   // Superadmin Settings State
   const [systemSettings, setSystemSettings] = useState({ is_active: true, trial_duration_days: 14 })
@@ -120,9 +121,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setUserRole(currentRole)
 
         // 1. Fetch 7-Tabung Config
-        const { data: configData } = await supabase.from('accounting_config').select('percentages').eq('profile_id', user.id).maybeSingle()
-        if (configData && configData.percentages) {
-          setPercentages(configData.percentages)
+        const { data: configData } = await supabase.from('accounting_config').select('percentages, bank_name').eq('profile_id', user.id).maybeSingle()
+        if (configData) {
+          if (configData.percentages) {
+            setPercentages(configData.percentages)
+          }
+          if (configData.bank_name) {
+            setBankName(configData.bank_name)
+          }
         }
 
         // 2. Fetch System Settings & Verify Access
@@ -242,7 +248,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     try {
       const { error } = await supabase.from('accounting_config').upsert({
         profile_id: user.id,
-        percentages: percentages
+        percentages: percentages,
+        bank_name: bankName
       }, { onConflict: 'profile_id' })
 
       if (error) throw error
@@ -750,6 +757,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Badge className="bg-brand-green/10 text-brand-green border-none px-4 py-1 rounded-full font-bold">
                     100% DIAGIH
                   </Badge>
+                  {bankName && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Bank: <span className="font-semibold text-foreground">{bankName}</span>
+                    </p>
+                  )}
                   {userRole === 'superadmin' && (
                     <Dialog open={isSuperadminConfigOpen} onOpenChange={setIsSuperadminConfigOpen}>
                       <DialogTrigger asChild>
@@ -798,9 +810,19 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Konfigurasi 7-Tabung</DialogTitle>
-                        <DialogDescription>Tetapkan peratusan agihan untuk setiap tabung.</DialogDescription>
+                        <DialogDescription>Tetapkan peratusan agihan untuk setiap tabung dan nama bank.</DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-2 gap-4 items-center">
+                          <Label>Nama Bank</Label>
+                          <Input 
+                            type="text" 
+                            value={bankName} 
+                            onChange={(e) => setBankName(e.target.value)}
+                            placeholder="Contoh: Maybank, CIMB, etc."
+                          />
+                        </div>
+                        <div className="border-t border-border my-2"></div>
                         <div className="grid grid-cols-2 gap-4 items-center">
                           <Label>Operating (%)</Label>
                           <Input type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
@@ -829,7 +851,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           <Label>Emergency (%)</Label>
                           <Input type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
                         </div>
-                        <div className="flex justify-end pt-2">
+                        <div className="flex justify-between items-center pt-2">
+                          <p className="text-xs text-muted-foreground">
+                            Bank: {bankName || "Belum ditetapkan"}
+                          </p>
                           <p className={cn("text-xs font-bold",
                             (percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency) === 100 ? "text-green-600" : "text-red-600"
                           )}>

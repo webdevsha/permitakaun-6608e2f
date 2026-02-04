@@ -24,14 +24,10 @@ export default function SignupPage() {
     phone: "",
     ssmNumber: "",
     icNumber: "",
-    address: "",
-    organizerCode: ""
+    address: ""
   })
 
-  const [files, setFiles] = useState<{
-    ssm?: File,
-    ic?: File
-  }>({})
+  // Files and organizer code removed - can be added later in Tetapan
 
   const router = useRouter()
   const supabase = createClient()
@@ -59,7 +55,6 @@ export default function SignupPage() {
             ssm_number: formData.ssmNumber,
             ic_number: formData.icNumber,
             address: formData.address,
-            organizer_code: formData.organizerCode, // Pass organizer code
             role: role // Pass the selected role
           }
         }
@@ -68,57 +63,6 @@ export default function SignupPage() {
       if (authError) throw authError
 
       if (authData.user) {
-        const userId = authData.user.id
-        let ssmUrl = ""
-        let icUrl = ""
-
-        // 2. Upload Documents (if any) - Only for Tenants currently, or both? 
-        // Assuming organizers might also need docs, but let's keep it enabled for both for now or restrict.
-        // For simplicity, upload logic remains same, but maybe store in different bucket or same.
-        if (files.ssm) {
-          const fileName = `ssm-${userId}-${Date.now()}.pdf`
-          const { error: uploadError } = await supabase.storage
-            .from('tenant-docs')
-            .upload(fileName, files.ssm)
-
-          if (!uploadError) {
-            const { data: { publicUrl } = {} } = supabase.storage.from('tenant-docs').getPublicUrl(fileName)
-            if (publicUrl) ssmUrl = publicUrl
-          }
-        }
-
-        if (files.ic) {
-          const fileName = `ic-${userId}-${Date.now()}.pdf`
-          const { error: uploadError } = await supabase.storage
-            .from('tenant-docs')
-            .upload(fileName, files.ic)
-
-          if (!uploadError) {
-            const { data: { publicUrl } = {} } = supabase.storage.from('tenant-docs').getPublicUrl(fileName)
-            if (publicUrl) icUrl = publicUrl
-          }
-        }
-
-        // 3. Update Record with File URLs
-        // Need to check which table to update based on role.
-        // The trigger creates the record in 'tenants' or 'organizers'.
-        // Organizers table might not have file columns yet in my SQL? 
-        // My SQL `update_schema_roles_organizers.sql` didn't add doc columns to organizers.
-        // So I should only update if role === 'tenant'.
-        if ((ssmUrl || icUrl) && role === 'tenant') {
-          const { error: updateError } = await supabase
-            .from('tenants')
-            .update({
-              ssm_file_url: ssmUrl || null,
-              ic_file_url: icUrl || null
-            })
-            .eq('profile_id', userId)
-
-          if (updateError) {
-            console.error("Error updating file URLs:", updateError)
-          }
-        }
-
         toast.success("Pendaftaran berjaya! Akaun anda sedang menunggu pengesahan admin.")
         router.push("/")
       }
@@ -239,46 +183,25 @@ export default function SignupPage() {
               />
             </div>
 
-            {role === 'tenant' && (
-              <div className="space-y-2">
-                <Label htmlFor="organizerCode">Kod Penganjur (Pilihan)</Label>
-                <Input
-                  id="organizerCode"
-                  className="border-input rounded-xl h-11"
-                  value={formData.organizerCode}
-                  onChange={(e) => setFormData({ ...formData, organizerCode: e.target.value })}
-                  placeholder="Masukkan kod jika ada"
-                />
-                <p className="text-[10px] text-muted-foreground">Biarkan kosong jika belum ada.</p>
-              </div>
-            )}
+            {/* Note: Kod Penganjur removed - can be added later in Tetapan */}
 
 
-            {/* Document Upload Section */}
-            <div className="bg-secondary/10 p-4 rounded-xl space-y-4 border border-border/50">
-              <h3 className="font-bold text-sm text-primary flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Dokumen Sokongan
+            {/* Documents Note - Hidden on signup, can be added later */}
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+              <h3 className="font-bold text-sm text-amber-800 flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4" /> Dokumen Diperlukan
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Salinan SSM (PDF)</Label>
-                  <Input
-                    type="file"
-                    accept="application/pdf"
-                    onChange={(e) => setFiles({ ...files, ssm: e.target.files?.[0] })}
-                    className="bg-white text-xs h-10 pt-1.5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Salinan IC (PDF/Gambar)</Label>
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    onChange={(e) => setFiles({ ...files, ic: e.target.files?.[0] })}
-                    className="bg-white text-xs h-10 pt-1.5"
-                  />
-                </div>
-              </div>
+              <p className="text-xs text-amber-700 mb-2">
+                Sila sediakan dokumen berikut untuk disemak oleh admin:
+              </p>
+              <ul className="text-xs text-amber-700 list-disc list-inside space-y-1">
+                <li>Salinan SSM (jika berdaftar)</li>
+                <li>Salinan Kad Pengenalan</li>
+                {role === 'tenant' && <li>Kod Penganjur (jika ada)</li>}
+              </ul>
+              <p className="text-xs text-amber-700 mt-2 font-medium">
+                Anda boleh muat naik dokumen ini nanti di Tetakan &gt; Profil Saya.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
