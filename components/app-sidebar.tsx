@@ -69,6 +69,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
+      { id: "staff", label: "Pengurusan Staf", icon: Users, href: "/dashboard/staff" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
       { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
