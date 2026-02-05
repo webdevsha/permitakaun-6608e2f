@@ -3,10 +3,57 @@ import { Users, MapPin, TrendingUp, AlertCircle, ArrowRight, Plus } from "lucide
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { checkAkaunAccess } from "@/utils/access-control"
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
+
+// Server-side access check to avoid client/server mismatch
+async function checkAccessServer(user: any, role: string) {
+    // Admins and staff always have access
+    if (['admin', 'superadmin', 'staff'].includes(role)) {
+        return { hasAccess: true, reason: 'admin_override', daysRemaining: 0 }
+    }
+
+    const supabase = await createClient()
+
+    // For organizers: check accounting_status first
+    if (role === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+        
+        if (organizer?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+        }
+    }
+
+    // Calculate trial days
+    const { data: settings } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'trial_period_days')
+        .maybeSingle()
+    const trialDays = parseInt(settings?.value || '14')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single()
+    
+    const createdAt = new Date(profile?.created_at || user.created_at).getTime()
+    const now = Date.now()
+    const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
+    const remaining = Math.max(0, trialDays - diffDays)
+
+    if (remaining > 0) {
+        return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
+    }
+
+    return { hasAccess: false, reason: 'expired', daysRemaining: 0 }
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,8 +93,8 @@ export default async function OrganizerDashboardPage() {
 
     const { tenants, overdueTenants, userProfile, organizers } = dashboardData
 
-    // Check Access
-    const access = await checkAkaunAccess(user, role)
+    // Check Access (server-side version to avoid client/server mismatch)
+    const access = await checkAccessServer(user, role)
 
     // Filter Data for "My View" (Personalized Dashboard)
     // Even if Admin/Hybrid, show MY stats on dashboard to avoid clutter

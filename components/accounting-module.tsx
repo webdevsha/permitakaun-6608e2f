@@ -119,88 +119,81 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const [isSuperadminConfigOpen, setIsSuperadminConfigOpen] = useState(false)
 
 
+  // Simplified init with timeout protection
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout
+    let isMounted = true
+    
     const init = async () => {
       console.log('[Accounting] INIT START - role:', role, 'user:', user?.id)
+      
+      // Safety timeout - force loading to false after 5 seconds
+      timeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.error('[Accounting] TIMEOUT - forcing loading to false')
+          setIsLoading(false)
+        }
+      }, 5000)
+      
       try {
         setIsLoading(true)
         setAccessDeniedStatus(null)
         setIsModuleVerified(false)
         
         if (!user || !role) {
-          console.log('[Accounting] No user or role, skipping')
-          setIsLoading(false)
+          console.log('[Accounting] No user or role')
           return
         }
 
-        let currentRole = role
-        setUserRole(currentRole)
+        setUserRole(role)
 
-        // FAST-PATH: Admin/Staff/Superadmin - grant immediate access
-        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
-          console.log('[Accounting] Privileged role - granting access')
+        // FAST-PATH: Admin/Staff/Superadmin
+        if (role === 'superadmin' || role === 'admin' || role === 'staff') {
+          console.log('[Accounting] Privileged role')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
-          setIsLoading(false)
           return
         }
 
-        // Fetch settings
-        const { data: settingsData } = await supabase
-          .from('system_settings')
-          .select('value')
-          .eq('key', 'accounting_module')
-          .maybeSingle()
-        
-        const settings = settingsData?.value || { is_active: true, trial_duration_days: 14 }
-        setSystemSettings(settings)
-
-        if (!settings.is_active) {
-          setAccessDeniedStatus('locked')
-          setIsModuleVerified(false)
-          setIsLoading(false)
-          return
-        }
-
-        // Check access based on role
-        let accessGranted = false
-        let denyReason: "locked" | "trial_expired" | null = 'trial_expired'
-
-        if (currentRole === 'organizer') {
-          // Check organizer accounting status
+        // For organizers/tenants - simple check
+        if (role === 'organizer') {
           const { data: organizer } = await supabase
             .from('organizers')
             .select('accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
           
-          console.log('[Accounting] Organizer status:', organizer?.accounting_status)
-          
-          // If accounting active, grant access
+          // Grant access if accounting is active
           if (organizer?.accounting_status === 'active') {
-            accessGranted = true
-            denyReason = null
-          } else {
-            // Check trial period
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('created_at')
-              .eq('id', user.id)
-              .single()
+            console.log('[Accounting] Organizer with active accounting')
+            setAccessDeniedStatus(null)
+            setIsModuleVerified(true)
+            return
+          }
+          
+          // Otherwise check trial
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('created_at')
+            .eq('id', user.id)
+            .maybeSingle()
+          
+          if (profile) {
+            const daysRemaining = 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+            console.log('[Accounting] Days remaining:', daysRemaining)
             
-            if (profile) {
-              const diffDays = Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
-              const daysRemaining = settings.trial_duration_days - diffDays
-              console.log('[Accounting] Days remaining:', daysRemaining)
-              
-              if (daysRemaining > 0) {
-                accessGranted = true
-                denyReason = null
-              }
+            if (daysRemaining > 0) {
+              setAccessDeniedStatus(null)
+              setIsModuleVerified(true)
+              return
             }
           }
-        } else if (currentRole === 'tenant') {
-          // Check tenant accounting status
+          
+          // Trial expired
+          setAccessDeniedStatus('trial_expired')
+          setIsModuleVerified(false)
+          
+        } else if (role === 'tenant') {
           const { data: tenant } = await supabase
             .from('tenants')
             .select('accounting_status')
@@ -208,26 +201,33 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             .maybeSingle()
           
           if (tenant?.accounting_status === 'active') {
-            accessGranted = true
-            denyReason = null
+            setAccessDeniedStatus(null)
+            setIsModuleVerified(true)
+          } else {
+            setAccessDeniedStatus('trial_expired')
+            setIsModuleVerified(false)
           }
         }
-
-        console.log('[Accounting] Access result:', accessGranted, denyReason)
-        setAccessDeniedStatus(denyReason)
-        setIsModuleVerified(accessGranted)
         
       } catch (e) {
-        console.error("[Accounting] Init Error:", e)
+        console.error("[Accounting] Error:", e)
         setAccessDeniedStatus('trial_expired')
         setIsModuleVerified(false)
       } finally {
-        setIsLoading(false)
-        console.log('[Accounting] INIT COMPLETE')
+        clearTimeout(timeoutId)
+        if (isMounted) {
+          setIsLoading(false)
+          console.log('[Accounting] INIT COMPLETE')
+        }
       }
     }
 
     init()
+    
+    return () => {
+      isMounted = false
+      clearTimeout(timeoutId)
+    }
   }, [role, user?.id])
 
   const handleSaveConfig = async () => {

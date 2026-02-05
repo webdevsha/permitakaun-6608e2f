@@ -55,11 +55,12 @@ export const updateSession = async (request: NextRequest) => {
     }
 
     // Optional: If user IS logged in and tries to go to /login, redirect to /dashboard
-    if (user && isAuthRoute) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/dashboard'
-      return NextResponse.redirect(url)
-    }
+    // DISABLED: Allow logged-in users to access login page for sign-out
+    // if (user && isAuthRoute) {
+    //   const url = request.nextUrl.clone()
+    //   url.pathname = '/dashboard'
+    //   return NextResponse.redirect(url)
+    // }
 
     return response
   } catch (error) {
