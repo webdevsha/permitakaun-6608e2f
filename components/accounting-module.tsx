@@ -1096,12 +1096,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                             </TableCell>
                             <TableCell className="px-8 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                {(userRole === "admin" || userRole === "superadmin") && transaction.status === 'pending' && (
+                                {/* Use role from auth as fallback if userRole not set yet */}
+                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin") && transaction.status === 'pending' && (
                                   <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id)} title="Luluskan">
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
                                 )}
-                                {(userRole === "admin" || userRole === "superadmin" || (userRole === "staff" && transaction.status === 'pending')) && (
+                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin" || ((userRole === "staff" || role === "staff") && transaction.status === 'pending')) && (
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -1111,7 +1112,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <Edit2 className="h-4 w-4" />
                                   </Button>
                                 )}
-                                {(userRole === "admin" || userRole === "superadmin") && (
+                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin") && (
                                   <Button
                                     size="icon"
                                     variant="ghost"

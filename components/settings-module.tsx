@@ -259,6 +259,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     // For staff, only show users from their organization
     if (role === 'staff') {
       const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user?.id).single()
+      console.log('[Settings] Staff fetchUsers - organizer_code:', profile?.organizer_code)
       if (profile?.organizer_code) {
         const { data } = await supabase
           .from('profiles')
@@ -266,8 +267,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           .eq('organizer_code', profile.organizer_code)
           .neq('role', 'superadmin')
           .order('created_at', { ascending: false })
+        console.log('[Settings] Staff users fetched:', data?.length || 0)
         if (data) setUsersList(data)
       } else {
+        console.warn('[Settings] Staff has no organizer_code - showing empty list')
         setUsersList([])
       }
       setLoadingUsers(false)

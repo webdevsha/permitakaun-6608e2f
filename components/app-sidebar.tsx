@@ -39,6 +39,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
   const [businessName, setBusinessName] = React.useState<string>("")
+  const [adminInfo, setAdminInfo] = React.useState<{name: string, organizer_code: string} | null>(null)
 
   // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
   // Only fall back to auth context if initial data is not available
@@ -79,6 +80,53 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
     
     fetchBusinessName()
   }, [user?.id])
+
+  // Fetch admin info for staff
+  React.useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (role !== 'staff' || !user?.id) return
+      
+      const supabase = createClient()
+      
+      // Get staff's organizer_code
+      const { data: staffProfile } = await supabase
+        .from('profiles')
+        .select('organizer_code')
+        .eq('id', user.id)
+        .single()
+      
+      if (!staffProfile?.organizer_code) return
+      
+      // Try to get organizer info
+      const { data: organizer } = await supabase
+        .from('organizers')
+        .select('name, organizer_code')
+        .eq('organizer_code', staffProfile.organizer_code)
+        .single()
+      
+      if (organizer) {
+        setAdminInfo(organizer)
+        return
+      }
+      
+      // Fallback: get admin profile info
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('organizer_code', staffProfile.organizer_code)
+        .eq('role', 'admin')
+        .single()
+      
+      if (adminProfile) {
+        setAdminInfo({ 
+          name: adminProfile.full_name || adminProfile.email, 
+          organizer_code: staffProfile.organizer_code 
+        })
+      }
+    }
+    
+    fetchAdminInfo()
+  }, [role, user?.id])
 
   // Only show skeleton if we have NO role data at all and auth is still initializing
   const showSkeleton = !role && isLoading && !isInitialized
@@ -227,6 +275,13 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
       </div>
 
       <div className="p-4 border-t border-border/50">
+        {/* Staff Admin Info Banner */}
+        {role === 'staff' && adminInfo && !isCollapsed && (
+          <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-lg">
+            <p className="text-[10px] text-blue-600 uppercase font-semibold tracking-wider">Staf bagi</p>
+            <p className="text-xs text-blue-800 font-medium truncate">{adminInfo.name}</p>
+          </div>
+        )}
         <div className={cn(
           "bg-secondary/30 rounded-2xl p-4 flex items-center gap-3 transition-all",
           isCollapsed ? "justify-center p-2 bg-transparent" : ""

@@ -84,9 +84,33 @@ export default async function AdminDashboardPage() {
 
     const { tenants, organizers } = data
 
+    // Fetch admin/organizer info for staff display
+    let adminInfo = null
+    if (role === 'staff' && profile?.organizer_code) {
+        const { data: org } = await supabase
+            .from('organizers')
+            .select('name, organizer_code')
+            .eq('organizer_code', profile.organizer_code)
+            .single()
+        if (org) {
+            adminInfo = org
+        } else {
+            // Fallback: check if admin profile exists
+            const { data: adminProfile } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('organizer_code', profile.organizer_code)
+                .eq('role', 'admin')
+                .single()
+            if (adminProfile) {
+                adminInfo = { name: adminProfile.full_name || adminProfile.email, organizer_code: profile.organizer_code }
+            }
+        }
+    }
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-4 border-b border-border/30">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-4 border-border/30">
                 <div className="space-y-2">
                     <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground tracking-tighter">
                         Admin Panel
@@ -94,6 +118,14 @@ export default async function AdminDashboardPage() {
                     <p className="text-muted-foreground text-lg font-medium">
                         Pusat kawalan sistem, kewangan dan pengurusan staf.
                     </p>
+                    {/* Show admin info for staff */}
+                    {role === 'staff' && adminInfo && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm text-blue-800">
+                                <span className="font-semibold">Anda adalah Staf bagi:</span> {adminInfo.name} ({adminInfo.organizer_code})
+                            </p>
+                        </div>
+                    )}
                 </div>
             </header>
 

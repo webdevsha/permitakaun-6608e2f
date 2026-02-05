@@ -75,11 +75,16 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
   const { role } = useAuth() // Get role
   
   // Use SWR for fresh data after mutations
+  // CRITICAL: Use server data as source of truth to prevent flickering
   const { data: organizersData, mutate } = useSWR('organizers', fetchOrganizers, {
     fallbackData: initialOrganizers,
-    revalidateOnMount: false
+    revalidateOnMount: false,
+    dedupingInterval: 5000 // Prevent rapid revalidation
   })
-  const organizers = organizersData || initialOrganizers || []
+  
+  // ALWAYS prioritize server-provided initial data to prevent hydration mismatch
+  // Only use SWR data after a mutation
+  const organizers = initialOrganizers || organizersData || []
 
   const [isOpen, setIsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
