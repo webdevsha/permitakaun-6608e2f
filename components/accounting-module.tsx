@@ -1109,6 +1109,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         // Transactions are stored from PAYER's perspective (tenant_id = payer)
                         // But we need to show from VIEWER's perspective
 
+                        // Check if this is a public payment (no tenant_id, has metadata.is_public_payment)
+                        const isPublicPayment = !transaction.tenant_id && transaction.metadata?.is_public_payment
+
                         // Find viewer's tenant ID(s)
                         const viewerTenantIds = tenants
                           ?.filter((t: any) => t.profile_id === user?.id)
@@ -1121,7 +1124,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         let displayType = transaction.type
                         let displaySign = transaction.type === 'income' ? '+' : '-'
 
-                        if (!viewerIsPayer && transaction.category === 'Sewa') {
+                        // For public payments: organizer is always the recipient (income)
+                        if (isPublicPayment) {
+                          displayType = 'income'
+                          displaySign = '+'
+                        } else if (!viewerIsPayer && transaction.category === 'Sewa') {
                           // Viewer is NOT the payer, but sees this rent payment
                           // This means viewer is the RECIPIENT (organizer)
                           // Flip the perspective: payer's expense = recipient's income
@@ -1143,12 +1150,19 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                             <TableCell>
                               <div className="font-bold text-foreground">{transaction.description}</div>
                               <div className="flex flex-col gap-1 mt-1">
-                                {transaction.tenants && (
+                                {/* Show tenant name or payer name from metadata for public payments */}
+                                {transaction.tenants ? (
                                   <div className="flex items-center gap-1 text-xs text-primary font-medium">
                                     <User size={12} />
                                     {transaction.tenants.full_name}
                                   </div>
-                                )}
+                                ) : transaction.metadata?.payer_name ? (
+                                  <div className="flex items-center gap-1 text-xs text-blue-600 font-medium">
+                                    <User size={12} />
+                                    {transaction.metadata.payer_name}
+                                    <span className="text-[10px] bg-blue-100 px-1.5 py-0.5 rounded">Awam</span>
+                                  </div>
+                                ) : null}
                                 <Badge variant="outline" className="w-fit text-[10px] py-0 h-5 bg-slate-50 text-slate-500 border-slate-200">
                                   {transaction.category}
                                 </Badge>

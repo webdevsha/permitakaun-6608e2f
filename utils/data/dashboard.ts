@@ -347,8 +347,20 @@ export async function fetchDashboardData() {
                     .in('tenant_id', tenants.filter((t: any) => t.profile_id === user.id).map((t: any) => t.id))
                     .order('date', { ascending: false })
 
-                // Combine: Rent from managed tenants + Own manual transactions
-                transactions = [...(tx || []), ...(ownTx || [])]
+                // Fetch PUBLIC PAYMENTS (payments from non-registered users via /bayar)
+                // These have organizer_id set but no tenant_id
+                const { data: publicTx, error: publicTxErr } = await supabase
+                    .from('transactions')
+                    .select('*')
+                    .eq('organizer_id', orgId)
+                    .is('tenant_id', null)
+                    .order('date', { ascending: false })
+
+                if (publicTxErr) console.error('[Dashboard DEBUG] Public Payment Fetch Error:', publicTxErr)
+                console.log(`[Dashboard DEBUG] Public Payments Found: ${publicTx?.length || 0}`)
+
+                // Combine: Rent from managed tenants + Own manual transactions + Public payments
+                transactions = [...(tx || []), ...(ownTx || []), ...(publicTx || [])]
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
             } else {

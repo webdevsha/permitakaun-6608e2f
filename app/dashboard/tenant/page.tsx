@@ -1,11 +1,12 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { ArrowRight, TrendingUp, AlertCircle } from "lucide-react"
+import { ArrowRight, TrendingUp, AlertCircle, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
+import { Suspense } from "react"
 
 // Server-side access check to avoid client/server mismatch
 async function checkAccessServer(user: any, role: string) {

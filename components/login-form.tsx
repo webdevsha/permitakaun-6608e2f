@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Loader2, Database } from "lucide-react"
+import { Loader2, Database, CreditCard } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { login } from "@/actions/auth"
@@ -103,6 +103,20 @@ export function LoginForm() {
           <p className="text-sm text-muted-foreground">
             Belum ada akaun? <Link href="/signup" className="text-primary font-bold hover:underline">Daftar Sekarang</Link>
           </p>
+
+          {/* Public Payment Link */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <p className="text-sm text-blue-800 font-medium mb-2">
+              Ingin membuat bayaran sewa tanpa daftar akaun?
+            </p>
+            <Link 
+              href="/bayar" 
+              className="inline-flex items-center text-sm text-blue-600 font-bold hover:underline"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Bayar Sewa Tapak
+            </Link>
+          </div>
 
           <div className="border-t pt-4">
             <Link href="/setup" className="inline-flex items-center text-xs text-muted-foreground hover:text-primary transition-colors">
