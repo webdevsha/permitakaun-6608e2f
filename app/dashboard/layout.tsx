@@ -6,6 +6,16 @@ import { redirect } from "next/navigation"
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// Helper to add timeout to promises - converts query builder to promise
+const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        queryBuilder as Promise<T>,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
+        )
+    ])
+}
+
 /**
  * Dashboard Layout - Server Component
  * 
@@ -19,17 +29,40 @@ export default async function DashboardLayout({
 }) {
     const supabase = await createClient()
 
-    // Fetch User and Profile in parallel for better performance
-    const [{ data: { user } }, { data: profile }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase
-            .from("profiles")
-            .select("*")
-            .single()
-    ])
+    // Fetch User first (with timeout)
+    let user: any;
+    try {
+        const authResult: any = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = authResult?.data?.user
+    } catch (e) {
+        console.error('[DashboardLayout] Timeout/error getting user:', e)
+        redirect("/login")
+    }
 
     if (!user) {
         redirect("/login")
+    }
+
+    // Fetch Profile with timeout and proper user filter
+    let profile: any = null;
+    try {
+        const profileResult: any = await withTimeout(
+            supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", user.id)
+                .maybeSingle(),
+            3000,
+            'getProfile'
+        )
+        profile = profileResult?.data
+    } catch (e) {
+        console.error('[DashboardLayout] Timeout/error getting profile:', e)
+        // Continue without profile - determineUserRole will handle it
     }
 
     // Determine Role using consistent shared utility

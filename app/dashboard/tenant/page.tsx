@@ -52,20 +52,55 @@ export const revalidate = 0
  * This page should only be accessible to users with tenant role.
  * Server-side role verification prevents unauthorized access.
  */
+// Helper for timeout
+const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        queryBuilder as Promise<T>,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
+        )
+    ])
+}
+
 export default async function TenantDashboardPage() {
     // Verify user and role server-side
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Get user with timeout
+    let user: any;
+    try {
+        const authResult: any = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = authResult.data?.user
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout getting user:', e)
+        redirect('/login')
+    }
     
     if (!user) {
         redirect('/login')
     }
     
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, organizer_code, full_name, email')
-        .eq('id', user.id)
-        .single()
+    // Get profile with timeout
+    let profile;
+    try {
+        const profileResult: any = await withTimeout(
+            supabase
+                .from('profiles')
+                .select('role, organizer_code, full_name, email')
+                .eq('id', user.id)
+                .maybeSingle(),
+            3000,
+            'getProfile'
+        )
+        profile = profileResult.data
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout getting profile:', e)
+        profile = null
+    }
     
     const role = determineUserRole(profile, user.email)
     
@@ -73,12 +108,35 @@ export default async function TenantDashboardPage() {
     // Organizers/admins/superadmins can also use this as a simplified view
     // But if someone tries to access with wrong expectations, they can still see
 
-    const data = await fetchDashboardData()
+    // Fetch dashboard data with timeout
+    let data: any;
+    try {
+        data = await withTimeout(
+            fetchDashboardData(),
+            8000,
+            'fetchDashboardData'
+        )
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout fetching dashboard data:', e)
+        // Use empty data as fallback
+        data = { myLocations: [], userProfile: profile, transactions: [], tenants: [], overdueTenants: [], organizers: [], availableLocations: [], role: role || 'tenant' }
+    }
+    
     const { myLocations, userProfile } = data
     const displayRole = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Peniaga"
 
     // Check Access (server-side version to avoid client/server mismatch)
-    const access = await checkAccessServer(user, role)
+    let access: any;
+    try {
+        access = await withTimeout(
+            checkAccessServer(user, role),
+            3000,
+            'checkAccessServer'
+        )
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout checking access:', e)
+        access = { hasAccess: true, reason: 'trial_active', daysRemaining: 14 }
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

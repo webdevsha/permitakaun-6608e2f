@@ -64,20 +64,55 @@ export const revalidate = 0
  * This page should only be accessible to users with organizer role.
  * Server-side role verification prevents unauthorized access.
  */
+// Helper for timeout
+const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        queryBuilder as Promise<T>,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
+        )
+    ])
+}
+
 export default async function OrganizerDashboardPage() {
     // Verify user and role server-side
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Get user with timeout
+    let user: any;
+    try {
+        const authResult: any = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = authResult.data?.user
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout getting user:', e)
+        redirect('/login')
+    }
     
     if (!user) {
         redirect('/login')
     }
     
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, organizer_code, full_name, email')
-        .eq('id', user.id)
-        .single()
+    // Get profile with timeout
+    let profile;
+    try {
+        const profileResult: any = await withTimeout(
+            supabase
+                .from('profiles')
+                .select('role, organizer_code, full_name, email')
+                .eq('id', user.id)
+                .maybeSingle(),
+            3000,
+            'getProfile'
+        )
+        profile = profileResult.data
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout getting profile:', e)
+        profile = null
+    }
     
     const role = determineUserRole(profile, user.email)
     
@@ -88,13 +123,34 @@ export default async function OrganizerDashboardPage() {
         redirect('/dashboard/tenant')
     }
 
-    const dashboardData = await fetchDashboardData()
-    const locations = await fetchLocations()
+    // Fetch data with timeouts
+    let dashboardData: any, locations: any;
+    try {
+        [dashboardData, locations] = await Promise.all([
+            withTimeout(fetchDashboardData(), 8000, 'fetchDashboardData'),
+            withTimeout(fetchLocations(), 5000, 'fetchLocations')
+        ])
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout fetching data:', e)
+        // Use empty data as fallback
+        dashboardData = { tenants: [], overdueTenants: [], userProfile: profile, organizers: [], myLocations: [], availableLocations: [], transactions: [], role: role || 'organizer' }
+        locations = []
+    }
 
     const { tenants, overdueTenants, userProfile, organizers } = dashboardData
 
     // Check Access (server-side version to avoid client/server mismatch)
-    const access = await checkAccessServer(user, role)
+    let access: any;
+    try {
+        access = await withTimeout(
+            checkAccessServer(user, role),
+            3000,
+            'checkAccessServer'
+        )
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout checking access:', e)
+        access = { hasAccess: true, reason: 'trial_active', daysRemaining: 14 }
+    }
 
     // Filter Data for "My View" (Personalized Dashboard)
     // Even if Admin/Hybrid, show MY stats on dashboard to avoid clutter
