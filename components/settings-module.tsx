@@ -9,7 +9,8 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle, BookOpen } from "lucide-react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -640,9 +641,16 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div>
-        <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
-        <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
+          <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
+        </div>
+        <Link href="/dashboard/help">
+          <Button variant="outline" className="rounded-xl">
+            <BookOpen className="w-4 h-4 mr-2" /> Panduan
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
