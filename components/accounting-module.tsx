@@ -34,7 +34,9 @@ import {
   ChevronDown,
   Lock,
   Settings,
-  CheckCircle
+  CheckCircle,
+  Pencil,
+  X
 } from "lucide-react"
 import {
   Dialog,
@@ -119,9 +121,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   useEffect(() => {
     const init = async () => {
+      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id)
       try {
         setIsLoading(true)
+        setAccessDeniedStatus(null)
+        setIsModuleVerified(false)
+        
         if (!user || !role) {
+          console.log('[Accounting] No user or role, skipping')
           setIsLoading(false)
           return
         }
@@ -129,92 +136,99 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         let currentRole = role
         setUserRole(currentRole)
 
-        // FAST-PATH: Admin/Staff get immediate access without waiting for all checks
-        const isPrivilegedRole = currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff'
-        
-        // Fetch config and settings in parallel (always needed)
-        const [configResult, settingsResult] = await Promise.all([
-          supabase.from('accounting_config').select('percentages, bank_names').eq('profile_id', user.id).maybeSingle(),
-          supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-        ])
-
-        // Apply config immediately
-        if (configResult.data) {
-          if (configResult.data.percentages) setPercentages(configResult.data.percentages)
-          if (configResult.data.bank_names) setBankNames(configResult.data.bank_names)
+        // FAST-PATH: Admin/Staff/Superadmin - grant immediate access
+        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
+          console.log('[Accounting] Privileged role - granting access')
+          setAccessDeniedStatus(null)
+          setIsModuleVerified(true)
+          setIsLoading(false)
+          return
         }
 
-        const settings = settingsResult.data?.value || { is_active: true, trial_duration_days: 14 }
-        if (settingsResult.data) setSystemSettings(settingsResult.data.value)
+        // Fetch settings
+        const { data: settingsData } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'accounting_module')
+          .maybeSingle()
+        
+        const settings = settingsData?.value || { is_active: true, trial_duration_days: 14 }
+        setSystemSettings(settings)
 
-        // Access Control Logic
-        let accessGranted = true
-        let denyReason: "locked" | "trial_expired" | null = null
+        if (!settings.is_active) {
+          setAccessDeniedStatus('locked')
+          setIsModuleVerified(false)
+          setIsLoading(false)
+          return
+        }
 
-        if (isPrivilegedRole) {
-          // Admin/Staff/Superadmin: Grant access immediately (no additional checks needed)
-          accessGranted = true
-        } else if (!settings.is_active) {
-          // Module locked for non-privileged users
-          accessGranted = false
-          denyReason = 'locked'
-        } else if (currentRole === 'tenant') {
-          // Tenants: Check tenant status
-          const { data: tenant, error } = await supabase
-            .from('tenants')
-            .select('id, accounting_status')
-            .eq('profile_id', user.id)
-            .maybeSingle()
+        // Check access based on role
+        let accessGranted = false
+        let denyReason: "locked" | "trial_expired" | null = 'trial_expired'
 
-          if (tenant) {
-            setNewTransaction(prev => ({ ...prev, tenant_id: tenant.id }))
-          }
-          if (error) console.error("Tenant status fetch error:", error)
-
-          if (!tenant || tenant.accounting_status !== 'active') {
-            accessGranted = false
-            denyReason = 'trial_expired'
-          }
-        } else if (currentRole === 'organizer') {
-          // Organizers: Check organizer status or trial
+        if (currentRole === 'organizer') {
+          // Check organizer accounting status
           const { data: organizer } = await supabase
             .from('organizers')
             .select('accounting_status')
-            .eq('id', user.id)
+            .eq('profile_id', user.id)
             .maybeSingle()
-
-          if (organizer && organizer.accounting_status === 'active') {
+          
+          console.log('[Accounting] Organizer status:', organizer?.accounting_status)
+          
+          // If accounting active, grant access
+          if (organizer?.accounting_status === 'active') {
             accessGranted = true
+            denyReason = null
           } else {
-            // Trial check
-            const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+            // Check trial period
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('created_at')
+              .eq('id', user.id)
+              .single()
+            
             if (profile) {
-              const diffDays = Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
-              if (diffDays > settings.trial_duration_days) {
-                accessGranted = false
-                denyReason = 'trial_expired'
+              const diffDays = Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              const daysRemaining = settings.trial_duration_days - diffDays
+              console.log('[Accounting] Days remaining:', daysRemaining)
+              
+              if (daysRemaining > 0) {
+                accessGranted = true
+                denyReason = null
               }
             }
           }
-
-          // Auto-assign self-tenant for organizers
-          if (tenants) {
-            const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
-            if (selfTenant) setNewTransaction(prev => ({ ...prev, tenant_id: selfTenant.id }))
+        } else if (currentRole === 'tenant') {
+          // Check tenant accounting status
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          
+          if (tenant?.accounting_status === 'active') {
+            accessGranted = true
+            denyReason = null
           }
         }
 
+        console.log('[Accounting] Access result:', accessGranted, denyReason)
         setAccessDeniedStatus(denyReason)
         setIsModuleVerified(accessGranted)
+        
       } catch (e) {
-        console.error("Accounting Init Error:", e)
+        console.error("[Accounting] Init Error:", e)
+        setAccessDeniedStatus('trial_expired')
+        setIsModuleVerified(false)
       } finally {
         setIsLoading(false)
+        console.log('[Accounting] INIT COMPLETE')
       }
     }
 
     init()
-  }, [role, user])
+  }, [role, user?.id])
 
   const handleSaveConfig = async () => {
     // Validate total 100%
@@ -261,11 +275,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     setDisplayLimit(5)
   }, [filterMonth, filterType, filterStatus])
 
+  console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
+  
   if (isLoading) {
     return <div className="p-12 text-center text-muted-foreground"><Loader2 className="animate-spin h-8 w-8 mx-auto mb-4" />Menyemak kelayakan...</div>
   }
 
   if (accessDeniedStatus === 'trial_expired') {
+    console.log('[Accounting] RENDERING SubscriptionPlans (trial_expired)')
     return <SubscriptionPlans />
   }
 
@@ -453,28 +470,100 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         }
       }
 
+      if (!user) {
+        toast.error("Ralat: Sesi pengguna tidak sah")
+        setIsSaving(false)
+        return
+      }
+      
+      // Get or create tenant record for transaction
+      let entityId: number | null = null
+      
+      // Check for existing tenant
+      const { data: existingTenant } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (existingTenant?.id) {
+        entityId = existingTenant.id
+      } else {
+        // Need to create tenant record - get user details based on role
+        let fullName = user.email?.split('@')[0] || 'User'
+        let orgCode = null
+        
+        if (userRole === 'organizer') {
+          const { data: org } = await supabase
+            .from('organizers')
+            .select('name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (org) {
+            fullName = org.name
+            orgCode = org.organizer_code
+          }
+        } else if (userRole === 'admin') {
+          const { data: admin } = await supabase
+            .from('admins')
+            .select('full_name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (admin) {
+            fullName = admin.full_name
+            orgCode = admin.organizer_code
+          }
+        } else if (userRole === 'staff') {
+          const { data: staff } = await supabase
+            .from('staff')
+            .select('full_name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (staff) {
+            fullName = staff.full_name
+            orgCode = staff.organizer_code
+          }
+        }
+        
+        // Create tenant record
+        const { data: newTenant, error: createError } = await supabase
+          .from('tenants')
+          .insert({
+            profile_id: user.id,
+            full_name: fullName,
+            business_name: fullName,
+            email: user.email,
+            organizer_code: orgCode,
+            status: 'active',
+            accounting_status: 'active'
+          })
+          .select('id')
+          .single()
+        
+        if (createError) {
+          console.error('[Accounting] Error creating tenant:', createError)
+          toast.error("Ralat: Gagal mencipta rekod peniaga")
+          setIsSaving(false)
+          return
+        }
+        
+        entityId = newTenant?.id || null
+      }
+
       const txData = {
         description: newTransaction.description,
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
         status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
-        tenant_id: newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null,
+        tenant_id: entityId,
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
 
-      // Just-In-Time: Auto-resolve Tenant ID if missing (for Organizers/Admins)
-      if (!txData.tenant_id && (userRole === 'organizer' || userRole === 'admin') && tenants && user) {
-        const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
-        if (selfTenant) {
-          txData.tenant_id = selfTenant.id
-        }
-      }
-
+      // Validate entity ID is resolved
       if (!txData.tenant_id) {
-        // If still missing, show error
-        toast.error("Sila pilih Peniaga/Tenant (Self-Tenant Not Found)")
+        toast.error("Ralat: Tidak dapat mengenal pasti entiti pengguna. Sila cuba lagi.")
         setIsSaving(false)
         return
       }
@@ -615,9 +704,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   />
                 </div>
 
-                {/* Tenant Selection for Admin/Organizer */}
-                {/* Tenant Selection REMOVED - Auto-assigned to Self */}
-
+                {/* Transaction Type and Amount */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="type">Jenis</Label>

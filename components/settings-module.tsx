@@ -93,6 +93,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   const [formData, setFormData] = useState({
     fullName: initialProfile?.full_name || "",
     businessName: initialProfile?.business_name || "",
+    email: initialProfile?.email || user?.email || "",
     phone: initialProfile?.phone_number || "",
     ssmNumber: initialProfile?.ssm_number || "",
     icNumber: initialProfile?.ic_number || "",
@@ -314,6 +315,28 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
     } catch (e: any) {
       toast.error("Failed to update role: " + e.message)
+    }
+  }
+
+  // State for editing trial date
+  const [editingTrialUser, setEditingTrialUser] = useState<string | null>(null)
+  const [newTrialDate, setNewTrialDate] = useState<string>("")
+
+  const handleUpdateTrialDate = async (userId: string, newDate: string) => {
+    try {
+      // Update the user's created_at to the new trial start date
+      const { error } = await supabase
+        .from('profiles')
+        .update({ created_at: new Date(newDate).toISOString() })
+        .eq('id', userId)
+      
+      if (error) throw error
+      toast.success(`Tarikh mula percubaan dikemaskini`)
+      fetchUsers() // Refresh the list
+      setEditingTrialUser(null)
+      setNewTrialDate("")
+    } catch (e: any) {
+      toast.error("Gagal mengemaskini: " + e.message)
     }
   }
 
@@ -756,12 +779,16 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <DataField label="Nama Perniagaan / Syarikat" value={formData.businessName} field="businessName" isEditing={isEditing} onChange={handleInputChange} />
-                  <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
+                  <DataField label="Emel" value={formData.email} field="email" placeholder="email@example.com" isEditing={isEditing} onChange={handleInputChange} />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
                   <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
                 </div>
               </CardContent>
             </Card>
@@ -1197,15 +1224,59 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-mono text-muted-foreground">{new Date(usr.created_at).toLocaleDateString('ms-MY')}</span>
-                            {(() => {
-                              const status = getTrialStatus(usr.created_at)
-                              if (['admin', 'superadmin', 'staff'].includes(usr.role)) return <span className="text-[10px] text-green-600 font-bold">Privileged</span>
-                              return status.isExpired
-                                ? <span className="text-[10px] text-red-600 font-bold">Expired ({Math.abs(status.daysRemaining)}d ago)</span>
-                                : <span className="text-[10px] text-blue-600 font-bold">{status.daysRemaining} days left</span>
-                            })()}
+                          <div className="flex flex-col gap-1">
+                            {editingTrialUser === usr.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="date"
+                                  value={newTrialDate}
+                                  onChange={(e) => setNewTrialDate(e.target.value)}
+                                  className="h-7 text-xs w-32"
+                                />
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => handleUpdateTrialDate(usr.id, newTrialDate)}
+                                >
+                                  <Check className="w-3 h-3" />
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => {
+                                    setEditingTrialUser(null)
+                                    setNewTrialDate("")
+                                  }}
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-xs font-mono text-muted-foreground">{new Date(usr.created_at).toLocaleDateString('ms-MY')}</span>
+                                {(() => {
+                                  const status = getTrialStatus(usr.created_at)
+                                  if (['admin', 'superadmin', 'staff'].includes(usr.role)) return <span className="text-[10px] text-green-600 font-bold">Privileged</span>
+                                  return status.isExpired
+                                    ? <span className="text-[10px] text-red-600 font-bold">Expired ({Math.abs(status.daysRemaining)}d ago)</span>
+                                    : <span className="text-[10px] text-blue-600 font-bold">{status.daysRemaining} days left</span>
+                                })()}
+                                {(role === 'admin' || role === 'superadmin') && !['admin', 'superadmin', 'staff'].includes(usr.role) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-[10px] px-2 w-fit"
+                                    onClick={() => {
+                                      setEditingTrialUser(usr.id)
+                                      setNewTrialDate(new Date(usr.created_at).toISOString().split('T')[0])
+                                    }}
+                                  >
+                                    <Pencil className="w-3 h-3 mr-1" /> Edit Tarikh
+                                  </Button>
+                                )}
+                              </>
+                            )}
                           </div>
                         </TableCell>
                         {role === 'superadmin' && (
