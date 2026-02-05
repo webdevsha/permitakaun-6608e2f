@@ -3,10 +3,57 @@ import { Users, MapPin, TrendingUp, AlertCircle, ArrowRight, Plus } from "lucide
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { checkAkaunAccess } from "@/utils/access-control"
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
+
+// Server-side access check to avoid client/server mismatch
+async function checkAccessServer(user: any, role: string) {
+    // Admins and staff always have access
+    if (['admin', 'superadmin', 'staff'].includes(role)) {
+        return { hasAccess: true, reason: 'admin_override', daysRemaining: 0 }
+    }
+
+    const supabase = await createClient()
+
+    // For organizers: check accounting_status first
+    if (role === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+        
+        if (organizer?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+        }
+    }
+
+    // Calculate trial days
+    const { data: settings } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'trial_period_days')
+        .maybeSingle()
+    const trialDays = parseInt(settings?.value || '14')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single()
+    
+    const createdAt = new Date(profile?.created_at || user.created_at).getTime()
+    const now = Date.now()
+    const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
+    const remaining = Math.max(0, trialDays - diffDays)
+
+    if (remaining > 0) {
+        return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
+    }
+
+    return { hasAccess: false, reason: 'expired', daysRemaining: 0 }
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,20 +64,55 @@ export const revalidate = 0
  * This page should only be accessible to users with organizer role.
  * Server-side role verification prevents unauthorized access.
  */
+// Helper for timeout
+const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        queryBuilder as Promise<T>,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
+        )
+    ])
+}
+
 export default async function OrganizerDashboardPage() {
     // Verify user and role server-side
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Get user with timeout
+    let user: any;
+    try {
+        const authResult: any = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = authResult.data?.user
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout getting user:', e)
+        redirect('/login')
+    }
     
     if (!user) {
         redirect('/login')
     }
     
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, organizer_code, full_name, email')
-        .eq('id', user.id)
-        .single()
+    // Get profile with timeout
+    let profile;
+    try {
+        const profileResult: any = await withTimeout(
+            supabase
+                .from('profiles')
+                .select('role, organizer_code, full_name, email')
+                .eq('id', user.id)
+                .maybeSingle(),
+            3000,
+            'getProfile'
+        )
+        profile = profileResult.data
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout getting profile:', e)
+        profile = null
+    }
     
     const role = determineUserRole(profile, user.email)
     
@@ -41,13 +123,34 @@ export default async function OrganizerDashboardPage() {
         redirect('/dashboard/tenant')
     }
 
-    const dashboardData = await fetchDashboardData()
-    const locations = await fetchLocations()
+    // Fetch data with timeouts
+    let dashboardData: any, locations: any;
+    try {
+        [dashboardData, locations] = await Promise.all([
+            withTimeout(fetchDashboardData(), 8000, 'fetchDashboardData'),
+            withTimeout(fetchLocations(), 5000, 'fetchLocations')
+        ])
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout fetching data:', e)
+        // Use empty data as fallback
+        dashboardData = { tenants: [], overdueTenants: [], userProfile: profile, organizers: [], myLocations: [], availableLocations: [], transactions: [], role: role || 'organizer' }
+        locations = []
+    }
 
     const { tenants, overdueTenants, userProfile, organizers } = dashboardData
 
-    // Check Access
-    const access = await checkAkaunAccess(user, role)
+    // Check Access (server-side version to avoid client/server mismatch)
+    let access: any;
+    try {
+        access = await withTimeout(
+            checkAccessServer(user, role),
+            3000,
+            'checkAccessServer'
+        )
+    } catch (e) {
+        console.error('[OrganizerDashboard] Timeout checking access:', e)
+        access = { hasAccess: true, reason: 'trial_active', daysRemaining: 14 }
+    }
 
     // Filter Data for "My View" (Personalized Dashboard)
     // Even if Admin/Hybrid, show MY stats on dashboard to avoid clutter

@@ -1,7 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -87,8 +85,7 @@ const fetcher = async () => {
 export function LocationModule({ initialLocations }: { initialLocations?: any[] }) {
   const { role } = useAuth()
   const locations = initialLocations || []
-  const router = useRouter()
-  const mutate = () => router.refresh()
+  const mutate = () => window.location.reload()
   const isLoading = false
   const [selectedLocation, setSelectedLocation] = useState<any>(null)
   const [locationTenants, setLocationTenants] = useState<any[]>([])

@@ -1,12 +1,47 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { ArrowRight, TrendingUp, AlertCircle } from "lucide-react"
+import { ArrowRight, TrendingUp, AlertCircle, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { checkAkaunAccess } from "@/utils/access-control"
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
+import { Suspense } from "react"
+
+// Server-side access check to avoid client/server mismatch
+async function checkAccessServer(user: any, role: string) {
+    // Admins and staff always have access
+    if (['admin', 'superadmin', 'staff'].includes(role)) {
+        return { hasAccess: true, reason: 'admin_override', daysRemaining: 0 }
+    }
+
+    const supabase = await createClient()
+
+    // Calculate trial days
+    const { data: settings } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'trial_period_days')
+        .maybeSingle()
+    const trialDays = parseInt(settings?.value || '14')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single()
+    
+    const createdAt = new Date(profile?.created_at || user.created_at).getTime()
+    const now = Date.now()
+    const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
+    const remaining = Math.max(0, trialDays - diffDays)
+
+    if (remaining > 0) {
+        return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
+    }
+
+    return { hasAccess: false, reason: 'expired', daysRemaining: 0 }
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,20 +52,55 @@ export const revalidate = 0
  * This page should only be accessible to users with tenant role.
  * Server-side role verification prevents unauthorized access.
  */
+// Helper for timeout
+const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        queryBuilder as Promise<T>,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
+        )
+    ])
+}
+
 export default async function TenantDashboardPage() {
     // Verify user and role server-side
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Get user with timeout
+    let user: any;
+    try {
+        const authResult: any = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = authResult.data?.user
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout getting user:', e)
+        redirect('/login')
+    }
     
     if (!user) {
         redirect('/login')
     }
     
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, organizer_code, full_name, email')
-        .eq('id', user.id)
-        .single()
+    // Get profile with timeout
+    let profile;
+    try {
+        const profileResult: any = await withTimeout(
+            supabase
+                .from('profiles')
+                .select('role, organizer_code, full_name, email')
+                .eq('id', user.id)
+                .maybeSingle(),
+            3000,
+            'getProfile'
+        )
+        profile = profileResult.data
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout getting profile:', e)
+        profile = null
+    }
     
     const role = determineUserRole(profile, user.email)
     
@@ -38,12 +108,35 @@ export default async function TenantDashboardPage() {
     // Organizers/admins/superadmins can also use this as a simplified view
     // But if someone tries to access with wrong expectations, they can still see
 
-    const data = await fetchDashboardData()
+    // Fetch dashboard data with timeout
+    let data: any;
+    try {
+        data = await withTimeout(
+            fetchDashboardData(),
+            8000,
+            'fetchDashboardData'
+        )
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout fetching dashboard data:', e)
+        // Use empty data as fallback
+        data = { myLocations: [], userProfile: profile, transactions: [], tenants: [], overdueTenants: [], organizers: [], availableLocations: [], role: role || 'tenant' }
+    }
+    
     const { myLocations, userProfile } = data
     const displayRole = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Peniaga"
 
-    // Check Access
-    const access = await checkAkaunAccess(user, role)
+    // Check Access (server-side version to avoid client/server mismatch)
+    let access: any;
+    try {
+        access = await withTimeout(
+            checkAccessServer(user, role),
+            3000,
+            'checkAccessServer'
+        )
+    } catch (e) {
+        console.error('[TenantDashboard] Timeout checking access:', e)
+        access = { hasAccess: true, reason: 'trial_active', daysRemaining: 14 }
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

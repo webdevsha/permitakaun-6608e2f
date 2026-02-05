@@ -1,11 +1,33 @@
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 
+// Timeout wrapper to prevent infinite hangs
+const withTimeout = <T>(promise: Promise<T>, ms: number, context: string): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`Timeout: ${context} took longer than ${ms}ms`)), ms)
+        )
+    ])
+}
+
 export async function fetchDashboardData() {
     const supabase = await createClient()
 
-    // Get User Role Context
-    const { data: { user } } = await supabase.auth.getUser()
+    // Get User Role Context (with timeout to prevent infinite hang)
+    let user: any;
+    try {
+        const { data: { user: u } } = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'getUser'
+        )
+        user = u
+    } catch (e) {
+        console.error('[fetchDashboardData] Timeout getting user:', e)
+        return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
+    }
+    
     if (!user) return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
 
     const { data: profile } = await supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single()
@@ -325,8 +347,20 @@ export async function fetchDashboardData() {
                     .in('tenant_id', tenants.filter((t: any) => t.profile_id === user.id).map((t: any) => t.id))
                     .order('date', { ascending: false })
 
-                // Combine: Rent from managed tenants + Own manual transactions
-                transactions = [...(tx || []), ...(ownTx || [])]
+                // Fetch PUBLIC PAYMENTS (payments from non-registered users via /bayar)
+                // These have organizer_id set but no tenant_id
+                const { data: publicTx, error: publicTxErr } = await supabase
+                    .from('transactions')
+                    .select('*')
+                    .eq('organizer_id', orgId)
+                    .is('tenant_id', null)
+                    .order('date', { ascending: false })
+
+                if (publicTxErr) console.error('[Dashboard DEBUG] Public Payment Fetch Error:', publicTxErr)
+                console.log(`[Dashboard DEBUG] Public Payments Found: ${publicTx?.length || 0}`)
+
+                // Combine: Rent from managed tenants + Own manual transactions + Public payments
+                transactions = [...(tx || []), ...(ownTx || []), ...(publicTx || [])]
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
             } else {
@@ -530,7 +564,21 @@ export async function fetchDashboardData() {
 
 export async function fetchLocations() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Get user with timeout protection
+    let user;
+    try {
+        const { data: { user: u } } = await withTimeout(
+            supabase.auth.getUser(),
+            5000,
+            'fetchLocations getUser'
+        )
+        user = u
+    } catch (e) {
+        console.error('[fetchLocations] Timeout getting user:', e)
+        return []
+    }
+    
     if (!user) return []
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
@@ -562,12 +610,30 @@ export async function fetchLocations() {
         }
     }
 
-    const { data: locations } = await query
+    const { data: locations, error: locationsError } = await query
+    if (locationsError) {
+        console.error('[fetchLocations] Error fetching locations:', locationsError)
+        return []
+    }
     if (!locations) return []
 
+    // Optimized: Fetch all tenant counts in parallel with error handling
     const locationsWithCounts = await Promise.all(locations.map(async (loc: any) => {
-        const { count } = await supabase.from('tenant_locations').select('*', { count: 'exact', head: true }).eq('location_id', loc.id)
-        return { ...loc, tenant_count: count || 0 }
+        try {
+            const { count, error: countError } = await supabase
+                .from('tenant_locations')
+                .select('*', { count: 'exact', head: true })
+                .eq('location_id', loc.id)
+            
+            if (countError) {
+                console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
+                return { ...loc, tenant_count: 0 }
+            }
+            return { ...loc, tenant_count: count || 0 }
+        } catch (e) {
+            console.error(`[fetchLocations] Exception counting tenants for location ${loc.id}:`, e)
+            return { ...loc, tenant_count: 0 }
+        }
     }))
 
     return locationsWithCounts
