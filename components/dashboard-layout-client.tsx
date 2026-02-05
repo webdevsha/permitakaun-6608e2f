@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import { AppSidebar, MobileNav } from "@/components/app-sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
-import { checkAkaunAccess } from "@/utils/access-control"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
@@ -24,27 +23,26 @@ export default function DashboardLayoutClient({
     initialRole,
     initialProfile
 }: DashboardLayoutProps) {
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-    const { user: authUser, role: authRole, isLoading, isInitialized } = useAuth()
+    const { role: authRole, signOut, user: authUser, profile: authProfile, isLoading, isInitialized } = useAuth()
     const router = useRouter()
     const pathname = usePathname()
-    
-    // Prevent duplicate access checks
     const checkedRef = useRef(false)
+    const [isSigningOut, setIsSigningOut] = useState(false)
 
-    // Use server-provided initial data for SSR, but trust auth state once initialized
-    // This ensures logout works correctly without flashing dashboard
-    const currentUser = isInitialized ? authUser : (initialUser || authUser)
-    const currentRole = isInitialized ? authRole : (initialRole || authRole)
+    // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
+    // Only fall back to auth context if initial data is not available
+    const user = initialUser || authUser
+    const role = initialRole || authRole
+    const profile = initialProfile || authProfile
 
+    // Check subscription access for Akaun
     useEffect(() => {
         // Only check access once after auth is initialized
         if (!isInitialized || checkedRef.current) return
         checkedRef.current = true
 
         const verifyAccess = async () => {
-            if (!currentUser) {
-                // Use window.location for hard redirect on logout (clears all state)
+            if (!user) {
                 window.location.href = '/login'
                 return
             }
@@ -55,101 +53,47 @@ export default function DashboardLayoutClient({
             // ONLY enforce subscription for Accounting features
             if (!pathname.startsWith('/dashboard/accounting')) return
 
-            // Admin/Staff/Superadmin Override - Let them access
-            if (currentRole === 'admin' || currentRole === 'staff' || currentRole === 'superadmin') return
-            
-            // Organizers: Check fresh data from DB (don't use cached user object)
-            if (currentRole === 'organizer') {
-                const supabase = createClient()
-                const { data: org } = await supabase
-                    .from('organizers')
-                    .select('accounting_status')
-                    .eq('profile_id', currentUser.id)
-                    .maybeSingle()
-                
-                // If accounting active, allow access
-                if (org?.accounting_status === 'active') return
-                
-                // Otherwise check trial with fresh created_at
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('created_at')
-                    .eq('id', currentUser.id)
-                    .single()
-                
-                const { data: settings } = await supabase.from('system_settings').select('trial_period_days').single()
-                const trialDays = settings?.trial_period_days || 14
-                
-                const createdAt = new Date(profile?.created_at || currentUser.created_at).getTime()
-                const diffDays = Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24))
-                const remaining = trialDays - diffDays
-                
-                if (remaining > 0) return // Trial still active
-                
-                // Trial expired - redirect
-                toast.error("Tempoh percubaan anda telah tamat. Sila langgan untuk meneruskan akses.", {
-                    duration: 5000,
-                    id: 'expired-toast'
-                })
-                router.push('/dashboard/subscription')
+            // Admin/Staff/Superadmin - always allow
+            if (role === 'admin' || role === 'staff' || role === 'superadmin') {
+                console.log('[Layout] Admin/Staff/Superadmin - allowing access')
                 return
             }
 
-            try {
-                const { hasAccess, reason } = await checkAkaunAccess(currentUser, currentRole || 'tenant')
-
-                if (!hasAccess && reason === 'expired') {
-                    toast.error("Tempoh percubaan anda telah tamat. Sila langgan untuk meneruskan akses.", {
-                        duration: 5000,
-                        id: 'expired-toast' // prevent duplicate toasts
-                    })
-                    router.push('/dashboard/subscription')
-                }
-            } catch (error) {
-                console.error('Access verification error:', error)
-            }
+            // For organizers and tenants - let the Accounting module handle the check
+            // Don't redirect here, let the module show appropriate UI
+            console.log('[Layout] Organizer/Tenant - letting module handle access check')
         }
 
         verifyAccess()
-    }, [currentUser, currentRole, pathname, router, isInitialized])
+    }, [user, role, pathname, router, isInitialized])
 
     // Show loading state only during initial hydration
-    // Once initialized, if no user, redirect to login immediately
-    if (!currentUser) {
-        if (isInitialized) {
-            // Auth initialized but no user = logged out, redirect immediately
-            window.location.href = '/login'
-        }
+    if (isLoading && !isInitialized) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Memuatkan...</p>
-                </div>
+            <div className="min-h-screen flex items-center justify-center bg-secondary">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
         )
     }
 
+    if (!user) {
+        return null
+    }
+
     return (
-        <div className="flex h-screen bg-background font-sans overflow-hidden">
+        <div className="min-h-screen flex w-full bg-secondary">
             <AppSidebar
-                isCollapsed={isSidebarCollapsed}
-                setIsCollapsed={setIsSidebarCollapsed}
-                initialRole={initialRole}
+                isCollapsed={false}
+                setIsCollapsed={() => { }}
                 initialUser={initialUser}
+                initialRole={initialRole}
                 initialProfile={initialProfile}
             />
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
-                <MobileNav
-                    initialRole={initialRole}
-                    initialUser={initialUser}
-                />
-                <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 scroll-smooth">
-                    <div className="max-w-7xl mx-auto space-y-10 pb-20">
-                        {children}
-                    </div>
-                </main>
-            </div>
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                    {children}
+                </div>
+            </main>
         </div>
     )
 }

@@ -121,9 +121,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   useEffect(() => {
     const init = async () => {
+      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id)
       try {
         setIsLoading(true)
+        setAccessDeniedStatus(null)
+        setIsModuleVerified(false)
+        
         if (!user || !role) {
+          console.log('[Accounting] No user or role, skipping')
           setIsLoading(false)
           return
         }
@@ -131,116 +136,99 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         let currentRole = role
         setUserRole(currentRole)
 
-        // FAST-PATH: Admin/Staff get immediate access without waiting for all checks
-        const isPrivilegedRole = currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff'
+        // FAST-PATH: Admin/Staff/Superadmin - grant immediate access
+        if (currentRole === 'superadmin' || currentRole === 'admin' || currentRole === 'staff') {
+          console.log('[Accounting] Privileged role - granting access')
+          setAccessDeniedStatus(null)
+          setIsModuleVerified(true)
+          setIsLoading(false)
+          return
+        }
+
+        // Fetch settings
+        const { data: settingsData } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'accounting_module')
+          .maybeSingle()
         
-        // Fetch config and settings in parallel (always needed)
-        const [configResult, settingsResult] = await Promise.all([
-          supabase.from('accounting_config').select('percentages, bank_names').eq('profile_id', user.id).maybeSingle(),
-          supabase.from('system_settings').select('value').eq('key', 'accounting_module').maybeSingle()
-        ])
+        const settings = settingsData?.value || { is_active: true, trial_duration_days: 14 }
+        setSystemSettings(settings)
 
-        // Apply config immediately
-        if (configResult.data) {
-          if (configResult.data.percentages) setPercentages(configResult.data.percentages)
-          if (configResult.data.bank_names) setBankNames(configResult.data.bank_names)
+        if (!settings.is_active) {
+          setAccessDeniedStatus('locked')
+          setIsModuleVerified(false)
+          setIsLoading(false)
+          return
         }
 
-        const settings = settingsResult.data?.value || { is_active: true, trial_duration_days: 14 }
-        if (settingsResult.data) setSystemSettings(settingsResult.data.value)
+        // Check access based on role
+        let accessGranted = false
+        let denyReason: "locked" | "trial_expired" | null = 'trial_expired'
 
-        // Access Control Logic
-        let accessGranted = true
-        let denyReason: "locked" | "trial_expired" | null = null
-
-        if (isPrivilegedRole) {
-          // Admin/Staff/Superadmin: Grant access immediately (no additional checks needed)
-          accessGranted = true
-        } else if (!settings.is_active) {
-          // Module locked for non-privileged users
-          accessGranted = false
-          denyReason = 'locked'
-        } else if (currentRole === 'tenant') {
-          // Tenants: Check tenant status
-          const { data: tenant, error } = await supabase
-            .from('tenants')
-            .select('id, accounting_status')
-            .eq('profile_id', user.id)
-            .maybeSingle()
-
-          if (tenant) {
-            setNewTransaction(prev => ({ ...prev, tenant_id: tenant.id }))
-          }
-          if (error) console.error("Tenant status fetch error:", error)
-
-          if (!tenant || tenant.accounting_status !== 'active') {
-            accessGranted = false
-            denyReason = 'trial_expired'
-          }
-        } else if (currentRole === 'organizer') {
-          console.log('[Accounting] Organizer access check for user:', user.id)
-          
-          // Organizers: Check organizer status or trial
-          const { data: organizer, error: orgError } = await supabase
+        if (currentRole === 'organizer') {
+          // Check organizer accounting status
+          const { data: organizer } = await supabase
             .from('organizers')
-            .select('accounting_status, id')
+            .select('accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
           
-          console.log('[Accounting] Organizer data:', organizer, 'error:', orgError)
-
-          // Check if accounting is active for this organizer
-          const accountingActive = organizer?.accounting_status === 'active'
-          console.log('[Accounting] Accounting active:', accountingActive, 'status:', organizer?.accounting_status)
+          console.log('[Accounting] Organizer status:', organizer?.accounting_status)
           
-          // Trial check - ALWAYS fetch fresh profile data to get updated created_at
-          let daysRemaining = 0
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('created_at')
-            .eq('id', user.id)
-            .single()
-          
-          if (profileError) {
-            console.error('[Accounting] Error fetching profile:', profileError)
-          }
-          
-          if (profile) {
-            const createdAt = new Date(profile.created_at).getTime()
-            const now = Date.now()
-            const diffMs = now - createdAt
-            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-            daysRemaining = settings.trial_duration_days - diffDays
-            console.log('[Accounting] Trial check - createdAt:', profile.created_at, 'diffDays:', diffDays, 'daysRemaining:', daysRemaining)
-          }
-          
-          // Grant access if either accounting is active OR still in trial
-          if (accountingActive || daysRemaining > 0) {
+          // If accounting active, grant access
+          if (organizer?.accounting_status === 'active') {
             accessGranted = true
-            console.log('[Accounting] Access GRANTED for organizer (accountingActive:', accountingActive, 'daysRemaining:', daysRemaining, ')')
+            denyReason = null
           } else {
-            accessGranted = false
-            denyReason = 'trial_expired'
-            console.log('[Accounting] Access DENIED for organizer - trial expired')
+            // Check trial period
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('created_at')
+              .eq('id', user.id)
+              .single()
+            
+            if (profile) {
+              const diffDays = Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              const daysRemaining = settings.trial_duration_days - diffDays
+              console.log('[Accounting] Days remaining:', daysRemaining)
+              
+              if (daysRemaining > 0) {
+                accessGranted = true
+                denyReason = null
+              }
+            }
           }
+        } else if (currentRole === 'tenant') {
+          // Check tenant accounting status
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
           
-          // Auto-assign organizer ID for transactions
-          if (organizer?.id) {
-            console.log('[Accounting] Auto-assigned organizer ID:', organizer.id)
+          if (tenant?.accounting_status === 'active') {
+            accessGranted = true
+            denyReason = null
           }
         }
 
+        console.log('[Accounting] Access result:', accessGranted, denyReason)
         setAccessDeniedStatus(denyReason)
         setIsModuleVerified(accessGranted)
+        
       } catch (e) {
-        console.error("Accounting Init Error:", e)
+        console.error("[Accounting] Init Error:", e)
+        setAccessDeniedStatus('trial_expired')
+        setIsModuleVerified(false)
       } finally {
         setIsLoading(false)
+        console.log('[Accounting] INIT COMPLETE')
       }
     }
 
     init()
-  }, [role, user])
+  }, [role, user?.id])
 
   const handleSaveConfig = async () => {
     // Validate total 100%
@@ -287,11 +275,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     setDisplayLimit(5)
   }, [filterMonth, filterType, filterStatus])
 
+  console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
+  
   if (isLoading) {
     return <div className="p-12 text-center text-muted-foreground"><Loader2 className="animate-spin h-8 w-8 mx-auto mb-4" />Menyemak kelayakan...</div>
   }
 
   if (accessDeniedStatus === 'trial_expired') {
+    console.log('[Accounting] RENDERING SubscriptionPlans (trial_expired)')
     return <SubscriptionPlans />
   }
 
@@ -479,10 +470,16 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         }
       }
 
-      // Auto-resolve entity ID based on role (Akaun is for own use only)
+      if (!user) {
+        toast.error("Ralat: Sesi pengguna tidak sah")
+        setIsSaving(false)
+        return
+      }
+      
+      // Get or create tenant record for transaction
       let entityId: number | null = null
       
-      // First, check if user already has a tenant record
+      // Check for existing tenant
       const { data: existingTenant } = await supabase
         .from('tenants')
         .select('id')
@@ -491,78 +488,66 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       
       if (existingTenant?.id) {
         entityId = existingTenant.id
-      } else if (userRole === 'organizer' && user) {
-        // For organizers without tenant record, create one
-        const { data: org } = await supabase
-          .from('organizers')
-          .select('id, name, email, organizer_code')
-          .eq('profile_id', user.id)
-          .maybeSingle()
+      } else {
+        // Need to create tenant record - get user details based on role
+        let fullName = user.email?.split('@')[0] || 'User'
+        let orgCode = null
         
-        if (org) {
-          // Create a tenant record for this organizer
-          const { data: newTenant, error: createError } = await supabase
-            .from('tenants')
-            .insert({
-              profile_id: user.id,
-              full_name: org.name,
-              business_name: org.name,
-              email: org.email || user.email,
-              organizer_code: org.organizer_code,
-              status: 'active',
-              accounting_status: 'active'
-            })
-            .select('id')
-            .single()
-          
-          if (createError) {
-            console.error('[Accounting] Error creating tenant for organizer:', createError)
-          } else if (newTenant) {
-            entityId = newTenant.id
+        if (userRole === 'organizer') {
+          const { data: org } = await supabase
+            .from('organizers')
+            .select('name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (org) {
+            fullName = org.name
+            orgCode = org.organizer_code
+          }
+        } else if (userRole === 'admin') {
+          const { data: admin } = await supabase
+            .from('admins')
+            .select('full_name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (admin) {
+            fullName = admin.full_name
+            orgCode = admin.organizer_code
+          }
+        } else if (userRole === 'staff') {
+          const { data: staff } = await supabase
+            .from('staff')
+            .select('full_name, organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+          if (staff) {
+            fullName = staff.full_name
+            orgCode = staff.organizer_code
           }
         }
-      } else if (userRole === 'tenant' && user) {
-        // For tenants, this shouldn't happen (no tenant record)
-        toast.error("Ralat: Rekod peniaga tidak dijumpai")
-        setIsSaving(false)
-        return
-      } else if (userRole === 'admin' || userRole === 'superadmin' || userRole === 'staff') {
-        // For admin/staff, create a tenant record if needed
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('full_name, email, organizer_code')
-          .eq('profile_id', user.id)
-          .maybeSingle()
         
-        const { data: staffData } = await supabase
-          .from('staff')
-          .select('full_name, email, organizer_code')
-          .eq('profile_id', user.id)
-          .maybeSingle()
+        // Create tenant record
+        const { data: newTenant, error: createError } = await supabase
+          .from('tenants')
+          .insert({
+            profile_id: user.id,
+            full_name: fullName,
+            business_name: fullName,
+            email: user.email,
+            organizer_code: orgCode,
+            status: 'active',
+            accounting_status: 'active'
+          })
+          .select('id')
+          .single()
         
-        const userData = adminData || staffData
-        
-        if (userData) {
-          const { data: newTenant, error: createError } = await supabase
-            .from('tenants')
-            .insert({
-              profile_id: user.id,
-              full_name: userData.full_name || user.email?.split('@')[0],
-              business_name: userData.full_name || user.email?.split('@')[0],
-              email: userData.email || user.email,
-              organizer_code: userData.organizer_code,
-              status: 'active',
-              accounting_status: 'active'
-            })
-            .select('id')
-            .single()
-          
-          if (createError) {
-            console.error('[Accounting] Error creating tenant for admin/staff:', createError)
-          } else if (newTenant) {
-            entityId = newTenant.id
-          }
+        if (createError) {
+          console.error('[Accounting] Error creating tenant:', createError)
+          toast.error("Ralat: Gagal mencipta rekod peniaga")
+          setIsSaving(false)
+          return
         }
+        
+        entityId = newTenant?.id || null
       }
 
       const txData = {
