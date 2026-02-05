@@ -667,9 +667,6 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         {locations?.map((loc: any) => {
           return (
             <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
-
-              // ... (in JSX)
-
               {role !== 'tenant' && (
                 <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                   {/* Admin Approval Button */}

@@ -12,7 +12,24 @@ export async function fetchDashboardData() {
 
     // Use shared role determination logic for consistency
     const role = determineUserRole(profile, user.email)
-    const organizerCode = profile?.organizer_code
+    
+    // Get organizer_code from appropriate table based on role
+    let organizerCode = profile?.organizer_code
+    
+    // For staff, get organizer_code from staff table (mirrors admin's data)
+    if (role === 'staff') {
+        const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user.id).single()
+        if (staffData?.organizer_code) {
+            organizerCode = staffData.organizer_code
+        }
+    }
+    // For admin, get organizer_code from admins table
+    else if (role === 'admin') {
+        const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user.id).single()
+        if (adminData?.organizer_code) {
+            organizerCode = adminData.organizer_code
+        }
+    }
 
     // Set userProfile with basic info from profiles table
     let userProfile: any = profile ? {
@@ -37,6 +54,7 @@ export async function fetchDashboardData() {
         const adminOrgCode = user.email === 'admin@kumim.my' ? 'ORG002' : null
 
         // Fetch Tenants with Locations
+        // IMPORTANT: Exclude organizers and admins - they are NOT tenants
         let tQuery = supabase
             .from('tenants')
             .select('*, tenant_locations(*, locations(*))')
@@ -52,17 +70,46 @@ export async function fetchDashboardData() {
 
         const { data: t } = await tQuery
 
+        // Filter out organizers and admins from tenants list
+        // They should NOT appear under "Peniaga & Sewa"
+        const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code')
+        const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
+        const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
+        
+        // Also get admin/staff profiles to exclude
+        const { data: adminProfiles } = await supabase.from('profiles').select('id').in('role', ['admin', 'superadmin', 'staff'])
+        const adminProfileIds = new Set(adminProfiles?.map(p => p.id) || [])
+
         // Enrich Tenants with Payment Status (Server-side simulation of client logic)
         if (t) {
             // Fetch last approved payments for all tenants efficiently
-            // Note: For large datasets, this strategy might need optimization (e.g. SQL view)
             const { data: payments } = await supabase
                 .from('tenant_payments')
                 .select('*')
                 .eq('status', 'approved')
                 .order('payment_date', { ascending: false })
 
-            tenants = t.map(tenant => {
+            // Filter tenants: exclude organizers, admins, and staff
+            // They should NOT appear under "Peniaga & Sewa"
+            let filteredTenants = t.filter(tenant => {
+                // Exclude if profile is an organizer
+                if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) return false
+                // Exclude if profile is admin/staff
+                if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) return false
+                // Exclude if the tenant's organizer_code matches an organizer (indicates they're an organizer record)
+                if (tenant.organizer_code && organizerCodes.has(tenant.organizer_code) && !tenant.business_name) return false
+                return true
+            })
+
+            // For admin@kumim.my: Only show "Ahmad" as sample (hide others for demo purposes)
+            if (user.email === 'admin@kumim.my') {
+                filteredTenants = filteredTenants.filter(tenant => 
+                    tenant.full_name?.toLowerCase().includes('ahmad') || 
+                    tenant.full_name?.toLowerCase().includes('sample')
+                )
+            }
+
+            tenants = filteredTenants.map(tenant => {
                 const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
                 let paymentStatus = 'active'
                 if (!lastPayment) paymentStatus = 'new'
@@ -205,30 +252,48 @@ export async function fetchDashboardData() {
                         .in('tenant_id', tIds)
                         .order('payment_date', { ascending: false })
 
-                    tenants = t.map(tenant => {
-                        const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
-                        let paymentStatus = 'active'
-                        if (!lastPayment) paymentStatus = 'new'
-                        return {
-                            ...tenant,
-                            locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
-                            lastPaymentDate: lastPayment?.payment_date
-                                ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
-                                : "Tiada Rekod",
-                            lastPaymentAmount: lastPayment?.amount || 0,
-                            paymentStatus
-                        }
-                    })
+                    // Filter out organizers/admins from tenants
+                    const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code')
+                    const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
+                    const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
+                    // Get admin/staff IDs from new tables
+                    const { data: adminData } = await supabase.from('admins').select('profile_id')
+                    const { data: staffData } = await supabase.from('staff').select('profile_id')
+                    const adminProfileIds = new Set([
+                        ...(adminData?.map(a => a.profile_id) || []),
+                        ...(staffData?.map(s => s.profile_id) || [])
+                    ])
+
+                    tenants = t
+                        .filter(tenant => {
+                            if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) return false
+                            if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) return false
+                            if (tenant.organizer_code && organizerCodes.has(tenant.organizer_code) && !tenant.business_name) return false
+                            return true
+                        })
+                        .map(tenant => {
+                            const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
+                            let paymentStatus = 'active'
+                            if (!lastPayment) paymentStatus = 'new'
+                            return {
+                                ...tenant,
+                                locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
+                                lastPaymentDate: lastPayment?.payment_date
+                                    ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
+                                    : "Tiada Rekod",
+                                lastPaymentAmount: lastPayment?.amount || 0,
+                                paymentStatus
+                            }
+                        })
                 }
 
                 // Fetch Transactions for these tenants
-                // For Organizers: Only show RENT payments (Sewa) from tenants, not their personal expenses
+                // For Staff/Organizers: Show ALL transactions (Sewa and others) for full visibility
                 console.log(`[Dashboard DEBUG] Fetching transactions for IDs:`, tIds)
                 const { data: tx, error: txErr } = await supabase
                     .from('transactions')
                     .select('*, tenants(full_name, business_name)')
                     .in('tenant_id', tIds)
-                    .eq('category', 'Sewa') // Only rent payments, not subscriptions or other personal expenses
                     .order('date', { ascending: false })
 
                 if (txErr) console.error('[Dashboard DEBUG] Transaction Fetch Error:', txErr)

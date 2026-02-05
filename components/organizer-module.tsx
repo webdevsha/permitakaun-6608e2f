@@ -38,10 +38,42 @@ import { logAction } from "@/utils/logging"
 
 const fetchOrganizers = async () => {
   const supabase = createClient()
-  const { data, error } = await supabase
+  
+  // Get current user's profile to determine role
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, organizer_code')
+    .eq('id', user.id)
+    .single()
+  
+  let query = supabase
     .from('organizers')
     .select('*, locations(*)')
     .order('created_at', { ascending: false })
+  
+  // For organizers, filter to only show their own record (by profile_id)
+  if (profile?.role === 'organizer') {
+    query = query.eq('profile_id', user.id)
+  }
+  // For staff, use the staff table to get organizer_code
+  else if (profile?.role === 'staff') {
+    const { data: staffData } = await supabase
+      .from('staff')
+      .select('organizer_code')
+      .eq('profile_id', user.id)
+      .single()
+    if (staffData?.organizer_code) {
+      query = query.eq('organizer_code', staffData.organizer_code)
+    } else {
+      return []
+    }
+  }
+  // For admin/superadmin, they see all (or filtered by their org in page.tsx)
+  
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
@@ -51,11 +83,16 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
   const { role } = useAuth() // Get role
   
   // Use SWR for fresh data after mutations
+  // CRITICAL: Use server data as source of truth to prevent flickering
   const { data: organizersData, mutate } = useSWR('organizers', fetchOrganizers, {
     fallbackData: initialOrganizers,
-    revalidateOnMount: false
+    revalidateOnMount: false,
+    dedupingInterval: 5000 // Prevent rapid revalidation
   })
-  const organizers = organizersData || initialOrganizers || []
+  
+  // ALWAYS prioritize server-provided initial data to prevent hydration mismatch
+  // Only use SWR data after a mutation
+  const organizers = initialOrganizers || organizersData || []
 
   const [isOpen, setIsOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)

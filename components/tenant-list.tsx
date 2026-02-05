@@ -30,22 +30,29 @@ const fetchTenants = async () => {
    const { data: { user } } = await supabase.auth.getUser()
    if (!user) return []
 
-   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+   const { data: profile } = await supabase.from('profiles').select('role, organizer_code').eq('id', user.id).single()
    const role = profile?.role
+   const orgCode = profile?.organizer_code
+
+   // DEBUG: Log staff filtering
+   console.log('[TenantList] User:', user.email, 'Role:', role, 'OrgCode:', orgCode)
 
    let query = supabase.from('tenants').select('*').order('created_at', { ascending: false })
 
-   // --- ORGANIZER FILTER ---
-   if (role === 'organizer') {
-      const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).single()
-      if (org && org.organizer_code) {
-         query = query.eq('organizer_code', org.organizer_code)
+   // --- ORGANIZER/STAFF FILTER ---
+   // Both organizers and staff should only see tenants from their organization
+   if (role === 'organizer' || role === 'staff') {
+      if (orgCode) {
+         query = query.eq('organizer_code', orgCode)
+         console.log('[TenantList] Filtering by organizer_code:', orgCode)
       } else {
-         return [] // No Tenants for unlinked organizer
+         console.warn('[TenantList] No organizer_code for staff/organizer - returning empty')
+         return [] // No Tenants for unlinked users
       }
    }
 
    const { data: tenants, error } = await query
+   console.log('[TenantList] Fetched tenants:', tenants?.length || 0)
    if (error) throw error
    if (!tenants) return []
 
@@ -412,7 +419,8 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
 
             {/* Filters & Bulk Actions */}
             <div className="flex flex-col md:flex-row gap-4 mt-4 items-center justify-between bg-secondary/10 p-3 rounded-xl border border-border/50">
-               <div className="flex items-center gap-2 w-full md:w-auto">
+               {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+               <div className="flex items-center gap-2 w-full md:w-auto" suppressHydrationWarning>
                   <Input
                      placeholder="Cari nama..."
                      className="h-9 w-full md:w-[200px] bg-white"

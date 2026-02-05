@@ -9,7 +9,8 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle, BookOpen } from "lucide-react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -255,6 +256,29 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
+    
+    // For staff, only show users from their organization
+    if (role === 'staff') {
+      // Get organizer_code from staff table (not profiles)
+      const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user?.id).single()
+      console.log('[Settings] Staff fetchUsers - organizer_code from staff table:', staffData?.organizer_code)
+      if (staffData?.organizer_code) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('organizer_code', staffData.organizer_code)
+          .neq('role', 'superadmin')
+          .order('created_at', { ascending: false })
+        console.log('[Settings] Staff users fetched:', data?.length || 0)
+        if (data) setUsersList(data)
+      } else {
+        console.warn('[Settings] Staff has no organizer_code in staff table - showing empty list')
+        setUsersList([])
+      }
+      setLoadingUsers(false)
+      return
+    }
+    
     let query = supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
 
     // SPECIAL RULE for Hazman (admin@kumim.my):
@@ -314,6 +338,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   const [canAddUsers, setCanAddUsers] = useState(false)
   const [checkingSubscription, setCheckingSubscription] = useState(true)
   const [staffCount, setStaffCount] = useState(0)
+  const [userOrgCode, setUserOrgCode] = useState<string | null>(null)
   const [newUserForm, setNewUserForm] = useState({
     email: "",
     password: "",
@@ -330,20 +355,22 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         return
       }
 
-      // Fetch current staff count for this admin/organizer
-      let staffQuery = supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'staff')
+      // Fetch current staff count from staff table (not profiles)
+      let staffQuery = supabase.from('staff').select('id', { count: 'exact' })
       
       if (role === 'organizer') {
         // Get organizer code
         const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).maybeSingle()
         if (org?.organizer_code) {
           staffQuery = staffQuery.eq('organizer_code', org.organizer_code)
+          setUserOrgCode(org.organizer_code)
         }
       } else if (role === 'admin') {
-        // For admin, check by their organizer_code or show all staff they manage
-        const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user.id).single()
-        if (profile?.organizer_code) {
-          staffQuery = staffQuery.eq('organizer_code', profile.organizer_code)
+        // For admin, get organizer_code from admins table
+        const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user.id).single()
+        if (adminData?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', adminData.organizer_code)
+          setUserOrgCode(adminData.organizer_code)
         }
       }
       
@@ -615,9 +642,16 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div>
-        <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
-        <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
+          <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
+        </div>
+        <Link href="/dashboard/help">
+          <Button variant="outline" className="rounded-xl">
+            <BookOpen className="w-4 h-4 mr-2" /> Panduan
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
@@ -1081,7 +1115,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                     </CardTitle>
                     <CardDescription>Urus akses dan akaun staf untuk organisasi anda.</CardDescription>
                   </div>
-                  <AddStaffDialog />
+                  <AddStaffDialog organizerCode={userOrgCode} currentStaffCount={staffCount} maxStaff={MAX_STAFF} />
                 </div>
               </CardHeader>
               <CardContent className="p-6">

@@ -74,7 +74,7 @@ export default async function StaffPage() {
                             <AlertCircle className="w-3 h-3 mr-1" /> Had dicapai
                         </Badge>
                     )}
-                    <AddStaffDialog currentStaffCount={staffCount} maxStaff={MAX_STAFF} />
+                    <AddStaffDialog currentStaffCount={staffCount} maxStaff={MAX_STAFF} organizerCode={adminOrgCode} />
                 </div>
             </header>
 
