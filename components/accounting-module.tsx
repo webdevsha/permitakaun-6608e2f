@@ -34,7 +34,9 @@ import {
   ChevronDown,
   Lock,
   Settings,
-  CheckCircle
+  CheckCircle,
+  Pencil,
+  X
 } from "lucide-react"
 import {
   Dialog,
@@ -191,28 +193,40 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           const accountingActive = organizer?.accounting_status === 'active'
           console.log('[Accounting] Accounting active:', accountingActive, 'status:', organizer?.accounting_status)
           
-          // Trial check - use profile created_at
+          // Trial check - ALWAYS fetch fresh profile data to get updated created_at
           let daysRemaining = 0
-          const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('created_at')
+            .eq('id', user.id)
+            .single()
+          
+          if (profileError) {
+            console.error('[Accounting] Error fetching profile:', profileError)
+          }
+          
           if (profile) {
-            const diffDays = Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+            const createdAt = new Date(profile.created_at).getTime()
+            const now = Date.now()
+            const diffMs = now - createdAt
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
             daysRemaining = settings.trial_duration_days - diffDays
-            console.log('[Accounting] Trial check - diffDays:', diffDays, 'daysRemaining:', daysRemaining)
+            console.log('[Accounting] Trial check - createdAt:', profile.created_at, 'diffDays:', diffDays, 'daysRemaining:', daysRemaining)
           }
           
           // Grant access if either accounting is active OR still in trial
           if (accountingActive || daysRemaining > 0) {
             accessGranted = true
-            console.log('[Accounting] Access GRANTED for organizer')
+            console.log('[Accounting] Access GRANTED for organizer (accountingActive:', accountingActive, 'daysRemaining:', daysRemaining, ')')
           } else {
             accessGranted = false
             denyReason = 'trial_expired'
-            console.log('[Accounting] Access DENIED for organizer')
+            console.log('[Accounting] Access DENIED for organizer - trial expired')
           }
           
-          // For organizers, use their organizer ID as the tenant_id for self-transactions
+          // Auto-assign organizer ID for transactions
           if (organizer?.id) {
-            setNewTransaction(prev => ({ ...prev, tenant_id: organizer.id.toString() }))
+            console.log('[Accounting] Auto-assigned organizer ID:', organizer.id)
           }
         }
 
@@ -465,18 +479,89 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         }
       }
 
-      // Get organizer ID for organizers
-      let tenantId = newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null
+      // Auto-resolve entity ID based on role (Akaun is for own use only)
+      let entityId: number | null = null
       
-      if (userRole === 'organizer' && !tenantId && user) {
-        // For organizers, auto-get their organizer ID
+      // First, check if user already has a tenant record
+      const { data: existingTenant } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+      
+      if (existingTenant?.id) {
+        entityId = existingTenant.id
+      } else if (userRole === 'organizer' && user) {
+        // For organizers without tenant record, create one
         const { data: org } = await supabase
           .from('organizers')
-          .select('id')
+          .select('id, name, email, organizer_code')
           .eq('profile_id', user.id)
           .maybeSingle()
-        if (org?.id) {
-          tenantId = org.id
+        
+        if (org) {
+          // Create a tenant record for this organizer
+          const { data: newTenant, error: createError } = await supabase
+            .from('tenants')
+            .insert({
+              profile_id: user.id,
+              full_name: org.name,
+              business_name: org.name,
+              email: org.email || user.email,
+              organizer_code: org.organizer_code,
+              status: 'active',
+              accounting_status: 'active'
+            })
+            .select('id')
+            .single()
+          
+          if (createError) {
+            console.error('[Accounting] Error creating tenant for organizer:', createError)
+          } else if (newTenant) {
+            entityId = newTenant.id
+          }
+        }
+      } else if (userRole === 'tenant' && user) {
+        // For tenants, this shouldn't happen (no tenant record)
+        toast.error("Ralat: Rekod peniaga tidak dijumpai")
+        setIsSaving(false)
+        return
+      } else if (userRole === 'admin' || userRole === 'superadmin' || userRole === 'staff') {
+        // For admin/staff, create a tenant record if needed
+        const { data: adminData } = await supabase
+          .from('admins')
+          .select('full_name, email, organizer_code')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        const { data: staffData } = await supabase
+          .from('staff')
+          .select('full_name, email, organizer_code')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        const userData = adminData || staffData
+        
+        if (userData) {
+          const { data: newTenant, error: createError } = await supabase
+            .from('tenants')
+            .insert({
+              profile_id: user.id,
+              full_name: userData.full_name || user.email?.split('@')[0],
+              business_name: userData.full_name || user.email?.split('@')[0],
+              email: userData.email || user.email,
+              organizer_code: userData.organizer_code,
+              status: 'active',
+              accounting_status: 'active'
+            })
+            .select('id')
+            .single()
+          
+          if (createError) {
+            console.error('[Accounting] Error creating tenant for admin/staff:', createError)
+          } else if (newTenant) {
+            entityId = newTenant.id
+          }
         }
       }
 
@@ -486,14 +571,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         amount: amount,
         type: newTransaction.type,
         status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
-        tenant_id: tenantId,
+        tenant_id: entityId,
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
 
-      // Validate tenant_id is selected
+      // Validate entity ID is resolved
       if (!txData.tenant_id) {
-        toast.error("Sila pilih Peniaga")
+        toast.error("Ralat: Tidak dapat mengenal pasti entiti pengguna. Sila cuba lagi.")
         setIsSaving(false)
         return
       }

@@ -31,30 +31,51 @@ export async function checkAkaunAccess(user: any, role: string): Promise<AccessS
         return { hasAccess: true, reason: 'admin_override' }
     }
 
-    // Calculate trial days in parallel with other operations
-    const trialDaysPromise = getCachedTrialPeriod()
+    const supabase = createClient()
+
+    // For organizers: check accounting_status first (db source of truth)
+    if (role === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+        
+        // If accounting is active, grant access immediately
+        if (organizer?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'subscription_active' }
+        }
+    }
+
+    // Calculate trial days - ALWAYS fetch fresh created_at from profiles
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single()
     
-    const createdAt = new Date(user.created_at).getTime()
+    const trialDays = await getCachedTrialPeriod()
+    
+    // Use fresh created_at from database, not stale user.created_at
+    const createdAt = new Date(profile?.created_at || user.created_at).getTime()
     const now = Date.now()
     const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
     
-    const trialDays = await trialDaysPromise
     const remaining = Math.max(0, trialDays - diffDays)
 
     if (remaining > 0) {
         return { hasAccess: true, reason: 'trial_active', daysRemaining: remaining }
     }
 
-    // Trial expired - check subscription (only for tenant/organizer)
+    // Trial expired - check subscription
     if (role === 'tenant' || role === 'organizer') {
-        const supabase = createClient()
         const table = role === 'tenant' ? 'tenants' : 'organizers'
         
         const { data: entity } = await supabase
             .from(table)
             .select('id')
             .eq('profile_id', user.id)
-            .maybeSingle() // Use maybeSingle instead of single to avoid errors
+            .maybeSingle()
 
         if (entity?.id) {
             const hasSub = await checkSubscriptionStatus(entity.id)

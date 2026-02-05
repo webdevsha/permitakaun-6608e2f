@@ -54,27 +54,66 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
       
       const supabase = createClient()
       
-      // Try to get business name from tenant profile
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('business_name')
-        .eq('profile_id', user.id)
-        .maybeSingle()
+      // Fetch based on role
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
       
-      if (tenant?.business_name) {
-        setBusinessName(tenant.business_name)
-        return
-      }
+      const userRole = userProfile?.role
       
-      // Try organizer profile if no tenant
-      const { data: organizer } = await supabase
-        .from('organizers')
-        .select('business_name')
-        .eq('profile_id', user.id)
-        .maybeSingle()
-      
-      if (organizer?.business_name) {
-        setBusinessName(organizer.business_name)
+      if (userRole === 'organizer') {
+        // For organizers, use 'name' as business name
+        const { data: organizer } = await supabase
+          .from('organizers')
+          .select('name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        if (organizer?.name) {
+          setBusinessName(organizer.name)
+          return
+        }
+      } else if (userRole === 'admin') {
+        // For admins, use full_name from admins table
+        const { data: admin } = await supabase
+          .from('admins')
+          .select('full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        if (admin?.full_name) {
+          setBusinessName(admin.full_name)
+          return
+        }
+      } else if (userRole === 'staff') {
+        // For staff, use full_name from staff table
+        const { data: staff } = await supabase
+          .from('staff')
+          .select('full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        if (staff?.full_name) {
+          setBusinessName(staff.full_name)
+          return
+        }
+      } else {
+        // For tenants, use business_name
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('business_name, full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        
+        if (tenant?.business_name) {
+          setBusinessName(tenant.business_name)
+          return
+        } else if (tenant?.full_name) {
+          setBusinessName(tenant.full_name)
+          return
+        }
       }
     }
     

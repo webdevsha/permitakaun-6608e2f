@@ -578,35 +578,82 @@ export async function fetchSettingsData() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { profile: null, backups: [], role: null, trialPeriodDays: 14, user: null }
 
-    const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const { data: userProfile } = await supabase.from('profiles').select('role, email, full_name').eq('id', user.id).single()
     const role = userProfile?.role
 
-    let profile: any = null
+    let profile: any = {
+        // Base data from auth/profiles
+        profile_id: user.id,
+        email: userProfile?.email || user.email,
+        full_name: userProfile?.full_name || user.user_metadata?.full_name || '',
+    }
 
-    // Fetch profile data based on role
+    // Fetch role-specific profile data
     if (role === 'organizer') {
         // For organizers, fetch from organizers table
         const { data: org } = await supabase.from('organizers').select('*').eq('profile_id', user.id).maybeSingle()
         if (org) {
-            // Map organizer fields to match tenant structure
             profile = {
+                ...profile,
                 id: org.id,
-                profile_id: org.profile_id,
-                full_name: org.name,  // Use organizer name as full_name
-                business_name: org.name,  // Also use as business_name
-                email: org.email,
+                business_name: org.name,  // Organizer name = business name
                 organizer_code: org.organizer_code,
                 status: org.status,
                 accounting_status: org.accounting_status,
-                // Organizer-specific fields
+                phone_number: org.phone,
+                address: org.address,
                 is_organizer: true,
-                name: org.name,
+            }
+        }
+    } else if (role === 'admin') {
+        // For admins, fetch from admins table
+        const { data: admin } = await supabase.from('admins').select('*').eq('profile_id', user.id).maybeSingle()
+        if (admin) {
+            profile = {
+                ...profile,
+                id: admin.id,
+                business_name: admin.full_name,  // Use full name as business name for admins
+                organizer_code: admin.organizer_code,
+                status: admin.is_active ? 'active' : 'inactive',
+                phone_number: admin.phone_number,
+                is_admin: true,
+            }
+        }
+    } else if (role === 'staff') {
+        // For staff, fetch from staff table
+        const { data: staff } = await supabase.from('staff').select('*').eq('profile_id', user.id).maybeSingle()
+        if (staff) {
+            profile = {
+                ...profile,
+                id: staff.id,
+                business_name: staff.full_name,  // Use full name as business name for staff
+                organizer_code: staff.organizer_code,
+                status: staff.is_active ? 'active' : 'inactive',
+                phone_number: staff.phone_number,
+                is_staff: true,
             }
         }
     } else {
         // For tenants and others, fetch from tenants table
         const { data: tenant } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
-        profile = tenant
+        if (tenant) {
+            profile = {
+                ...profile,
+                id: tenant.id,
+                business_name: tenant.business_name || tenant.full_name,
+                full_name: tenant.full_name || profile.full_name,
+                phone_number: tenant.phone_number,
+                ic_number: tenant.ic_number,
+                ssm_number: tenant.ssm_number,
+                address: tenant.address,
+                status: tenant.status,
+                accounting_status: tenant.accounting_status,
+                profile_image_url: tenant.profile_image_url,
+                ssm_file_url: tenant.ssm_file_url,
+                food_handling_cert_url: tenant.food_handling_cert_url,
+                other_docs_url: tenant.other_docs_url,
+            }
+        }
     }
 
     let backups: any[] = []

@@ -6,6 +6,7 @@ import { useAuth } from "@/components/providers/auth-provider"
 import { checkAkaunAccess } from "@/utils/access-control"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
+import { createClient } from "@/utils/supabase/client"
 
 import { User } from "@supabase/supabase-js"
 import { Profile } from "@/types/supabase-types"
@@ -54,8 +55,45 @@ export default function DashboardLayoutClient({
             // ONLY enforce subscription for Accounting features
             if (!pathname.startsWith('/dashboard/accounting')) return
 
-            // Admin/Staff/Organizer Override - Let them access, module will check internally
-            if (currentRole === 'admin' || currentRole === 'staff' || currentRole === 'superadmin' || currentRole === 'organizer') return
+            // Admin/Staff/Superadmin Override - Let them access
+            if (currentRole === 'admin' || currentRole === 'staff' || currentRole === 'superadmin') return
+            
+            // Organizers: Check fresh data from DB (don't use cached user object)
+            if (currentRole === 'organizer') {
+                const supabase = createClient()
+                const { data: org } = await supabase
+                    .from('organizers')
+                    .select('accounting_status')
+                    .eq('profile_id', currentUser.id)
+                    .maybeSingle()
+                
+                // If accounting active, allow access
+                if (org?.accounting_status === 'active') return
+                
+                // Otherwise check trial with fresh created_at
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('created_at')
+                    .eq('id', currentUser.id)
+                    .single()
+                
+                const { data: settings } = await supabase.from('system_settings').select('trial_period_days').single()
+                const trialDays = settings?.trial_period_days || 14
+                
+                const createdAt = new Date(profile?.created_at || currentUser.created_at).getTime()
+                const diffDays = Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24))
+                const remaining = trialDays - diffDays
+                
+                if (remaining > 0) return // Trial still active
+                
+                // Trial expired - redirect
+                toast.error("Tempoh percubaan anda telah tamat. Sila langgan untuk meneruskan akses.", {
+                    duration: 5000,
+                    id: 'expired-toast'
+                })
+                router.push('/dashboard/subscription')
+                return
+            }
 
             try {
                 const { hasAccess, reason } = await checkAkaunAccess(currentUser, currentRole || 'tenant')
