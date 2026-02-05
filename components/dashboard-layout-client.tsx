@@ -54,8 +54,8 @@ export default function DashboardLayoutClient({
             // ONLY enforce subscription for Accounting features
             if (!pathname.startsWith('/dashboard/accounting')) return
 
-            // Admin Override (Double safety)
-            if (currentRole === 'admin' || currentRole === 'staff' || currentRole === 'superadmin') return
+            // Admin/Staff/Organizer Override - Let them access, module will check internally
+            if (currentRole === 'admin' || currentRole === 'staff' || currentRole === 'superadmin' || currentRole === 'organizer') return
 
             try {
                 const { hasAccess, reason } = await checkAkaunAccess(currentUser, currentRole || 'tenant')

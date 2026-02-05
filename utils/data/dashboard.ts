@@ -72,9 +72,11 @@ export async function fetchDashboardData() {
 
         // Filter out organizers and admins from tenants list
         // They should NOT appear under "Peniaga & Sewa"
-        const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code')
+        const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code, name')
         const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
         const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
+        // Create a map of organizer_code to name
+        const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
         
         // Also get admin/staff profiles to exclude
         const { data: adminProfiles } = await supabase.from('profiles').select('id').in('role', ['admin', 'superadmin', 'staff'])
@@ -96,8 +98,6 @@ export async function fetchDashboardData() {
                 if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) return false
                 // Exclude if profile is admin/staff
                 if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) return false
-                // Exclude if the tenant's organizer_code matches an organizer (indicates they're an organizer record)
-                if (tenant.organizer_code && organizerCodes.has(tenant.organizer_code) && !tenant.business_name) return false
                 return true
             })
 
@@ -116,6 +116,7 @@ export async function fetchDashboardData() {
                 return {
                     ...tenant,
                     locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
+                    organizerName: organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code || '-',
                     lastPaymentDate: lastPayment?.payment_date
                         ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
                         : "Tiada Rekod",
@@ -159,8 +160,10 @@ export async function fetchDashboardData() {
         let orgId = null
 
         if (role === 'organizer') {
-            // Organizer table uses 'id' as the FK to profiles (same UUID)
-            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('id', user.id).single()
+            // Organizer table uses 'profile_id' as the FK to auth.users
+            console.log(`[Dashboard] Organizer lookup: user.id=${user.id}`)
+            const { data: org, error: orgError } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
+            console.log(`[Dashboard] Organizer result:`, org, 'error:', orgError)
             orgCode = org?.organizer_code
             orgId = org?.id
 
@@ -168,13 +171,16 @@ export async function fetchDashboardData() {
                 organizers = [org] // Populate for UI Header
             }
         } else if (role === 'staff') {
+            console.log(`[Dashboard] Staff access: orgCode=${orgCode}`)
             if (!orgCode) {
                 // If staff has no link, RETURN EMPTY to prevent leak
+                console.warn(`[Dashboard] Staff has no organizer_code - returning empty`)
                 return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role, userProfile }
             }
 
             // Staff: Find the organizer by code to get their ID (Mirroring Admin's Org)
-            const { data: org } = await supabase.from('organizers').select('id, organizer_code').eq('organizer_code', orgCode).single()
+            const { data: org, error: orgError } = await supabase.from('organizers').select('id, organizer_code').eq('organizer_code', orgCode).single()
+            console.log(`[Dashboard] Staff organizer lookup:`, org, 'error:', orgError)
             orgId = org?.id
 
             if (org) {
@@ -253,9 +259,11 @@ export async function fetchDashboardData() {
                         .order('payment_date', { ascending: false })
 
                     // Filter out organizers/admins from tenants
-                    const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code')
+                    const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code, name')
                     const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
                     const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
+                    // Create a map of organizer_code to name
+                    const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
                     // Get admin/staff IDs from new tables
                     const { data: adminData } = await supabase.from('admins').select('profile_id')
                     const { data: staffData } = await supabase.from('staff').select('profile_id')
@@ -264,11 +272,21 @@ export async function fetchDashboardData() {
                         ...(staffData?.map(s => s.profile_id) || [])
                     ])
 
+                    console.log(`[Dashboard DEBUG] Before filter: ${t.length} tenants`)
+                    console.log(`[Dashboard DEBUG] Organizer profile IDs:`, Array.from(organizerProfileIds))
+                    console.log(`[Dashboard DEBUG] Admin/Staff profile IDs:`, Array.from(adminProfileIds))
                     tenants = t
                         .filter(tenant => {
-                            if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) return false
-                            if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) return false
-                            if (tenant.organizer_code && organizerCodes.has(tenant.organizer_code) && !tenant.business_name) return false
+                            // Filter out records where a profile is an organizer (not a tenant)
+                            if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) {
+                                console.log(`[Dashboard DEBUG] Filtered out ${tenant.full_name} - matches organizer profile`)
+                                return false
+                            }
+                            // Filter out records where a profile is admin/staff (not a tenant)
+                            if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) {
+                                console.log(`[Dashboard DEBUG] Filtered out ${tenant.full_name} - matches admin/staff profile`)
+                                return false
+                            }
                             return true
                         })
                         .map(tenant => {
@@ -282,7 +300,8 @@ export async function fetchDashboardData() {
                                     ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
                                     : "Tiada Rekod",
                                 lastPaymentAmount: lastPayment?.amount || 0,
-                                paymentStatus
+                                paymentStatus,
+                                organizerName: tenant.organizer_code || '-'
                             }
                         })
                 }
@@ -559,11 +578,39 @@ export async function fetchSettingsData() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { profile: null, backups: [], role: null, trialPeriodDays: 14, user: null }
 
-    const { data: profile } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
     const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const role = userProfile?.role
+
+    let profile: any = null
+
+    // Fetch profile data based on role
+    if (role === 'organizer') {
+        // For organizers, fetch from organizers table
+        const { data: org } = await supabase.from('organizers').select('*').eq('profile_id', user.id).maybeSingle()
+        if (org) {
+            // Map organizer fields to match tenant structure
+            profile = {
+                id: org.id,
+                profile_id: org.profile_id,
+                full_name: org.name,  // Use organizer name as full_name
+                business_name: org.name,  // Also use as business_name
+                email: org.email,
+                organizer_code: org.organizer_code,
+                status: org.status,
+                accounting_status: org.accounting_status,
+                // Organizer-specific fields
+                is_organizer: true,
+                name: org.name,
+            }
+        }
+    } else {
+        // For tenants and others, fetch from tenants table
+        const { data: tenant } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
+        profile = tenant
+    }
 
     let backups: any[] = []
-    if (['admin', 'superadmin', 'staff'].includes(userProfile?.role || '')) {
+    if (['admin', 'superadmin', 'staff'].includes(role || '')) {
         const { data: b } = await supabase.storage.from('backups').list('', { sortBy: { column: 'created_at', order: 'desc' } })
         if (b) backups = b
     }
@@ -571,5 +618,5 @@ export async function fetchSettingsData() {
     const { data: systemSettings } = await supabase.from('system_settings').select('trial_period_days').single()
     const trialPeriodDays = systemSettings?.trial_period_days || 14
 
-    return { profile, backups, role: userProfile?.role, trialPeriodDays, user }
+    return { profile, backups, role, trialPeriodDays, user }
 }

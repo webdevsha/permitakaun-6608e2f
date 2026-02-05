@@ -176,31 +176,43 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             denyReason = 'trial_expired'
           }
         } else if (currentRole === 'organizer') {
+          console.log('[Accounting] Organizer access check for user:', user.id)
+          
           // Organizers: Check organizer status or trial
-          const { data: organizer } = await supabase
+          const { data: organizer, error: orgError } = await supabase
             .from('organizers')
-            .select('accounting_status')
-            .eq('id', user.id)
+            .select('accounting_status, id')
+            .eq('profile_id', user.id)
             .maybeSingle()
+          
+          console.log('[Accounting] Organizer data:', organizer, 'error:', orgError)
 
-          if (organizer && organizer.accounting_status === 'active') {
-            accessGranted = true
-          } else {
-            // Trial check
-            const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
-            if (profile) {
-              const diffDays = Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
-              if (diffDays > settings.trial_duration_days) {
-                accessGranted = false
-                denyReason = 'trial_expired'
-              }
-            }
+          // Check if accounting is active for this organizer
+          const accountingActive = organizer?.accounting_status === 'active'
+          console.log('[Accounting] Accounting active:', accountingActive, 'status:', organizer?.accounting_status)
+          
+          // Trial check - use profile created_at
+          let daysRemaining = 0
+          const { data: profile } = await supabase.from('profiles').select('created_at').eq('id', user.id).single()
+          if (profile) {
+            const diffDays = Math.ceil((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+            daysRemaining = settings.trial_duration_days - diffDays
+            console.log('[Accounting] Trial check - diffDays:', diffDays, 'daysRemaining:', daysRemaining)
           }
-
-          // Auto-assign self-tenant for organizers
-          if (tenants) {
-            const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
-            if (selfTenant) setNewTransaction(prev => ({ ...prev, tenant_id: selfTenant.id }))
+          
+          // Grant access if either accounting is active OR still in trial
+          if (accountingActive || daysRemaining > 0) {
+            accessGranted = true
+            console.log('[Accounting] Access GRANTED for organizer')
+          } else {
+            accessGranted = false
+            denyReason = 'trial_expired'
+            console.log('[Accounting] Access DENIED for organizer')
+          }
+          
+          // For organizers, use their organizer ID as the tenant_id for self-transactions
+          if (organizer?.id) {
+            setNewTransaction(prev => ({ ...prev, tenant_id: organizer.id.toString() }))
           }
         }
 
@@ -453,28 +465,35 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         }
       }
 
+      // Get organizer ID for organizers
+      let tenantId = newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null
+      
+      if (userRole === 'organizer' && !tenantId && user) {
+        // For organizers, auto-get their organizer ID
+        const { data: org } = await supabase
+          .from('organizers')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (org?.id) {
+          tenantId = org.id
+        }
+      }
+
       const txData = {
         description: newTransaction.description,
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
         status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
-        tenant_id: newTransaction.tenant_id ? parseInt(newTransaction.tenant_id) : null,
+        tenant_id: tenantId,
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
 
-      // Just-In-Time: Auto-resolve Tenant ID if missing (for Organizers/Admins)
-      if (!txData.tenant_id && (userRole === 'organizer' || userRole === 'admin') && tenants && user) {
-        const selfTenant = tenants.find((t: any) => t.profile_id === user.id)
-        if (selfTenant) {
-          txData.tenant_id = selfTenant.id
-        }
-      }
-
+      // Validate tenant_id is selected
       if (!txData.tenant_id) {
-        // If still missing, show error
-        toast.error("Sila pilih Peniaga/Tenant (Self-Tenant Not Found)")
+        toast.error("Sila pilih Peniaga")
         setIsSaving(false)
         return
       }
@@ -615,9 +634,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   />
                 </div>
 
-                {/* Tenant Selection for Admin/Organizer */}
-                {/* Tenant Selection REMOVED - Auto-assigned to Self */}
-
+                {/* Transaction Type and Amount */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="type">Jenis</Label>
