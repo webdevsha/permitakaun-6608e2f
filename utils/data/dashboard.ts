@@ -12,7 +12,24 @@ export async function fetchDashboardData() {
 
     // Use shared role determination logic for consistency
     const role = determineUserRole(profile, user.email)
-    const organizerCode = profile?.organizer_code
+    
+    // Get organizer_code from appropriate table based on role
+    let organizerCode = profile?.organizer_code
+    
+    // For staff, get organizer_code from staff table (mirrors admin's data)
+    if (role === 'staff') {
+        const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user.id).single()
+        if (staffData?.organizer_code) {
+            organizerCode = staffData.organizer_code
+        }
+    }
+    // For admin, get organizer_code from admins table
+    else if (role === 'admin') {
+        const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user.id).single()
+        if (adminData?.organizer_code) {
+            organizerCode = adminData.organizer_code
+        }
+    }
 
     // Set userProfile with basic info from profiles table
     let userProfile: any = profile ? {
@@ -239,8 +256,13 @@ export async function fetchDashboardData() {
                     const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code')
                     const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
                     const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
-                    const { data: adminProfiles } = await supabase.from('profiles').select('id').in('role', ['admin', 'superadmin', 'staff'])
-                    const adminProfileIds = new Set(adminProfiles?.map(p => p.id) || [])
+                    // Get admin/staff IDs from new tables
+                    const { data: adminData } = await supabase.from('admins').select('profile_id')
+                    const { data: staffData } = await supabase.from('staff').select('profile_id')
+                    const adminProfileIds = new Set([
+                        ...(adminData?.map(a => a.profile_id) || []),
+                        ...(staffData?.map(s => s.profile_id) || [])
+                    ])
 
                     tenants = t
                         .filter(tenant => {

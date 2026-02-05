@@ -39,7 +39,7 @@ import { logAction } from "@/utils/logging"
 const fetchOrganizers = async () => {
   const supabase = createClient()
   
-  // Get current user's profile to determine organizer_code
+  // Get current user's profile to determine role
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
   
@@ -54,12 +54,20 @@ const fetchOrganizers = async () => {
     .select('*, locations(*)')
     .order('created_at', { ascending: false })
   
-  // For staff and organizers, filter by their organizer_code
-  if (profile?.role === 'staff' || profile?.role === 'organizer') {
-    if (profile?.organizer_code) {
-      query = query.eq('organizer_code', profile.organizer_code)
+  // For organizers, filter to only show their own record (by profile_id)
+  if (profile?.role === 'organizer') {
+    query = query.eq('profile_id', user.id)
+  }
+  // For staff, use the staff table to get organizer_code
+  else if (profile?.role === 'staff') {
+    const { data: staffData } = await supabase
+      .from('staff')
+      .select('organizer_code')
+      .eq('profile_id', user.id)
+      .single()
+    if (staffData?.organizer_code) {
+      query = query.eq('organizer_code', staffData.organizer_code)
     } else {
-      // If no organizer_code, return empty (they shouldn't see any organizers)
       return []
     }
   }

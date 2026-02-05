@@ -259,19 +259,20 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     
     // For staff, only show users from their organization
     if (role === 'staff') {
-      const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user?.id).single()
-      console.log('[Settings] Staff fetchUsers - organizer_code:', profile?.organizer_code)
-      if (profile?.organizer_code) {
+      // Get organizer_code from staff table (not profiles)
+      const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user?.id).single()
+      console.log('[Settings] Staff fetchUsers - organizer_code from staff table:', staffData?.organizer_code)
+      if (staffData?.organizer_code) {
         const { data } = await supabase
           .from('profiles')
           .select('*')
-          .eq('organizer_code', profile.organizer_code)
+          .eq('organizer_code', staffData.organizer_code)
           .neq('role', 'superadmin')
           .order('created_at', { ascending: false })
         console.log('[Settings] Staff users fetched:', data?.length || 0)
         if (data) setUsersList(data)
       } else {
-        console.warn('[Settings] Staff has no organizer_code - showing empty list')
+        console.warn('[Settings] Staff has no organizer_code in staff table - showing empty list')
         setUsersList([])
       }
       setLoadingUsers(false)
@@ -354,8 +355,8 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         return
       }
 
-      // Fetch current staff count for this admin/organizer
-      let staffQuery = supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'staff')
+      // Fetch current staff count from staff table (not profiles)
+      let staffQuery = supabase.from('staff').select('id', { count: 'exact' })
       
       if (role === 'organizer') {
         // Get organizer code
@@ -365,11 +366,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           setUserOrgCode(org.organizer_code)
         }
       } else if (role === 'admin') {
-        // For admin, check by their organizer_code or show all staff they manage
-        const { data: profile } = await supabase.from('profiles').select('organizer_code').eq('id', user.id).single()
-        if (profile?.organizer_code) {
-          staffQuery = staffQuery.eq('organizer_code', profile.organizer_code)
-          setUserOrgCode(profile.organizer_code)
+        // For admin, get organizer_code from admins table
+        const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user.id).single()
+        if (adminData?.organizer_code) {
+          staffQuery = staffQuery.eq('organizer_code', adminData.organizer_code)
+          setUserOrgCode(adminData.organizer_code)
         }
       }
       
