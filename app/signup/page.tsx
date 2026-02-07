@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { Loader2, ArrowLeft, Upload, FileText } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { sendWelcomeEmailAction } from "@/actions/email"
 
 export default function SignupPage() {
 
@@ -63,6 +64,9 @@ export default function SignupPage() {
       if (authError) throw authError
 
       if (authData.user) {
+        // Send Welcome Email
+        await sendWelcomeEmailAction(formData.email, formData.fullName)
+
         toast.success("Pendaftaran berjaya! Akaun anda sedang menunggu pengesahan admin.")
         router.push("/")
       }
