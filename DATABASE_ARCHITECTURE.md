@@ -73,6 +73,69 @@ Admin (admin@kumim.my)
 3. **Tenant → Organizer**: `tenants.organizer_code` = `organizers.organizer_code`
 4. **Tenant → Location**: via `tenant_locations` table
 
+## Akaun (Transactions) Architecture
+
+Each role has their own transaction table for clear financial tracking:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        AKaun TRANSACTION TABLES                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────┐                                               │
+│   │  admin_transactions │  Platform admin financial records             │
+│   │  - admin_id (FK)    │                                               │
+│   │  - reference_type   │  'organizer' | 'tenant' | 'platform'          │
+│   └─────────────────────┘                                               │
+│                                                                         │
+│   ┌─────────────────────────┐                                           │
+│   │  organizer_transactions │  Organizer's Akaun (INCOME focused)       │
+│   │  - organizer_id (FK)    │                                           │
+│   │  - tenant_id (FK)       │  Link to paying tenant                    │
+│   │  - type: 'income'       │  Rent from tenants = INCOME               │
+│   │  - type: 'expense'      │  Org expenses                             │
+│   └─────────────────────────┘                                           │
+│                                                                         │
+│   ┌─────────────────────┐                                               │
+│   │  tenant_transactions│  Tenant's Akaun (EXPENSE focused)             │
+│   │  - tenant_id (FK)   │                                           │
+│   │  - organizer_id(FK) │  Link to organizer                          │
+│   │  - type: 'expense'  │  Rent payments = EXPENSE                    │
+│   │  - type: 'income'   │  Refunds                                    │
+│   │  - is_rent_payment  │  TRUE for rental payments                   │
+│   └─────────────────────┘                                               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Rent Payment Flow Example
+
+When Tenant "Ahmad" pays RM 100 rent to Organizer "Hazman Enterprise":
+
+```
+Ahmad pays RM 100
+      │
+      ├──► tenant_transactions (Ahmad's Akaun)
+      │      type: 'expense'
+      │      amount: 100
+      │      is_rent_payment: true
+      │      status: 'approved'
+      │
+      └──► organizer_transactions (Hazman's Akaun)
+             type: 'income'
+             amount: 100
+             is_auto_generated: true
+             status: 'approved'
+```
+
+This ensures:
+- ✅ Ahmad sees RM 100 expense in his Akaun
+- ✅ Hazman sees RM 100 income in his Akaun
+- ✅ Clear separation - no confusion about transaction types
+- ✅ Proper RLS - each sees only their own records
+
+See `AKAUN_TRANSACTIONS.md` for full details.
+
 ## SQL Fix
 
 Run: `sql/fix_database_architecture.sql`
