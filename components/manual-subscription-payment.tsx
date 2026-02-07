@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { useAuth } from "@/components/providers/auth-provider"
 
 interface ManualSubscriptionPaymentProps {
@@ -112,6 +113,11 @@ export function ManualSubscriptionPayment({
       return
     }
     
+    if (!user?.id) {
+      toast.error("Sesi tamat. Sila log masuk semula.")
+      return
+    }
+    
     setLoading(true)
     
     try {
@@ -121,6 +127,14 @@ export function ManualSubscriptionPayment({
         receiptUrl = await uploadReceipt()
       }
       
+      console.log("[Manual Payment] Starting submission:", {
+        userId: user.id,
+        userEmail: user.email,
+        role,
+        planName,
+        price
+      })
+      
       // 1. Create expense transaction for tenant/organizer (Cash Out)
       const expenseData = {
         description: `Bayaran Langganan - ${planName}`,
@@ -128,7 +142,7 @@ export function ManualSubscriptionPayment({
         type: 'expense',
         category: 'Langganan',
         date: new Date().toISOString().split('T')[0],
-        status: 'pending', // Pending until admin verifies
+        status: 'pending',
         payment_method: 'bank_transfer',
         payment_reference: transactionId,
         receipt_url: receiptUrl,
@@ -138,55 +152,99 @@ export function ManualSubscriptionPayment({
           bank_name: bankName,
           transaction_id: transactionId,
           is_subscription: true,
-          user_id: user?.id,
-          user_email: user?.email,
+          user_id: user.id,
+          user_email: user.email,
           submitted_at: new Date().toISOString()
         }
       }
       
       let expenseResult
-      if (role === 'tenant') {
+      let userRole = role
+      
+      // If role is not available from auth context, try to determine from database
+      if (!userRole) {
+        console.log("[Manual Payment] Role not in auth context, fetching from profiles...")
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+        userRole = profile?.role
+        console.log("[Manual Payment] Fetched role:", userRole)
+      }
+      
+      if (userRole === 'tenant') {
+        console.log("[Manual Payment] Creating tenant expense transaction...")
         // Get tenant ID
-        const { data: tenant } = await supabase
+        const { data: tenant, error: tenantError } = await supabase
           .from('tenants')
           .select('id')
-          .eq('profile_id', user?.id)
+          .eq('profile_id', user.id)
           .single()
+        
+        if (tenantError) {
+          console.error("[Manual Payment] Error fetching tenant:", tenantError)
+        }
         
         if (tenant) {
           expenseResult = await supabase
             .from('tenant_transactions')
             .insert({ ...expenseData, tenant_id: tenant.id })
+          
+          if (expenseResult.error) {
+            console.error("[Manual Payment] Error inserting tenant transaction:", expenseResult.error)
+            throw new Error("Gagal menyimpan rekod perbelanjaan: " + expenseResult.error.message)
+          }
+          console.log("[Manual Payment] Tenant expense created successfully")
+        } else {
+          console.error("[Manual Payment] Tenant not found for user:", user.id)
+          throw new Error("Rekod peniaga tidak dijumpai")
         }
-      } else if (role === 'organizer') {
+      } else if (userRole === 'organizer') {
+        console.log("[Manual Payment] Creating organizer expense transaction...")
         // Get organizer ID
-        const { data: organizer } = await supabase
+        const { data: organizer, error: orgError } = await supabase
           .from('organizers')
           .select('id')
-          .eq('profile_id', user?.id)
+          .eq('profile_id', user.id)
           .single()
+        
+        if (orgError) {
+          console.error("[Manual Payment] Error fetching organizer:", orgError)
+        }
         
         if (organizer) {
           expenseResult = await supabase
             .from('organizer_transactions')
             .insert({ ...expenseData, organizer_id: organizer.id })
+          
+          if (expenseResult.error) {
+            console.error("[Manual Payment] Error inserting organizer transaction:", expenseResult.error)
+            throw new Error("Gagal menyimpan rekod perbelanjaan: " + expenseResult.error.message)
+          }
+          console.log("[Manual Payment] Organizer expense created successfully")
+        } else {
+          console.error("[Manual Payment] Organizer not found for user:", user.id)
+          throw new Error("Rekod penganjur tidak dijumpai")
         }
+      } else {
+        console.error("[Manual Payment] Unknown role:", userRole)
+        throw new Error(`Peranan tidak dikenali: ${userRole}. Sila log masuk semula.`)
       }
       
-      if (expenseResult?.error) {
-        throw new Error("Gagamenyimpan rekod perbelanjaan")
-      }
+      // 2. Create income transaction for admin (Cash In) - using admin client to bypass RLS
+      console.log("[Manual Payment] Creating admin income transaction...")
+      const adminSupabase = createAdminClient()
       
-      // 2. Create income transaction for admin (Cash In) - pending verification
-      const { error: adminError } = await supabase
+      const { error: adminError } = await adminSupabase
         .from('admin_transactions')
         .insert({
-          description: `Langganan Pelan ${planName} - ${user?.email}`,
+          description: `Langganan Pelan ${planName} - ${user.email}`,
           amount: parseFloat(price),
           type: 'income',
           category: 'Langganan',
           date: new Date().toISOString().split('T')[0],
-          status: 'pending', // Pending until admin verifies
+          status: 'pending',
           payment_method: 'bank_transfer',
           payment_reference: transactionId,
           receipt_url: receiptUrl,
@@ -195,10 +253,10 @@ export function ManualSubscriptionPayment({
             plan_type: planName.toLowerCase(),
             bank_name: bankName,
             transaction_id: transactionId,
-            payer_email: user?.email,
-            payer_name: user?.user_metadata?.full_name || user?.email,
-            user_id: user?.id,
-            user_role: role,
+            payer_email: user.email,
+            payer_name: user.user_metadata?.full_name || user.email,
+            user_id: user.id,
+            user_role: userRole,
             is_manual_payment: true,
             requires_verification: true,
             submitted_at: new Date().toISOString()
@@ -206,15 +264,17 @@ export function ManualSubscriptionPayment({
         })
       
       if (adminError) {
-        console.error("Admin transaction error:", adminError)
-        // Don't fail, just log it
+        console.error("[Manual Payment] Admin transaction error:", adminError)
+        throw new Error("Gagal menyimpan rekod admin: " + adminError.message)
       }
       
-      toast.success("Pembayaran sedang diproses. Admin akan sahkan dalam masa 24 jam.")
+      console.log("[Manual Payment] Admin income created successfully")
+      
+      toast.success("Pembayaran berjaya dihantar. Admin akan sahkan dalam masa 24 jam.")
       onSuccess?.()
       
     } catch (error: any) {
-      console.error("Manual payment error:", error)
+      console.error("[Manual Payment] Error:", error)
       toast.error("Gagal: " + error.message)
     } finally {
       setLoading(false)

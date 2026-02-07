@@ -44,29 +44,55 @@ export function SubscriptionTab() {
     
     setLoading(true)
     try {
-      // Fetch subscription records from admin_transactions
-      // The metadata contains payer_email for subscription payments
-      const { data: adminTxns, error } = await supabase
-        .from('admin_transactions')
-        .select('*')
-        .eq('category', 'Langganan')
-        .eq('type', 'income')
-        .eq('status', 'completed')
-        .order('date', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching admin transactions:', error)
+      // Fetch user's own subscription PAYMENTS (Cash Out - expense) from their transactions
+      // This shows what THEY paid for their subscription
+      let userPayments: any[] = []
+      
+      if (role === 'tenant') {
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('profile_id', user.id)
+          .single()
+        
+        if (tenant) {
+          const { data: tenantTxns } = await supabase
+            .from('tenant_transactions')
+            .select('*')
+            .eq('tenant_id', tenant.id)
+            .eq('category', 'Langganan')
+            .eq('type', 'expense')
+            .order('date', { ascending: false })
+          
+          if (tenantTxns) {
+            userPayments = tenantTxns
+          }
+        }
+      } else if (role === 'organizer') {
+        const { data: organizer } = await supabase
+          .from('organizers')
+          .select('id')
+          .eq('profile_id', user.id)
+          .single()
+        
+        if (organizer) {
+          const { data: orgTxns } = await supabase
+            .from('organizer_transactions')
+            .select('*')
+            .eq('organizer_id', organizer.id)
+            .eq('category', 'Langganan')
+            .eq('type', 'expense')
+            .order('date', { ascending: false })
+          
+          if (orgTxns) {
+            userPayments = orgTxns
+          }
+        }
       }
       
-      // Filter transactions where metadata.payer_email matches current user's email
-      // or where metadata.user_id matches current user's id
-      const userSubscriptions = (adminTxns || []).filter((tx: any) => {
-        const metadata = tx.metadata || {}
-        return metadata.payer_email === user.email || metadata.user_id === user.id
-      })
-      
-      if (userSubscriptions.length > 0) {
-        setSubscriptions(userSubscriptions.map((t: any) => ({
+      // Map user payments to subscription records
+      if (userPayments.length > 0) {
+        setSubscriptions(userPayments.map((t: any) => ({
           id: t.id,
           amount: t.amount,
           date: t.date,
@@ -77,8 +103,15 @@ export function SubscriptionTab() {
           created_at: t.created_at
         })))
         
-        calculateNextPayment(userSubscriptions[0].date)
-        setHasActiveSubscription(true)
+        // Calculate next payment based on the most recent payment
+        const latestPayment = userPayments[0]
+        calculateNextPayment(latestPayment.date)
+        
+        // Check if subscription is active (has at least one completed payment)
+        const hasCompletedPayment = userPayments.some((p: any) => 
+          p.status === 'completed' || p.status === 'approved'
+        )
+        setHasActiveSubscription(hasCompletedPayment || latestPayment.status === 'pending')
       } else {
         // Check for active subscription in subscriptions table (for tenants)
         if (role === 'tenant') {
