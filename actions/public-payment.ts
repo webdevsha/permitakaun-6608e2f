@@ -1,7 +1,6 @@
 'use server'
 
-import { createClient } from "@/utils/supabase/server"
-import { cookies } from "next/headers"
+import { createAdminClient } from "@/utils/supabase/admin"
 
 export async function createPublicPaymentTransaction(data: {
     description: string
@@ -24,7 +23,8 @@ export async function createPublicPaymentTransaction(data: {
     }
 }) {
     try {
-        const supabase = await createClient()
+        // Use admin client to bypass RLS for public payments
+        const supabase = createAdminClient()
         
         const { data: transaction, error } = await supabase
             .from('organizer_transactions')
@@ -61,7 +61,7 @@ export async function updatePaymentTransactionWithRef(
     receiptUrl: string
 ) {
     try {
-        const supabase = await createClient()
+        const supabase = createAdminClient()
         
         const { error } = await supabase
             .from('organizer_transactions')

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { sendPaymentReceiptAction } from "@/actions/email"
 
 export async function POST(req: NextRequest) {
-    const supabase = await createClient()
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient()
 
     try {
         const formData = await req.formData()
@@ -19,15 +20,18 @@ export async function POST(req: NextRequest) {
         console.log("[Payment Callback] Received:", { id, paid, state, amount, email })
 
         if (paid === 'true' && state === 'paid') {
+            const billplzId = id?.toString()
+            
             // Try to update tenant_payments first (for logged-in tenant payments)
             const { data: payment, error: tpError } = await supabase
                 .from('tenant_payments')
                 .update({
                     status: 'approved',
-                    billplz_id: id?.toString(),
+                    billplz_id: billplzId,
+                    receipt_url: receipt_url?.toString(),
                     updated_at: new Date().toISOString()
                 })
-                .eq('billplz_id', id)
+                .eq('billplz_id', billplzId)
                 .select('*, tenants(full_name, email)')
                 .single()
 
@@ -55,22 +59,54 @@ export async function POST(req: NextRequest) {
             }
 
             // If not found in tenant_payments, try organizer_transactions (for public payments)
-            const { data: orgTx, error: otError } = await supabase
+            // Try by payment_reference first
+            let orgTxResult = await supabase
                 .from('organizer_transactions')
                 .update({
                     status: 'completed',
-                    payment_reference: id?.toString(),
+                    receipt_url: receipt_url?.toString(),
                     updated_at: new Date().toISOString()
                 })
-                .eq('payment_reference', id)
+                .eq('payment_reference', billplzId)
                 .select('*')
                 .single()
 
-            if (orgTx) {
+            // If not found, try looking for pending transactions that might match
+            if (!orgTxResult.data) {
+                console.log("[Payment Callback] Not found by payment_reference, trying pending transactions...")
+                // Get recent pending transactions and check metadata
+                const { data: pendingTxs } = await supabase
+                    .from('organizer_transactions')
+                    .select('*')
+                    .eq('status', 'pending')
+                    .gte('created_at', new Date(Date.now() - 3600000).toISOString()) // Last hour
+                    .order('created_at', { ascending: false })
+                    .limit(10)
+
+                if (pendingTxs && pendingTxs.length > 0) {
+                    // Update the most recent pending transaction
+                    const recentTx = pendingTxs[0]
+                    orgTxResult = await supabase
+                        .from('organizer_transactions')
+                        .update({
+                            status: 'completed',
+                            payment_reference: billplzId,
+                            receipt_url: receipt_url?.toString(),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', recentTx.id)
+                        .select('*')
+                        .single()
+                    
+                    console.log("[Payment Callback] Updated recent pending transaction:", recentTx.id)
+                }
+            }
+
+            if (orgTxResult.data) {
                 console.log("[Payment Callback] Updated organizer_transactions record")
                 
                 // For public payments, try to send receipt to the payer email from metadata
-                const metadata = orgTx.metadata || {}
+                const metadata = orgTxResult.data.metadata || {}
                 const payerEmail = metadata.payer_email || email
                 const payerName = metadata.payer_name || name || 'Pengguna'
                 

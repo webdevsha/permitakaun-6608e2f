@@ -57,12 +57,13 @@ function PaymentStatusContent() {
             try {
                 // Retry logic - sometimes there's a race condition between redirect and DB update
                 let retries = 0
-                const maxRetries = 3
+                const maxRetries = 5
                 let data = null
                 let error = null
 
                 while (retries < maxRetries) {
-                    const result = await supabase
+                    // Try lookup by ID first
+                    let result = await supabase
                         .from('organizer_transactions')
                         .select(`
                             *,
@@ -71,6 +72,18 @@ function PaymentStatusContent() {
                         .eq('id', txId)
                         .single()
                     
+                    // If not found by ID, try by payment_reference (Billplz ID)
+                    if (!result.data && !result.error) {
+                        result = await supabase
+                            .from('organizer_transactions')
+                            .select(`
+                                *,
+                                organizers:organizer_id (name, organizer_code)
+                            `)
+                            .eq('payment_reference', txId)
+                            .single()
+                    }
+                    
                     data = result.data
                     error = result.error
 
@@ -78,7 +91,7 @@ function PaymentStatusContent() {
                     
                     // Wait a bit before retrying
                     if (retries < maxRetries - 1) {
-                        await new Promise(r => setTimeout(r, 500))
+                        await new Promise(r => setTimeout(r, 1000))
                     }
                     retries++
                 }
@@ -96,7 +109,7 @@ function PaymentStatusContent() {
                             status: 'completed',
                             updated_at: new Date().toISOString()
                         })
-                        .eq('id', txId)
+                        .eq('id', data.id)
 
                     // Refresh data
                     const { data: updated } = await supabase
@@ -105,7 +118,7 @@ function PaymentStatusContent() {
                             *,
                             organizers:organizer_id (name, organizer_code)
                         `)
-                        .eq('id', txId)
+                        .eq('id', data.id)
                         .single()
 
                     if (updated) setTransaction(updated)
@@ -191,7 +204,7 @@ function PaymentStatusContent() {
                                 <Receipt className="w-5 h-5 text-primary" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">ID Transaksi</p>
-                                    <p className="font-mono font-medium">{transaction.id}</p>
+                                    <p className="font-mono font-medium">{transaction.payment_reference || transaction.id}</p>
                                 </div>
                             </div>
 
