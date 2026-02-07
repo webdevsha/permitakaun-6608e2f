@@ -10,13 +10,25 @@ export async function initiatePayment(params: {
     amount: number,
     description: string,
     metadata?: any,
-    redirectPath: string
+    redirectPath: string,
+    transactionId?: string, // For public payments - update existing record
+    payerEmail?: string,    // For public payments - use provided email
+    payerName?: string      // For public payments - use provided name
 }) {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user || !user.email) {
-        return { error: "Pengguna tidak dijumpai." }
+    
+    // For public payments, use provided email/name
+    // For logged-in users, get from auth
+    let email = params.payerEmail
+    let name = params.payerName
+    
+    if (!email) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || !user.email) {
+            return { error: "Pengguna tidak dijumpai." }
+        }
+        email = user.email
+        name = user.user_metadata?.full_name || 'User'
     }
 
     // Dynamic Mode Check
@@ -27,10 +39,11 @@ export async function initiatePayment(params: {
         console.error("Error fetching payment mode, defaulting to sandbox:", e)
     }
 
-    console.log(`[Payment] Initiating payment in ${mode} mode for ${user.email}`)
+    console.log(`[Payment] Initiating payment in ${mode} mode for ${email}`)
     console.log(`[Payment] Config:`, {
         billplzKey: PAYMENT_CONFIG.billplz.apiKey ? 'Set' : 'Missing',
-        chipKey: PAYMENT_CONFIG.chipIn.apiKey ? 'Set' : 'Missing'
+        chipKey: PAYMENT_CONFIG.chipIn.apiKey ? 'Set' : 'Missing',
+        transactionId: params.transactionId || 'None (will create tenant_payment)'
     })
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -54,8 +67,8 @@ export async function initiatePayment(params: {
             console.log("[Payment] Calling Billplz SANDBOX API...")
             // Reuse Billplz logic but with isSandbox = true
             result = await createBillplzBill({
-                email: user.email,
-                name: user.user_metadata?.full_name || 'User',
+                email: email!,
+                name: name || 'User',
                 amount: params.amount,
                 description: params.description,
                 callbackUrl: callbackUrl,
@@ -65,8 +78,8 @@ export async function initiatePayment(params: {
             console.log("[Payment] Calling Billplz API...")
             // Billplz redirects to ONE url and appends billplz[...] params
             result = await createBillplzBill({
-                email: user.email,
-                name: user.user_metadata?.full_name || 'User',
+                email: email!,
+                name: name || 'User',
                 amount: params.amount,
                 description: params.description,
                 callbackUrl: callbackUrl,
@@ -78,32 +91,49 @@ export async function initiatePayment(params: {
         console.log("[Payment] Result:", result)
 
         if (result && result.url) {
-            // Fetch Tenant ID and Organizer Code
-            const { data: tenant } = await supabase
-                .from('tenants')
-                .select('id, organizer_code')
-                .eq('profile_id', user.id)
-                .single()
+            // If transactionId provided (public payment), update the organizer_transaction
+            if (params.transactionId) {
+                const { error: updateError } = await supabase
+                    .from('organizer_transactions')
+                    .update({
+                        payment_reference: result.id,
+                        receipt_url: result.url,
+                        status: 'pending',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', params.transactionId)
 
-            if (tenant) {
-                // Insert Pending Payment Record into tenant_payments
-                // The 'transactions' record will be created automatically by the DB trigger upon approval.
-                const { error: txError } = await supabase.from('tenant_payments').insert({
-                    tenant_id: tenant.id,
-                    organizer_code: tenant.organizer_code, // Store Organizer Code
-                    payment_date: new Date().toISOString(),
-                    amount: params.amount,
-                    status: 'pending',
-                    payment_method: 'billplz',
-                    billplz_id: result.id, // Store Billplz ID for verification
-                    receipt_url: result.url, // Store payment link
-                    is_sandbox: mode === 'sandbox' // Mark as Test/Sandbox
-                })
-
-                if (txError) {
-                    console.error("[Payment] Failed to record pending payment:", txError)
+                if (updateError) {
+                    console.error("[Payment] Failed to update organizer_transaction:", updateError)
                 } else {
-                    console.log("[Payment] Recorded pending payment to tenant_payments.")
+                    console.log("[Payment] Updated organizer_transaction with payment reference.")
+                }
+            } else {
+                // For logged-in tenant payments - insert into tenant_payments
+                const { data: tenant } = await supabase
+                    .from('tenants')
+                    .select('id, organizer_code')
+                    .eq('profile_id', (await supabase.auth.getUser()).data.user?.id)
+                    .single()
+
+                if (tenant) {
+                    const { error: txError } = await supabase.from('tenant_payments').insert({
+                        tenant_id: tenant.id,
+                        organizer_code: tenant.organizer_code,
+                        payment_date: new Date().toISOString(),
+                        amount: params.amount,
+                        status: 'pending',
+                        payment_method: 'billplz',
+                        billplz_id: result.id,
+                        receipt_url: result.url,
+                        is_sandbox: mode === 'sandbox'
+                    })
+
+                    if (txError) {
+                        console.error("[Payment] Failed to record pending payment:", txError)
+                    } else {
+                        console.log("[Payment] Recorded pending payment to tenant_payments.")
+                    }
                 }
             }
 

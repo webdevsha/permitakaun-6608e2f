@@ -19,52 +19,81 @@ export async function POST(req: NextRequest) {
         console.log("[Payment Callback] Received:", { id, paid, state, amount, email })
 
         if (paid === 'true' && state === 'paid') {
-            // 1. Update Payment Status in DB
-            const { data: payment, error } = await supabase
+            // Try to update tenant_payments first (for logged-in tenant payments)
+            const { data: payment, error: tpError } = await supabase
                 .from('tenant_payments')
                 .update({
                     status: 'approved',
-                    billplz_id: id?.toString(), // Store ID to prevent duplicates if needed
+                    billplz_id: id?.toString(),
                     updated_at: new Date().toISOString()
                 })
                 .eq('billplz_id', id)
-                .select('*, tenants(full_name, email)') // Get Tenant Details
+                .select('*, tenants(full_name, email)')
                 .single()
 
-            if (error) {
-                console.error("[Payment Callback] DB Update Error:", error)
-                return NextResponse.json({ error: error.message }, { status: 500 })
+            if (payment) {
+                console.log("[Payment Callback] Updated tenant_payments record")
+                
+                // Send receipt email for tenant payment
+                if (payment.tenants?.email) {
+                    const tenantName = payment.tenants.full_name
+                    const tenantEmail = payment.tenants.email
+                    const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
+                    const date = new Date().toLocaleString('ms-MY')
+
+                    await sendPaymentReceiptAction(
+                        tenantEmail,
+                        tenantName,
+                        formattedAmount,
+                        date,
+                        "Pembayaran Sewa/Permit"
+                    )
+                    console.log("[Payment Callback] Receipt email sent to", tenantEmail)
+                }
+                
+                return NextResponse.json({ success: true, type: 'tenant_payment' })
             }
 
-            // 2. Send Receipt Email
-            if (payment && payment.tenants && payment.tenants.email) {
-                const tenantName = payment.tenants.full_name
-                const tenantEmail = payment.tenants.email
-                const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
-                const date = new Date().toLocaleString('ms-MY')
+            // If not found in tenant_payments, try organizer_transactions (for public payments)
+            const { data: orgTx, error: otError } = await supabase
+                .from('organizer_transactions')
+                .update({
+                    status: 'completed',
+                    payment_reference: id?.toString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('payment_reference', id)
+                .select('*')
+                .single()
 
-                await sendPaymentReceiptAction(
-                    tenantEmail,
-                    tenantName,
-                    formattedAmount,
-                    date,
-                    "Pembayaran Sewa/Permit"
-                )
-                console.log("[Payment Callback] Receipt email sent to", tenantEmail)
-            } else if (email) {
-                // Fallback if DB relation fails but callback has email
-                const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
-                const date = new Date().toLocaleString('ms-MY')
-                await sendPaymentReceiptAction(
-                    email.toString(),
-                    name?.toString() || 'Pengguna',
-                    formattedAmount,
-                    date,
-                    "Pembayaran Sewa/Permit"
-                )
+            if (orgTx) {
+                console.log("[Payment Callback] Updated organizer_transactions record")
+                
+                // For public payments, try to send receipt to the payer email from metadata
+                const metadata = orgTx.metadata || {}
+                const payerEmail = metadata.payer_email || email
+                const payerName = metadata.payer_name || name || 'Pengguna'
+                
+                if (payerEmail) {
+                    const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
+                    const date = new Date().toLocaleString('ms-MY')
+                    
+                    await sendPaymentReceiptAction(
+                        payerEmail.toString(),
+                        payerName.toString(),
+                        formattedAmount,
+                        date,
+                        "Pembayaran Sewa/Permit"
+                    )
+                    console.log("[Payment Callback] Receipt email sent to payer", payerEmail)
+                }
+                
+                return NextResponse.json({ success: true, type: 'organizer_transaction' })
             }
 
-            return NextResponse.json({ success: true })
+            // Log if neither was found
+            console.warn("[Payment Callback] Payment record not found for billplz_id:", id)
+            return NextResponse.json({ success: false, error: "Payment record not found" }, { status: 404 })
         }
 
         return NextResponse.json({ status: 'ignored' })

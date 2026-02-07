@@ -247,11 +247,15 @@ export default function PublicPaymentPage() {
             if (!transaction) throw new Error('Transaksi tidak dapat dicipta')
 
             // Initiate payment - with timeout
+            // Pass transaction details for public payment flow
             const result: any = await withTimeout(
                 () => initiatePayment({
                     amount,
                     description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
-                    redirectPath: `/bayar/status?tx=${transaction.id}`
+                    redirectPath: `/bayar/status?tx=${transaction.id}`,
+                    transactionId: transaction.id,
+                    payerEmail: email,
+                    payerName: fullName
                 }),
                 10000,
                 'initiatePayment'
