@@ -625,8 +625,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   }
 
   const handleDelete = async (id: number) => {
-    if (userRole !== "admin" && userRole !== "superadmin") {
-      toast.error("Hanya Admin boleh memadam transaksi")
+    // Allow admin, superadmin, or tenant to delete
+    const isAuthorized = userRole === "admin" || userRole === "superadmin" || 
+                         role === "admin" || role === "superadmin" || 
+                         role === "tenant" || userRole === "tenant"
+    
+    if (!isAuthorized) {
+      toast.error("Tidak dibenarkan memadam transaksi")
       return
     }
 
@@ -1132,7 +1137,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         <TableHead className="font-bold text-xs uppercase tracking-widest">Keterangan</TableHead>
                         <TableHead className="font-bold text-xs uppercase tracking-widest text-right">Jumlah</TableHead>
                         <TableHead className="font-bold text-xs uppercase tracking-widest text-center">Resit</TableHead>
-                        <TableHead className="font-bold text-xs uppercase tracking-widest text-center">Status</TableHead>
+                        {/* Only show Status for non-tenants */}
+                        {role !== 'tenant' && (
+                          <TableHead className="font-bold text-xs uppercase tracking-widest text-center">Status</TableHead>
+                        )}
                         <TableHead className="px-8 font-bold text-xs uppercase tracking-widest text-right">Aksi</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1192,22 +1200,25 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                 <span className="text-muted-foreground text-xs">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full px-4 py-1 text-[10px] font-bold uppercase tracking-wider",
-                                  transaction.status === "approved"
-                                    ? "bg-brand-green/10 text-brand-green border-brand-green/20"
-                                    : "bg-orange-50 text-orange-600 border-orange-100",
-                                )}
-                              >
-                                {transaction.status === "approved" ? "Diluluskan" : "Menunggu"}
-                              </Badge>
-                            </TableCell>
+                            {/* Only show Status for non-tenants */}
+                            {role !== 'tenant' && (
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "rounded-full px-4 py-1 text-[10px] font-bold uppercase tracking-wider",
+                                    transaction.status === "approved"
+                                      ? "bg-brand-green/10 text-brand-green border-brand-green/20"
+                                      : "bg-orange-50 text-orange-600 border-orange-100",
+                                  )}
+                                >
+                                  {transaction.status === "approved" ? "Diluluskan" : "Menunggu"}
+                                </Badge>
+                              </TableCell>
+                            )}
                             <TableCell className="px-8 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                {/* Use role from auth as fallback if userRole not set yet */}
+                                {/* Admin/Superadmin: Approve, Edit, Delete */}
                                 {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin") && transaction.status === 'pending' && (
                                   <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id)} title="Luluskan">
                                     <CheckCircle className="w-4 h-4" />
@@ -1233,6 +1244,29 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 )}
+                                {/* Tenant: Can edit/delete their own transactions */}
+                                {role === 'tenant' && (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
+                                      onClick={() => handleEdit(transaction)}
+                                      title="Kemaskini"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
+                                      onClick={() => handleDelete(transaction.id)}
+                                      title="Padam"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1240,7 +1274,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       })}
                       {(!displayedTransactions || displayedTransactions.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                          <TableCell colSpan={role === 'tenant' ? 5 : 6} className="text-center py-12 text-muted-foreground">
                             <p>Tiada transaksi direkodkan.</p>
                             <p className="text-xs opacity-50 mt-2">Sila tambah transaksi baru atau semak filter anda.</p>
                           </TableCell>
