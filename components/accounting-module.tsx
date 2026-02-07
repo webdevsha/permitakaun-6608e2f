@@ -127,15 +127,21 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     let isMounted = true
 
     const init = async () => {
-      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id)
+      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id, 'isLoading:', isLoading)
 
-      // Safety timeout - force loading to false after 5 seconds
+      // If auth is still loading, wait
+      if (!role && !user) {
+        console.log('[Accounting] Waiting for auth...')
+        return
+      }
+
+      // Safety timeout - force loading to false after 8 seconds
       timeoutId = setTimeout(() => {
         if (isMounted) {
           console.error('[Accounting] TIMEOUT - forcing loading to false')
           setIsLoading(false)
         }
-      }, 5000)
+      }, 8000)
 
       try {
         setIsLoading(true)
@@ -143,7 +149,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setIsModuleVerified(false)
 
         if (!user || !role) {
-          console.log('[Accounting] No user or role')
+          console.log('[Accounting] No user or role - allowing access for now')
+          setIsModuleVerified(true)
+          setIsLoading(false)
           return
         }
 
@@ -159,62 +167,66 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
         // For organizers/tenants - simple check
         if (role === 'organizer') {
-          const { data: organizer } = await supabase
-            .from('organizers')
-            .select('accounting_status')
-            .eq('profile_id', user.id)
-            .maybeSingle()
+          try {
+            const { data: organizer } = await supabase
+              .from('organizers')
+              .select('accounting_status')
+              .eq('profile_id', user.id)
+              .maybeSingle()
 
-          // Grant access if accounting is active
-          if (organizer?.accounting_status === 'active') {
-            console.log('[Accounting] Organizer with active accounting')
-            setAccessDeniedStatus(null)
-            setIsModuleVerified(true)
-            return
-          }
-
-          // Otherwise check trial
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('created_at')
-            .eq('id', user.id)
-            .maybeSingle()
-
-          if (profile) {
-            const daysRemaining = 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
-            console.log('[Accounting] Days remaining:', daysRemaining)
-
-            if (daysRemaining > 0) {
+            // Grant access if accounting is active
+            if (organizer?.accounting_status === 'active') {
+              console.log('[Accounting] Organizer with active accounting')
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
               return
             }
+          } catch (e) {
+            console.error('[Accounting] Error checking organizer:', e)
           }
 
-          // Trial expired
-          setAccessDeniedStatus('trial_expired')
-          setIsModuleVerified(false)
+          // Check trial as fallback
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('created_at')
+              .eq('id', user.id)
+              .maybeSingle()
 
-        } else if (role === 'tenant') {
-          const { data: tenant } = await supabase
-            .from('tenants')
-            .select('accounting_status')
-            .eq('profile_id', user.id)
-            .maybeSingle()
+            if (profile) {
+              const daysRemaining = 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              console.log('[Accounting] Days remaining:', daysRemaining)
 
-          if (tenant?.accounting_status === 'active') {
-            setAccessDeniedStatus(null)
-            setIsModuleVerified(true)
-          } else {
+              if (daysRemaining > 0) {
+                setAccessDeniedStatus(null)
+                setIsModuleVerified(true)
+                return
+              }
+            }
+
+            // Trial expired
             setAccessDeniedStatus('trial_expired')
             setIsModuleVerified(false)
+          } catch (e) {
+            console.error('[Accounting] Error checking trial:', e)
+            // Allow access on error
+            setIsModuleVerified(true)
           }
+
+        } else if (role === 'tenant') {
+          // Tenants always get access to their own Akaun
+          console.log('[Accounting] Tenant access granted')
+          setAccessDeniedStatus(null)
+          setIsModuleVerified(true)
+        } else {
+          // Unknown role - allow access
+          setIsModuleVerified(true)
         }
 
       } catch (e) {
         console.error("[Accounting] Error:", e)
-        setAccessDeniedStatus('trial_expired')
-        setIsModuleVerified(false)
+        // Allow access on error
+        setIsModuleVerified(true)
       } finally {
         clearTimeout(timeoutId)
         if (isMounted) {
