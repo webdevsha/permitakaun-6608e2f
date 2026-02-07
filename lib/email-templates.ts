@@ -21,7 +21,13 @@ export const getBaseTemplate = (content: string) => `
 <body>
   <div class="container">
     <div class="header">
-      <a href="https://permitakaun.com" class="logo">Permit<span>Akaun</span></a>
+      <Image
+                  src="https://permitakaun.kumim.my/logo.png"
+                  alt="Permit Akaun"
+                  fill
+                  className="object-contain"
+                  priority
+                />
     </div>
     <div class="content">
       ${content}
@@ -40,7 +46,7 @@ export const welcomeEmail = (name: string) => getBaseTemplate(`
   <p>Terima kasih kerana mendaftar dengan **Permit Akaun**.</p>
   <p>Akaun anda telah berjaya dicipta. Anda kini boleh mula menguruskan kewangan karnival dan sewaan tapak anda dengan lebih mudah dan sistematik.</p>
   <p>Sila log masuk untuk melengkapkan profil perniagaan anda.</p>
-  <center><a href="https://permitakaun.com/login" class="button">Log Masuk Sekarang</a></center>
+  <center><a href="https://permitakaun.kumim.my/login" class="button">Log Masuk Sekarang</a></center>
 `)
 
 export const paymentReceiptEmail = (name: string, amount: string, date: string, description: string) => getBaseTemplate(`
@@ -61,5 +67,5 @@ export const accountActivatedEmail = (name: string) => getBaseTemplate(`
   <p>Hai ${name},</p>
   <p>Permohonan anda telah diluluskan dan fitur **Akaun** anda kini telah **DIAKTIFKAN** sepenuhnya.</p>
   <p>Anda kini boleh mengakses modul perakaunan untuk merekod transaksi dan melihat prestasi kewangan perniagaan anda.</p>
-  <center><a href="https://permitakaun.com/dashboard/accounting" class="button">Buka Akaun Saya</a></center>
+  <center><a href="https://permitakaun.kumim.my/dashboard/accounting" class="button">Buka Akaun Saya</a></center>
 `)
