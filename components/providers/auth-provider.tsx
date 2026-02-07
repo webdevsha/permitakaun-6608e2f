@@ -27,6 +27,16 @@ const AuthContext = createContext<AuthContextType>({
   refreshAuth: async () => { },
 })
 
+// Helper to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, ms: number, context: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(`${context} timeout after ${ms}ms`)), ms)
+    )
+  ])
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
   const router = useRouter()
@@ -57,34 +67,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return determinedRole || 'tenant'
   }, [])
 
-  // Fetch profile data
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+  // Fetch profile data - FIXED: pass userEmail as parameter to avoid stale closure
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
+    try {
+      const { data: profileData, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        5000,
+        'fetchProfile'
+      )
 
-    if (profileData) {
-      setProfile(profileData)
-      const determinedRole = determineRole(profileData, user?.email)
-      setRole(determinedRole)
+      if (error) {
+        console.error('[Auth] Profile fetch error:', error)
+        return null
+      }
+
+      if (profileData) {
+        setProfile(profileData)
+        const determinedRole = determineRole(profileData, userEmail)
+        setRole(determinedRole)
+        return profileData
+      }
+      return null
+    } catch (error) {
+      console.error('[Auth] Profile fetch error:', error)
+      return null
     }
-  }, [supabase, determineRole, user?.email])
+  }, [supabase, determineRole])
 
   // Refresh auth state
   const refreshAuth = useCallback(async () => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    try {
+      const { data: { session: currentSession } } = await withTimeout(
+        supabase.auth.getSession(),
+        5000,
+        'getSession'
+      )
 
-    if (currentSession?.user) {
-      setUser(currentSession.user)
-      setSession(currentSession)
-      await fetchProfile(currentSession.user.id)
-    } else {
-      setUser(null)
-      setSession(null)
-      setProfile(null)
-      setRole(null)
+      if (currentSession?.user) {
+        setUser(currentSession.user)
+        setSession(currentSession)
+        await fetchProfile(currentSession.user.id, currentSession.user.email)
+      } else {
+        setUser(null)
+        setSession(null)
+        setProfile(null)
+        setRole(null)
+      }
+    } catch (error) {
+      console.error('[Auth] Refresh error:', error)
     }
   }, [supabase, fetchProfile])
 
@@ -93,18 +127,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Initial auth check
     const initAuth = async () => {
-      const { data: { session: initialSession } } = await supabase.auth.getSession()
+      try {
+        // Add timeout to prevent hanging
+        const { data: { session: initialSession }, error: sessionError } = await withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          'initAuth'
+        )
 
-      if (!mounted) return
+        if (sessionError) {
+          console.error('[Auth] Session error:', sessionError)
+        }
 
-      if (initialSession?.user) {
-        setUser(initialSession.user)
-        setSession(initialSession)
-        await fetchProfile(initialSession.user.id)
+        if (!mounted) return
+
+        if (initialSession?.user) {
+          setUser(initialSession.user)
+          setSession(initialSession)
+          // CRITICAL FIX: Pass user.email directly to avoid stale closure
+          await fetchProfile(initialSession.user.id, initialSession.user.email)
+        }
+      } catch (error) {
+        console.error('[Auth] Init error:', error)
+      } finally {
+        if (mounted) {
+          setIsLoading(false)
+          setIsInitialized(true)
+        }
       }
-
-      setIsLoading(false)
-      setIsInitialized(true)
     }
 
     initAuth()
@@ -121,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (newSession?.user) {
         setUser(newSession.user)
         setSession(newSession)
-        await fetchProfile(newSession.user.id)
+        await fetchProfile(newSession.user.id, newSession.user.email)
       }
     })
 
@@ -129,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [supabase, router, fetchProfile, pathname])
+  }, [supabase, fetchProfile])
 
   const signOut = async () => {
     try {

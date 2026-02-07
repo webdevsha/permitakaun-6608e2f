@@ -67,8 +67,14 @@ export default function DashboardLayoutClient({
         verifyAccess()
     }, [user, role, pathname, router, isInitialized])
 
-    // Show loading state only during initial hydration
-    if (isLoading && !isInitialized) {
+    // Show loading state only during initial hydration  
+    // CRITICAL FIX: If server provided initialUser, don't show loading spinner
+    // because we already have valid data from the server
+    const effectiveUser = initialUser || authUser
+    
+    // Show spinner only if:
+    // 1. Auth is still loading AND not initialized AND no user from either server or client
+    if (isLoading && !isInitialized && !effectiveUser) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-secondary">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -76,6 +82,7 @@ export default function DashboardLayoutClient({
         )
     }
 
+    // Return null if no user at all (will redirect in useEffect or let error boundary handle)
     if (!user) {
         return null
     }
