@@ -452,6 +452,8 @@ export async function fetchDashboardData() {
                 .from('transactions')
                 .select('*')
                 .eq('tenant_id', currentTenant.id)
+                .neq('category', 'Langganan') // Exclude system subscriptions
+                .neq('category', 'Subscription')
                 .order('date', { ascending: false })
 
             if (txData) {

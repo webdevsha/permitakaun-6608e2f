@@ -306,15 +306,24 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     // Is the viewer the payer of this transaction?
     const viewerIsPayer = viewerTenantIds.includes(t.tenant_id)
 
-    // If viewer is NOT the payer but sees a rent payment, flip the perspective
-    if (!viewerIsPayer && t.category === 'Sewa') {
+    // 1. If viewer IS the payer (Tenant) and it's a rent payment (Income in DB), flip to Expense
+    if (viewerIsPayer && (t.category === 'Sewa' || t.category === 'Rent') && t.type === 'income') {
       return {
         ...t,
-        type: t.type === 'expense' ? 'income' : 'expense' // Flip for recipient
+        type: 'expense'
       }
     }
 
-    return t // Keep as-is for viewer's own transactions
+    // 2. If viewer is NOT the payer (Organizer viewing) but sees a rent payment (Expense in DB? Unlikely but possible), flip
+    // This handles the reverse case if we ever store it differently
+    if (!viewerIsPayer && (t.category === 'Sewa' || t.category === 'Rent') && t.type === 'expense') {
+      return {
+        ...t,
+        type: 'income'
+      }
+    }
+
+    return t // Keep as-is for other cases
   }) || []
 
   // 1. Paid Up Capital (Modal)
