@@ -306,7 +306,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   
   // For tenants, include pending transactions in calculations (it's their own Akaun)
   // For organizers/admins, only count approved transactions
-  const isTenantRole = role === 'tenant' || userRole === 'tenant'
+  // Use 'role' from auth (available immediately) rather than userRole state
+  const isTenantRole = role === 'tenant'
   const statusFilter = isTenantRole ? ['approved', 'pending'] : ['approved']
 
   // 1. Paid Up Capital (Modal)
