@@ -5,6 +5,8 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { Toaster } from "sonner"
+import { GlobalLoader } from "@/components/global-loader"
+import { Suspense } from "react"
 
 const _geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 const _geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
@@ -29,6 +31,9 @@ export default function RootLayout({
     <html lang="ms">
       <body className={`${_geist.variable} ${_geistMono.variable} ${_playfair.variable} antialiased`} suppressHydrationWarning>
         <AuthProvider>
+          <Suspense fallback={null}>
+            <GlobalLoader />
+          </Suspense>
           {children}
           <Toaster />
         </AuthProvider>

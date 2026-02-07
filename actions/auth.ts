@@ -1,16 +1,17 @@
-'use server'
+"use server"
 
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 
-export async function login(prevState: { error: string } | undefined, formData: FormData) {
+export async function signOutAction() {
+    const supabase = await createClient()
+    await supabase.auth.signOut()
+    redirect('/login')
+}
+
+export async function login(prevState: any, formData: FormData) {
     const email = formData.get("email") as string
     const password = formData.get("password") as string
-
-    if (!email || !password) {
-        return { error: "Sila masukkan emel dan kata laluan" }
-    }
-
     const supabase = await createClient()
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -19,13 +20,8 @@ export async function login(prevState: { error: string } | undefined, formData: 
     })
 
     if (error) {
-        console.error("Login server error:", error)
-        return {
-            error: error.message === "Invalid login credentials"
-                ? "Emel atau kata laluan salah"
-                : error.message
-        }
+        return { error: error.message }
     }
 
-    return redirect("/dashboard")
+    redirect("/dashboard")
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,7 +62,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const [userRole, setUserRole] = useState<string>("")
   // Use server-provided transactions (already filtered by role in fetchDashboardData)
   const transactions = initialTransactions || []
-  const mutate = () => window.location.reload()
+  const router = useRouter()
+  const mutate = () => router.refresh()
   const [isLoading, setIsLoading] = useState(true)
 
   const supabase = createClient()
@@ -123,10 +125,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   useEffect(() => {
     let timeoutId: NodeJS.Timeout
     let isMounted = true
-    
+
     const init = async () => {
       console.log('[Accounting] INIT START - role:', role, 'user:', user?.id)
-      
+
       // Safety timeout - force loading to false after 5 seconds
       timeoutId = setTimeout(() => {
         if (isMounted) {
@@ -134,12 +136,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           setIsLoading(false)
         }
       }, 5000)
-      
+
       try {
         setIsLoading(true)
         setAccessDeniedStatus(null)
         setIsModuleVerified(false)
-        
+
         if (!user || !role) {
           console.log('[Accounting] No user or role')
           return
@@ -162,7 +164,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             .select('accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
-          
+
           // Grant access if accounting is active
           if (organizer?.accounting_status === 'active') {
             console.log('[Accounting] Organizer with active accounting')
@@ -170,36 +172,36 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             setIsModuleVerified(true)
             return
           }
-          
+
           // Otherwise check trial
           const { data: profile } = await supabase
             .from('profiles')
             .select('created_at')
             .eq('id', user.id)
             .maybeSingle()
-          
+
           if (profile) {
             const daysRemaining = 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
             console.log('[Accounting] Days remaining:', daysRemaining)
-            
+
             if (daysRemaining > 0) {
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
               return
             }
           }
-          
+
           // Trial expired
           setAccessDeniedStatus('trial_expired')
           setIsModuleVerified(false)
-          
+
         } else if (role === 'tenant') {
           const { data: tenant } = await supabase
             .from('tenants')
             .select('accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
-          
+
           if (tenant?.accounting_status === 'active') {
             setAccessDeniedStatus(null)
             setIsModuleVerified(true)
@@ -208,7 +210,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             setIsModuleVerified(false)
           }
         }
-        
+
       } catch (e) {
         console.error("[Accounting] Error:", e)
         setAccessDeniedStatus('trial_expired')
@@ -223,7 +225,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
 
     init()
-    
+
     return () => {
       isMounted = false
       clearTimeout(timeoutId)
@@ -276,7 +278,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   }, [filterMonth, filterType, filterStatus])
 
   console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
-  
+
   if (isLoading) {
     return <div className="p-12 text-center text-muted-foreground"><Loader2 className="animate-spin h-8 w-8 mx-auto mb-4" />Menyemak kelayakan...</div>
   }
@@ -475,24 +477,24 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setIsSaving(false)
         return
       }
-      
+
       // Get or create tenant record for transaction
       let entityId: number | null = null
-      
+
       // Check for existing tenant
       const { data: existingTenant } = await supabase
         .from('tenants')
         .select('id')
         .eq('profile_id', user.id)
         .maybeSingle()
-      
+
       if (existingTenant?.id) {
         entityId = existingTenant.id
       } else {
         // Need to create tenant record - get user details based on role
         let fullName = user.email?.split('@')[0] || 'User'
         let orgCode = null
-        
+
         if (userRole === 'organizer') {
           const { data: org } = await supabase
             .from('organizers')
@@ -524,7 +526,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             orgCode = staff.organizer_code
           }
         }
-        
+
         // Create tenant record
         const { data: newTenant, error: createError } = await supabase
           .from('tenants')
@@ -539,14 +541,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           })
           .select('id')
           .single()
-        
+
         if (createError) {
           console.error('[Accounting] Error creating tenant:', createError)
           toast.error("Ralat: Gagal mencipta rekod peniaga")
           setIsSaving(false)
           return
         }
-        
+
         entityId = newTenant?.id || null
       }
 
@@ -911,56 +913,56 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           <div className="col-span-3">Peratus (%)</div>
                           <div className="col-span-6">Nama Bank / Akaun</div>
                         </div>
-                        
+
                         {/* Operating */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Operating</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.operating} onChange={(e) => setBankNames({ ...bankNames, operating: e.target.value })} placeholder="Contoh: Maybank Business" />
                         </div>
-                        
+
                         {/* Tax */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Tax</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.tax} onChange={(e) => setPercentages({ ...percentages, tax: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.tax} onChange={(e) => setBankNames({ ...bankNames, tax: e.target.value })} placeholder="Contoh: LHDN / Bank Pembayar Cukai" />
                         </div>
-                        
+
                         {/* Zakat */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Zakat</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.zakat} onChange={(e) => setPercentages({ ...percentages, zakat: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.zakat} onChange={(e) => setBankNames({ ...bankNames, zakat: e.target.value })} placeholder="Contoh: Pusat Pungutan Zakat" />
                         </div>
-                        
+
                         {/* Investment */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Investment</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.investment} onChange={(e) => setBankNames({ ...bankNames, investment: e.target.value })} placeholder="Contoh: CIMB Investment Account" />
                         </div>
-                        
+
                         {/* Dividend */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Dividend</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.dividend} onChange={(e) => setBankNames({ ...bankNames, dividend: e.target.value })} placeholder="Contoh: RHB Dividend Account" />
                         </div>
-                        
+
                         {/* Savings */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Savings</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.savings} onChange={(e) => setBankNames({ ...bankNames, savings: e.target.value })} placeholder="Contoh: Tabung Haji / ASB" />
                         </div>
-                        
+
                         {/* Emergency */}
                         <div className="grid grid-cols-12 gap-2 items-center">
                           <Label className="col-span-3 text-sm">Emergency</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.emergency} onChange={(e) => setBankNames({ ...bankNames, emergency: e.target.value })} placeholder="Contoh: Maybank Savings" />
                         </div>
-                        
+
                         <div className="flex justify-between items-center pt-4 border-t">
                           <p className={cn("text-xs font-bold",
                             (percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency) === 100 ? "text-green-600" : "text-red-600"
