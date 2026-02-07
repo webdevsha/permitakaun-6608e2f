@@ -1,24 +1,326 @@
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
+import { unstable_cache } from 'next/cache'
 
 // Timeout wrapper to prevent infinite hangs
 async function withTimeout<T>(
-    queryFn: () => any,
+    queryFn: () => Promise<T>,
     ms: number,
     context: string
 ): Promise<T> {
     return Promise.race([
-        Promise.resolve(queryFn()),
+        queryFn(),
         new Promise<T>((_, reject) =>
             setTimeout(() => reject(new Error(`Timeout: ${context} took longer than ${ms}ms`)), ms)
         )
     ])
 }
 
+// Cache the dashboard data for 30 seconds to reduce database load
+const getCachedDashboardData = unstable_cache(
+    async (userId: string, role: string, email: string, organizerCode: string | null) => {
+        return await fetchDashboardDataInternal(userId, role, email, organizerCode)
+    },
+    ['dashboard-data'],
+    { revalidate: 30, tags: ['dashboard'] }
+)
+
+async function fetchDashboardDataInternal(
+    userId: string, 
+    role: string, 
+    email: string,
+    profileOrganizerCode: string | null
+) {
+    const supabase = await createClient()
+
+    // Get organizer_code from appropriate table based on role
+    let organizerCode = profileOrganizerCode
+
+    // For staff, get organizer_code from staff table (mirrors admin's data)
+    if (role === 'staff') {
+        try {
+            const { data: staffData } = await withTimeout(
+                () => supabase.from('staff').select('organizer_code').eq('profile_id', userId).single(),
+                3000,
+                'staff lookup'
+            )
+            if (staffData?.organizer_code) {
+                organizerCode = staffData.organizer_code
+            }
+        } catch (e) {
+            console.error('[Dashboard] Staff lookup timeout:', e)
+        }
+    }
+    // For admin, get organizer_code from admins table
+    else if (role === 'admin') {
+        try {
+            const { data: adminData } = await withTimeout(
+                () => supabase.from('admins').select('organizer_code').eq('profile_id', userId).single(),
+                3000,
+                'admin lookup'
+            )
+            if (adminData?.organizer_code) {
+                organizerCode = adminData.organizer_code
+            }
+        } catch (e) {
+            console.error('[Dashboard] Admin lookup timeout:', e)
+        }
+    }
+
+    let tenants: any[] = []
+    let transactions: any[] = []
+    let organizers: any[] = []
+    let myLocations: any[] = []
+    let availableLocations: any[] = []
+    let userProfile: any = null
+
+    try {
+        // --- ADMIN & SUPERADMIN (Organization Owners) ---
+        if (role === 'admin' || role === 'superadmin' || email === 'admin@kumim.my') {
+            const isDeveloperAdmin = email === 'admin@permit.com'
+            const adminOrgCode = email === 'admin@kumim.my' ? 'ORG002' : null
+
+            // Fetch Tenants with timeout
+            try {
+                let tQuery = supabase
+                    .from('tenants')
+                    .select('*, tenant_locations(*, locations(*))')
+                    .order('created_at', { ascending: false })
+                    .limit(100) // Limit to prevent timeouts
+
+                if (adminOrgCode) {
+                    tQuery = tQuery.eq('organizer_code', adminOrgCode)
+                } else if (!isDeveloperAdmin) {
+                    tQuery = tQuery.neq('organizer_code', 'ORG001')
+                }
+
+                const { data: t, error } = await withTimeout(() => tQuery, 5000, 'tenants query')
+                
+                if (error) throw error
+
+                // Get organizer name map
+                const { data: allOrganizers } = await withTimeout(
+                    () => supabase.from('organizers').select('profile_id, organizer_code, name').limit(100),
+                    3000,
+                    'organizers query'
+                )
+                const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
+
+                tenants = (t || []).map(tenant => ({
+                    ...tenant,
+                    locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
+                    organizerName: organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code || '-',
+                    lastPaymentDate: "Tiada Rekod",
+                    lastPaymentAmount: 0,
+                    paymentStatus: 'active'
+                }))
+            } catch (e) {
+                console.error('[Dashboard] Error fetching tenants:', e)
+                tenants = []
+            }
+
+            // Fetch Transactions with timeout
+            try {
+                let txQuery = supabase
+                    .from('organizer_transactions')
+                    .select('*, tenants(full_name, business_name, organizer_code)')
+                    .order('date', { ascending: false })
+                    .limit(50) // Limit to prevent timeouts
+
+                if (adminOrgCode) {
+                    const { data: orgData } = await supabase
+                        .from('organizers')
+                        .select('id')
+                        .eq('organizer_code', adminOrgCode)
+                        .single()
+                    if (orgData) {
+                        txQuery = txQuery.eq('organizer_id', orgData.id)
+                    }
+                } else if (!isDeveloperAdmin) {
+                    const { data: seedOrg } = await supabase
+                        .from('organizers')
+                        .select('id')
+                        .eq('organizer_code', 'ORG001')
+                        .maybeSingle()
+                    if (seedOrg) {
+                        txQuery = txQuery.neq('organizer_id', seedOrg.id)
+                    }
+                }
+
+                const { data: tx, error } = await withTimeout(() => txQuery, 5000, 'transactions query')
+                if (error) throw error
+                
+                transactions = (tx || []).map(t => ({
+                    ...t,
+                    table_source: 'organizer_transactions'
+                }))
+            } catch (e) {
+                console.error('[Dashboard] Error fetching transactions:', e)
+                transactions = []
+            }
+
+            // Fetch Organizers
+            try {
+                let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
+                if (!isDeveloperAdmin) {
+                    orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
+                }
+                const { data: org, error } = await withTimeout(() => orgQuery.limit(50), 3000, 'organizers query')
+                if (error) throw error
+                organizers = org || []
+            } catch (e) {
+                console.error('[Dashboard] Error fetching organizers:', e)
+                organizers = []
+            }
+        }
+        // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
+        else if (role === 'organizer' || role === 'staff') {
+            let orgId = null
+
+            if (role === 'organizer') {
+                const { data: org } = await withTimeout(
+                    () => supabase.from('organizers').select('id, organizer_code').eq('profile_id', userId).single(),
+                    3000,
+                    'organizer lookup'
+                )
+                orgId = org?.id
+                if (org) organizers = [org]
+            } else if (role === 'staff') {
+                if (!organizerCode) {
+                    return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role, userProfile: null }
+                }
+                const { data: org } = await withTimeout(
+                    () => supabase.from('organizers').select('id, organizer_code').eq('organizer_code', organizerCode).single(),
+                    3000,
+                    'staff organizer lookup'
+                )
+                orgId = org?.id
+                if (org) organizers = [org]
+            }
+
+            if (orgId) {
+                // Fetch locations
+                try {
+                    const { data: locs } = await withTimeout(
+                        () => supabase.from('locations').select('*').eq('organizer_id', orgId).order('name').limit(50),
+                        3000,
+                        'locations query'
+                    )
+                    myLocations = (locs || []).map((l: any) => ({
+                        location_name: l.name,
+                        display_price: l.rate_monthly || l.rate_khemah || 0,
+                        ...l
+                    }))
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching locations:', e)
+                }
+
+                // Fetch tenants and transactions
+                try {
+                    const { data: tx } = await withTimeout(
+                        () => supabase
+                            .from('organizer_transactions')
+                            .select('*, tenants(full_name, business_name)')
+                            .eq('organizer_id', orgId)
+                            .order('date', { ascending: false })
+                            .limit(50),
+                        5000,
+                        'organizer transactions query'
+                    )
+                    transactions = (tx || []).map(t => ({ ...t, table_source: 'organizer_transactions' }))
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching organizer transactions:', e)
+                    transactions = []
+                }
+            }
+        }
+        // --- TENANT VIEW ---
+        else {
+            const { data: tenantData } = await withTimeout(
+                () => supabase.from('tenants').select('*').eq('profile_id', userId).maybeSingle(),
+                3000,
+                'tenant lookup'
+            )
+
+            if (tenantData) {
+                tenants = [tenantData]
+                userProfile = tenantData
+
+                // Fetch locations
+                try {
+                    const { data: locData } = await withTimeout(
+                        () => supabase
+                            .from('tenant_locations')
+                            .select(`*, locations:location_id (*)`)
+                            .eq('tenant_id', tenantData.id)
+                            .limit(20),
+                        3000,
+                        'tenant locations query'
+                    )
+                    myLocations = (locData || []).map((item: any) => ({
+                        ...item,
+                        display_price: item.locations?.rate_monthly || item.locations?.rate_khemah || 0,
+                        location_name: item.locations?.name
+                    }))
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching tenant locations:', e)
+                }
+
+                // Fetch transactions from tenant_transactions
+                try {
+                    const { data: txData } = await withTimeout(
+                        () => supabase
+                            .from('tenant_transactions')
+                            .select('*')
+                            .eq('tenant_id', tenantData.id)
+                            .neq('category', 'Langganan')
+                            .neq('category', 'Subscription')
+                            .order('date', { ascending: false })
+                            .limit(50),
+                        5000,
+                        'tenant transactions query'
+                    )
+                    transactions = (txData || []).map(tx => ({
+                        id: tx.id,
+                        date: tx.date,
+                        description: tx.description,
+                        category: tx.category,
+                        amount: tx.amount,
+                        type: tx.type,
+                        status: tx.status,
+                        receipt_url: tx.receipt_url,
+                        tenant_id: tx.tenant_id,
+                        table_source: 'tenant_transactions'
+                    }))
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching tenant transactions:', e)
+                    transactions = []
+                }
+            }
+        }
+    } catch (error) {
+        console.error('[Dashboard] Unexpected error:', error)
+    }
+
+    // Calculate overdue tenants
+    const overdueTenants: any[] = []
+    
+    return {
+        transactions,
+        tenants,
+        overdueTenants,
+        organizers,
+        myLocations,
+        availableLocations,
+        userProfile,
+        role
+    }
+}
+
 export async function fetchDashboardData() {
     const supabase = await createClient()
 
-    // Get User Role Context (with timeout to prevent infinite hang)
+    // Get User with timeout
     let user: any;
     try {
         const authResult: any = await withTimeout(
@@ -32,554 +334,33 @@ export async function fetchDashboardData() {
         return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
     }
 
-    if (!user) return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
+    if (!user) {
+        return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
+    }
 
-    const { data: profile } = await supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single()
+    // Get profile
+    let profile: any
+    try {
+        const { data } = await withTimeout(
+            () => supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single(),
+            3000,
+            'profile query'
+        )
+        profile = data
+    } catch (e) {
+        console.error('[fetchDashboardData] Error fetching profile:', e)
+    }
 
-    // Use shared role determination logic for consistency
     const role = determineUserRole(profile, user.email)
 
-    // Get organizer_code from appropriate table based on role
-    let organizerCode = profile?.organizer_code
-
-    // For staff, get organizer_code from staff table (mirrors admin's data)
-    if (role === 'staff') {
-        const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user.id).single()
-        if (staffData?.organizer_code) {
-            organizerCode = staffData.organizer_code
-        }
-    }
-    // For admin, get organizer_code from admins table
-    else if (role === 'admin') {
-        const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user.id).single()
-        if (adminData?.organizer_code) {
-            organizerCode = adminData.organizer_code
-        }
-    }
-
-    // Set userProfile with basic info from profiles table
-    let userProfile: any = profile ? {
-        full_name: profile.full_name,
-        email: profile.email
-    } : null
-
-    let tenants: any[] = []
-    let transactions: any[] = []
-    let organizers: any[] = []
-    let myLocations: any[] = []
-    let availableLocations: any[] = []
-
-    // --- ADMIN & SUPERADMIN (Organization Owners) ---
-    // Only fetch ALL if explicitly Admin/Superadmin. Staff handled separately to enforce mirroring.
-    if (role === 'admin' || role === 'superadmin' || user.email === 'admin@kumim.my') {
-
-        // Developer-Admin Logic: Only admin@permit.com sees Seed Data (ORG001)
-        const isDeveloperAdmin = user.email === 'admin@permit.com'
-
-        // Specific admin organization codes - these admins ONLY see their own org data
-        const adminOrgCode = user.email === 'admin@kumim.my' ? 'ORG002' : null
-
-        // Fetch Tenants with Locations
-        // IMPORTANT: Exclude organizers and admins - they are NOT tenants
-        let tQuery = supabase
-            .from('tenants')
-            .select('*, tenant_locations(*, locations(*))')
-            .order('created_at', { ascending: false })
-
-        if (adminOrgCode) {
-            // Specific admin (e.g., admin@kumim.my) only sees their org data
-            tQuery = tQuery.eq('organizer_code', adminOrgCode)
-        } else if (!isDeveloperAdmin) {
-            // Other non-dev admins exclude ORG001 but see all other orgs
-            tQuery = tQuery.neq('organizer_code', 'ORG001')
-        }
-
-        const { data: t } = await tQuery
-
-        // Filter out organizers and admins from tenants list
-        // They should NOT appear under "Peniaga & Sewa"
-        const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code, name')
-        const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
-        const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
-        // Create a map of organizer_code to name
-        const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
-
-        // Also get admin/staff profiles to exclude
-        const { data: adminProfiles } = await supabase.from('profiles').select('id').in('role', ['admin', 'superadmin', 'staff'])
-        const adminProfileIds = new Set(adminProfiles?.map(p => p.id) || [])
-
-        // Enrich Tenants with Payment Status (Server-side simulation of client logic)
-        if (t) {
-            // Fetch last approved payments for all tenants efficiently
-            const { data: payments } = await supabase
-                .from('tenant_payments')
-                .select('*')
-                .eq('status', 'approved')
-                .order('payment_date', { ascending: false })
-
-            // Filter tenants: exclude organizers, admins, and staff
-            // They should NOT appear under "Peniaga & Sewa"
-            let filteredTenants = t.filter(tenant => {
-                // Exclude if profile is an organizer
-                if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) return false
-                // Exclude if profile is admin/staff
-                if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) return false
-                return true
-            })
-
-            // For admin@kumim.my: Only show "Ahmad" as sample (hide others for demo purposes)
-            if (user.email === 'admin@kumim.my') {
-                filteredTenants = filteredTenants.filter(tenant =>
-                    tenant.full_name?.toLowerCase().includes('ahmad') ||
-                    tenant.full_name?.toLowerCase().includes('sample')
-                )
-            }
-
-            tenants = filteredTenants.map(tenant => {
-                const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
-                let paymentStatus = 'active'
-                if (!lastPayment) paymentStatus = 'new'
-                return {
-                    ...tenant,
-                    locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
-                    organizerName: organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code || '-',
-                    lastPaymentDate: lastPayment?.payment_date
-                        ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : "Tiada Rekod",
-                    lastPaymentAmount: lastPayment?.amount || 0,
-                    paymentStatus
-                }
-            })
-        }
-
-
-        // Admin uses organizer_transactions to see income from all tenants
-        let txQuery = supabase
-            .from('organizer_transactions')
-            .select('*, tenants(full_name, business_name, organizer_code)')
-            .order('date', { ascending: false })
-
-        if (adminOrgCode) {
-            // Specific admin only sees their org transactions
-            // Filter by organizer's organizer_code via tenants join or organizer_id
-            const { data: orgData } = await supabase
-                .from('organizers')
-                .select('id')
-                .eq('organizer_code', adminOrgCode)
-                .single()
-            if (orgData) {
-                txQuery = txQuery.eq('organizer_id', orgData.id)
-            }
-        } else if (!isDeveloperAdmin) {
-            // Exclude ORG001 transactions for non-dev admins
-            const { data: seedOrg } = await supabase
-                .from('organizers')
-                .select('id')
-                .eq('organizer_code', 'ORG001')
-                .maybeSingle()
-            if (seedOrg) {
-                txQuery = txQuery.neq('organizer_id', seedOrg.id)
-            }
-        }
-
-        const { data: tx } = await txQuery
-        transactions = (tx || []).map(t => ({
-            ...t,
-            // Map organizer_transactions to common format expected by UI
-            table_source: 'organizer_transactions'
-        }))
-
-        let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-        if (!isDeveloperAdmin) {
-            // Filter out ALL seed/demo organizer codes for non-dev admins
-            orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
-        }
-        const { data: org } = await orgQuery
-        organizers = org || []
-
-        // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
-    } else if (role === 'organizer' || role === 'staff') {
-        // Enforce STRICT mirroring: Staff MUST have an organizer_code.
-        // If staff has no code, they see NOTHING.
-        let orgCode = organizerCode
-        let orgId = null
-
-        if (role === 'organizer') {
-            // Organizer table uses 'profile_id' as the FK to auth.users
-            console.log(`[Dashboard] Organizer lookup: user.id=${user.id}`)
-            const { data: org, error: orgError } = await supabase.from('organizers').select('id, organizer_code').eq('profile_id', user.id).single()
-            console.log(`[Dashboard] Organizer result:`, org, 'error:', orgError)
-            orgCode = org?.organizer_code
-            orgId = org?.id
-
-            if (org) {
-                organizers = [org] // Populate for UI Header
-            }
-        } else if (role === 'staff') {
-            console.log(`[Dashboard] Staff access: orgCode=${orgCode}`)
-            if (!orgCode) {
-                // If staff has no link, RETURN EMPTY to prevent leak
-                console.warn(`[Dashboard] Staff has no organizer_code - returning empty`)
-                return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role, userProfile }
-            }
-
-            // Staff: Find the organizer by code to get their ID (Mirroring Admin's Org)
-            const { data: org, error: orgError } = await supabase.from('organizers').select('id, organizer_code').eq('organizer_code', orgCode).single()
-            console.log(`[Dashboard] Staff organizer lookup:`, org, 'error:', orgError)
-            orgId = org?.id
-
-            if (org) {
-                organizers = [org] // Populate for UI Header
-            }
-        }
-
-        // Fetch Locations (for both Organizer and Staff)
-        if (orgId) {
-            const { data: locs } = await supabase
-                .from('locations')
-                .select('*')
-                .eq('organizer_id', orgId)
-                .order('name')
-
-            if (locs) {
-                myLocations = locs.map((l: any) => ({
-                    location_name: l.name,
-                    display_price: l.rate_monthly || l.rate_khemah || 0, // Fallback price for display
-                    ...l
-                }))
-            }
-        }
-
-        // Combine logic: Fetch tenants by Code OR by Location Rental
-        if (orgCode || (myLocations && myLocations.length > 0)) {
-            console.log(`[Dashboard DEBUG] Discovery Start. OrgCode: ${orgCode}, Locs: ${myLocations?.length}`)
-            let tenantIds = new Set<string>();
-
-            // 1. Get Tenants by Organizer Code
-            if (orgCode) {
-                const { data: tByCode, error: tErr } = await supabase
-                    .from('tenants')
-                    .select('id')
-                    .eq('organizer_code', orgCode)
-                if (tErr) console.error('[Dashboard DEBUG] Error fetching tenants by code:', tErr)
-                tByCode?.forEach(x => tenantIds.add(x.id))
-                console.log(`[Dashboard DEBUG] Tenants by Code: ${tByCode?.length || 0}`)
-            }
-
-            // 2. Get Tenants by Location Rentals
-            // (Even if they don't have my organizer_code, they are my tenants if they rent my spot)
-            if (myLocations && myLocations.length > 0) {
-                const locIds = myLocations.map((l: any) => l.id)
-                console.log(`[Dashboard DEBUG] Checking rentals for Location IDs:`, locIds)
-                const { data: rentalTenants, error: rErr } = await supabase
-                    .from('tenant_locations')
-                    .select('tenant_id')
-                    .in('location_id', locIds)
-                    .eq('status', 'active')
-
-                if (rErr) console.error('[Dashboard DEBUG] Error fetching rental tenants:', rErr)
-                rentalTenants?.forEach(r => tenantIds.add(r.tenant_id))
-                console.log(`[Dashboard DEBUG] Tenants by Rentals: ${rentalTenants?.length || 0}`)
-            }
-
-            console.log(`[Dashboard DEBUG] Total Tenant IDs:`, Array.from(tenantIds))
-
-            // Fetch Full Data for these Tenants
-            if (tenantIds.size > 0) {
-                const tIds = Array.from(tenantIds) as string[]
-
-                const { data: t } = await supabase
-                    .from('tenants')
-                    .select('*, tenant_locations(*, locations(*))')
-                    .in('id', tIds)
-                    .order('full_name', { ascending: true })
-
-                // Enrich Tenants
-                if (t) {
-                    const { data: payments } = await supabase
-                        .from('tenant_payments')
-                        .select('*')
-                        .eq('status', 'approved')
-                        .in('tenant_id', tIds)
-                        .order('payment_date', { ascending: false })
-
-                    // Filter out organizers/admins from tenants
-                    const { data: allOrganizers } = await supabase.from('organizers').select('profile_id, organizer_code, name')
-                    const organizerProfileIds = new Set(allOrganizers?.map(o => o.profile_id).filter(Boolean) || [])
-                    const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
-                    // Create a map of organizer_code to name
-                    const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
-                    // Get admin/staff IDs from new tables
-                    const { data: adminData } = await supabase.from('admins').select('profile_id')
-                    const { data: staffData } = await supabase.from('staff').select('profile_id')
-                    const adminProfileIds = new Set([
-                        ...(adminData?.map(a => a.profile_id) || []),
-                        ...(staffData?.map(s => s.profile_id) || [])
-                    ])
-
-                    console.log(`[Dashboard DEBUG] Before filter: ${t.length} tenants`)
-                    console.log(`[Dashboard DEBUG] Organizer profile IDs:`, Array.from(organizerProfileIds))
-                    console.log(`[Dashboard DEBUG] Admin/Staff profile IDs:`, Array.from(adminProfileIds))
-                    tenants = t
-                        .filter(tenant => {
-                            // Filter out records where a profile is an organizer (not a tenant)
-                            if (tenant.profile_id && organizerProfileIds.has(tenant.profile_id)) {
-                                console.log(`[Dashboard DEBUG] Filtered out ${tenant.full_name} - matches organizer profile`)
-                                return false
-                            }
-                            // Filter out records where a profile is admin/staff (not a tenant)
-                            if (tenant.profile_id && adminProfileIds.has(tenant.profile_id)) {
-                                console.log(`[Dashboard DEBUG] Filtered out ${tenant.full_name} - matches admin/staff profile`)
-                                return false
-                            }
-                            return true
-                        })
-                        .map(tenant => {
-                            const lastPayment = payments?.find((p: any) => p.tenant_id === tenant.id)
-                            let paymentStatus = 'active'
-                            if (!lastPayment) paymentStatus = 'new'
-                            return {
-                                ...tenant,
-                                locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
-                                lastPaymentDate: lastPayment?.payment_date
-                                    ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
-                                    : "Tiada Rekod",
-                                lastPaymentAmount: lastPayment?.amount || 0,
-                                paymentStatus,
-                                organizerName: tenant.organizer_code || '-'
-                            }
-                        })
-                }
-
-                // Fetch Transactions from organizer_transactions table
-                // Organizer/Staff sees their own Akaun (income from tenants)
-                console.log(`[Dashboard DEBUG] Fetching organizer transactions for orgId:`, orgId)
-                const { data: tx, error: txErr } = await supabase
-                    .from('organizer_transactions')
-                    .select('*, tenants(full_name, business_name)')
-                    .eq('organizer_id', orgId)
-                    .order('date', { ascending: false })
-
-                if (txErr) console.error('[Dashboard DEBUG] Organizer Transaction Fetch Error:', txErr)
-                console.log(`[Dashboard DEBUG] Organizer Transactions Found: ${tx?.length || 0}`)
-
-                transactions = (tx || []).map(t => ({
-                    ...t,
-                    table_source: 'organizer_transactions'
-                }))
-
-            } else {
-                transactions = []
-            }
-        }
-        // --- TENANT VIEW ---
-    } else {
-        // 1. Get Tenant Profile
-        const { data: tenantData } = await supabase
-            .from('tenants')
-            .select('*')
-            .eq('profile_id', user.id)
-            .maybeSingle()
-
-        // Fallback: Check email if profile_id not linked
-        let currentTenant = tenantData
-        if (!currentTenant && user.email) {
-            const { data: tenantByEmail } = await supabase
-                .from('tenants')
-                .select('*')
-                .eq('email', user.email)
-                .maybeSingle()
-
-            // If we found a tenant by email but it doesn't have profile_id linked,
-            // we should link it now to prevent future mismatches
-            if (tenantByEmail && !tenantByEmail.profile_id) {
-                const { error: updateError } = await supabase
-                    .from('tenants')
-                    .update({ profile_id: user.id })
-                    .eq('id', tenantByEmail.id)
-
-                if (!updateError) {
-                    // Successfully linked, update our local copy
-                    currentTenant = { ...tenantByEmail, profile_id: user.id }
-                } else {
-                    // If update failed, still use the tenant but log the issue
-                    console.warn('Failed to link tenant profile_id:', updateError)
-                    currentTenant = tenantByEmail
-                }
-            } else {
-                currentTenant = tenantByEmail
-            }
-        }
-
-        if (currentTenant) {
-            tenants = [currentTenant] // Fix: Populate tenants array so AccountingModule can identify viewer
-            userProfile = currentTenant
-
-            // 2. Get My Locations
-            const { data: locData } = await supabase
-                .from('tenant_locations')
-                .select(`*, locations:location_id (*)`)
-                .eq('tenant_id', currentTenant.id)
-
-            if (locData) {
-                myLocations = locData.map((item: any) => {
-                    let price = 0
-                    const loc = item.locations
-
-                    // Try to get price based on rate_type
-                    if (item.rate_type === 'khemah' && loc.rate_khemah > 0) {
-                        price = loc.rate_khemah
-                    } else if (item.rate_type === 'cbs' && loc.rate_cbs > 0) {
-                        price = loc.rate_cbs
-                    } else if (item.rate_type === 'monthly' && loc.rate_monthly > 0) {
-                        price = loc.rate_monthly
-                    } else {
-                        // Fallback: Use any available rate (prefer monthly > khemah > cbs)
-                        price = (loc.rate_monthly > 0 ? loc.rate_monthly : 0) ||
-                            (loc.rate_khemah > 0 ? loc.rate_khemah : 0) ||
-                            (loc.rate_cbs > 0 ? loc.rate_cbs : 0) || 0
-                    }
-
-                    return {
-                        ...item,
-                        display_price: price,
-                        location_name: loc.name
-                    }
-                })
-            }
-
-            // 3. Get History from tenant_transactions table
-            // Tenant sees their own Akaun (expenses/payments)
-            const { data: txData } = await supabase
-                .from('tenant_transactions')
-                .select('*')
-                .eq('tenant_id', currentTenant.id)
-                .neq('category', 'Langganan') // Exclude system subscriptions
-                .neq('category', 'Subscription')
-                .order('date', { ascending: false })
-
-            if (txData) {
-                transactions = txData.map(tx => ({
-                    id: tx.id,
-                    date: tx.date,
-                    description: tx.description,
-                    category: tx.category,
-                    amount: tx.amount,
-                    type: tx.type, // This is 'expense' for rent payments
-                    status: tx.status,
-                    receipt_url: tx.receipt_url,
-                    tenant_id: tx.tenant_id,
-                    table_source: 'tenant_transactions',
-                    is_rent_payment: tx.is_rent_payment
-                }))
-            }
-
-            // 4. Available Locations (if organizer code exists)
-            if (currentTenant.organizer_code) {
-                const { data: orgData } = await supabase
-                    .from('organizers')
-                    .select('id')
-                    .eq('organizer_code', currentTenant.organizer_code)
-                    .maybeSingle()
-
-                if (orgData) {
-                    const { data: filteredLocs } = await supabase
-                        .from('locations')
-                        .select('*')
-                        .eq('organizer_id', orgData.id)
-                        .order('name')
-                    availableLocations = filteredLocs || []
-                }
-            }
-        }
-    }
-
-    // 3. Logic: Calculate Overdue based on Rate Type (Common for Dashboard Overview)
-    const overdueTenants = []
-
-    if ((role === 'admin' || role === 'staff' || role === 'organizer') && tenants && transactions) {
-        for (const t of tenants) {
-            // Find last approved income (need to re-fetch or find in tx list if it contains all)
-            // The 'transactions' array above contains ALL transactions for Admin/Staff
-            // For Organizer it contains filtered.
-            // So we can use it.
-            const lastTx = transactions.find(
-                (tx: any) => tx.tenant_id === t.id && tx.type === 'income' && tx.status === 'approved'
-            )
-
-            // Determine primary rate type from assigned locations (take first for simplicity)
-            const loc = t.tenant_locations?.[0]
-            const rateType = loc?.rate_type || 'monthly' // Default to monthly if unknown
-            const locationName = loc?.locations?.name || 'Unknown'
-
-            // Calculate Days passed
-            let daysDiff = 0
-            let lastDateStr = 'Tiada Rekod'
-
-            if (!lastTx) {
-                daysDiff = 999 // Never paid
-            } else {
-                const lastDate = new Date(lastTx.date)
-                const today = new Date()
-                const diffTime = Math.abs(today.getTime() - lastDate.getTime())
-                daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                lastDateStr = lastTx.date
-            }
-
-            // --- Overdue Logic ---
-            let isOverdue = false
-            let arrearsAmount = 0
-            let overdueText = ""
-
-            if (rateType === 'monthly') {
-                // Monthly renews monthly (30 days)
-                if (daysDiff > 30) {
-                    isOverdue = true
-                    const monthsOverdue = Math.floor(daysDiff / 30)
-                    const rate = loc?.locations?.rate_monthly || 0
-                    arrearsAmount = monthsOverdue * rate
-                    overdueText = `${monthsOverdue} Bulan`
-                }
-            } else {
-                // Daily/Khemah/CBS renews WEEKLY (7 days)
-                if (daysDiff > 7) {
-                    isOverdue = true
-                    const weeksOverdue = Math.floor(daysDiff / 7)
-                    const rate = rateType === 'cbs' ? (loc?.locations?.rate_cbs || 0) : (loc?.locations?.rate_khemah || 0)
-                    arrearsAmount = weeksOverdue * rate
-                    overdueText = `${weeksOverdue} Minggu`
-                }
-            }
-
-            if (isOverdue) {
-                overdueTenants.push({
-                    ...t,
-                    lastDate: lastDateStr,
-                    arrears: arrearsAmount,
-                    overdueText,
-                    locationName
-                })
-            }
-        }
-    }
-
-    return {
-        transactions,
-        tenants,
-        overdueTenants,
-        organizers,
-        myLocations,
-        availableLocations,
-        userProfile,
-        role,
-        user // Added user for context (created_at etc)
-    }
+    // For now, skip caching to avoid stale data issues
+    // Return fresh data
+    return await fetchDashboardDataInternal(user.id, role, user.email, profile?.organizer_code)
 }
 
 export async function fetchLocations() {
     const supabase = await createClient()
 
-    // Get user with timeout protection
     let user: any;
     try {
         const authResult: any = await withTimeout(
@@ -602,9 +383,9 @@ export async function fetchLocations() {
         .from('locations')
         .select('*, organizers(name)')
         .order('created_at', { ascending: true })
+        .limit(100)
 
     // Regular organizers only see their own locations
-    // Admin organizers (like admin@kumim.my) see ALL locations
     if (role === 'organizer' && user.email !== 'admin@kumim.my') {
         const { data: org } = await supabase.from('organizers').select('id').eq('profile_id', user.id).single()
         if (org) {
@@ -613,44 +394,24 @@ export async function fetchLocations() {
             return []
         }
     }
-    // Admins, staff, and admin organizers see all locations (no filter)
 
     // Developer-Admin Logic: Hide ORG001 for everyone except admin@permit.com
     if (user.email !== 'admin@permit.com') {
-        // Get ORG001 ID to exclude
         const { data: seedOrg } = await supabase.from('organizers').select('id').eq('organizer_code', 'ORG001').maybeSingle()
         if (seedOrg) {
             query = query.neq('organizer_id', seedOrg.id)
         }
     }
 
-    const { data: locations, error: locationsError } = await query
+    const { data: locations, error: locationsError } = await withTimeout(() => query, 5000, 'locations query')
     if (locationsError) {
         console.error('[fetchLocations] Error fetching locations:', locationsError)
         return []
     }
     if (!locations) return []
 
-    // Optimized: Fetch all tenant counts in parallel with error handling
-    const locationsWithCounts = await Promise.all(locations.map(async (loc: any) => {
-        try {
-            const { count, error: countError } = await supabase
-                .from('tenant_locations')
-                .select('*', { count: 'exact', head: true })
-                .eq('location_id', loc.id)
-
-            if (countError) {
-                console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
-                return { ...loc, tenant_count: 0 }
-            }
-            return { ...loc, tenant_count: count || 0 }
-        } catch (e) {
-            console.error(`[fetchLocations] Exception counting tenants for location ${loc.id}:`, e)
-            return { ...loc, tenant_count: 0 }
-        }
-    }))
-
-    return locationsWithCounts
+    // Return locations without counting (to save time)
+    return locations.map((loc: any) => ({ ...loc, tenant_count: 0 }))
 }
 
 export async function fetchSettingsData() {
@@ -662,84 +423,66 @@ export async function fetchSettingsData() {
     const role = userProfile?.role
 
     let profile: any = {
-        // Base data from auth/profiles
         profile_id: user.id,
         email: userProfile?.email || user.email,
         full_name: userProfile?.full_name || user.user_metadata?.full_name || '',
     }
 
-    // Fetch role-specific profile data
-    if (role === 'organizer') {
-        // For organizers, fetch from organizers table
-        const { data: org } = await supabase.from('organizers').select('*').eq('profile_id', user.id).maybeSingle()
-        if (org) {
-            profile = {
-                ...profile,
-                id: org.id,
-                business_name: org.name,  // Organizer name = business name
-                organizer_code: org.organizer_code,
-                status: org.status,
-                accounting_status: org.accounting_status,
-                phone_number: org.phone,
-                address: org.address,
-                is_organizer: true,
+    // Fetch role-specific profile data with timeouts
+    try {
+        if (role === 'organizer') {
+            const { data: org } = await withTimeout(
+                () => supabase.from('organizers').select('*').eq('profile_id', user.id).maybeSingle(),
+                3000,
+                'organizer profile'
+            )
+            if (org) {
+                profile = { ...profile, id: org.id, business_name: org.name, organizer_code: org.organizer_code, status: org.status }
+            }
+        } else if (role === 'admin') {
+            const { data: admin } = await withTimeout(
+                () => supabase.from('admins').select('*').eq('profile_id', user.id).maybeSingle(),
+                3000,
+                'admin profile'
+            )
+            if (admin) {
+                profile = { ...profile, id: admin.id, business_name: admin.full_name, organizer_code: admin.organizer_code }
+            }
+        } else if (role === 'staff') {
+            const { data: staff } = await withTimeout(
+                () => supabase.from('staff').select('*').eq('profile_id', user.id).maybeSingle(),
+                3000,
+                'staff profile'
+            )
+            if (staff) {
+                profile = { ...profile, id: staff.id, business_name: staff.full_name, organizer_code: staff.organizer_code }
+            }
+        } else {
+            const { data: tenant } = await withTimeout(
+                () => supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle(),
+                3000,
+                'tenant profile'
+            )
+            if (tenant) {
+                profile = { ...profile, id: tenant.id, business_name: tenant.business_name || tenant.full_name }
             }
         }
-    } else if (role === 'admin') {
-        // For admins, fetch from admins table
-        const { data: admin } = await supabase.from('admins').select('*').eq('profile_id', user.id).maybeSingle()
-        if (admin) {
-            profile = {
-                ...profile,
-                id: admin.id,
-                business_name: admin.full_name,  // Use full name as business name for admins
-                organizer_code: admin.organizer_code,
-                status: admin.is_active ? 'active' : 'inactive',
-                phone_number: admin.phone_number,
-                is_admin: true,
-            }
-        }
-    } else if (role === 'staff') {
-        // For staff, fetch from staff table
-        const { data: staff } = await supabase.from('staff').select('*').eq('profile_id', user.id).maybeSingle()
-        if (staff) {
-            profile = {
-                ...profile,
-                id: staff.id,
-                business_name: staff.full_name,  // Use full name as business name for staff
-                organizer_code: staff.organizer_code,
-                status: staff.is_active ? 'active' : 'inactive',
-                phone_number: staff.phone_number,
-                is_staff: true,
-            }
-        }
-    } else {
-        // For tenants and others, fetch from tenants table
-        const { data: tenant } = await supabase.from('tenants').select('*').eq('profile_id', user.id).maybeSingle()
-        if (tenant) {
-            profile = {
-                ...profile,
-                id: tenant.id,
-                business_name: tenant.business_name || tenant.full_name,
-                full_name: tenant.full_name || profile.full_name,
-                phone_number: tenant.phone_number,
-                ic_number: tenant.ic_number,
-                ssm_number: tenant.ssm_number,
-                address: tenant.address,
-                status: tenant.status,
-                accounting_status: tenant.accounting_status,
-                profile_image_url: tenant.profile_image_url,
-                ssm_file_url: tenant.ssm_file_url,
-                food_handling_cert_url: tenant.food_handling_cert_url,
-                other_docs_url: tenant.other_docs_url,
-            }
-        }
+    } catch (e) {
+        console.error('[fetchSettingsData] Error fetching profile:', e)
     }
 
     let backups: any[] = []
     if (['admin', 'superadmin', 'staff'].includes(role || '')) {
-        const { data: b } = await supabase.storage.from('backups').list('', { sortBy: { column: 'created_at', order: 'desc' } })
-        if (b) backups = b
+        try {
+            const { data: b } = await withTimeout(
+                () => supabase.storage.from('backups').list('', { sortBy: { column: 'created_at', order: 'desc' }, limit: 10 }),
+                3000,
+                'backups list'
+            )
+            if (b) backups = b
+        } catch (e) {
+            console.error('[fetchSettingsData] Error fetching backups:', e)
+        }
     }
 
     const { data: systemSettings } = await supabase.from('system_settings').select('trial_period_days').single()

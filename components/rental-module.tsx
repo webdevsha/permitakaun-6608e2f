@@ -681,7 +681,13 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                   {history.map((pay) => (
                     <TableRow key={pay.id}>
                       <TableCell className="pl-6 font-mono text-xs text-muted-foreground">
-                        {new Date(pay.payment_date).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {(() => {
+                          const dateStr = pay.payment_date || pay.date
+                          if (!dateStr) return '-'
+                          const date = new Date(dateStr)
+                          if (isNaN(date.getTime())) return '-'
+                          return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                        })()}
                       </TableCell>
                       <TableCell>{pay.remarks || "Bayaran Sewa"}</TableCell>
                       {(() => {

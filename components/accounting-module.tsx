@@ -303,15 +303,20 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // No perspective transformation needed!
   
   const perspectiveTransactions = transactions || []
+  
+  // For tenants, include pending transactions in calculations (it's their own Akaun)
+  // For organizers/admins, only count approved transactions
+  const isTenantRole = role === 'tenant' || userRole === 'tenant'
+  const statusFilter = isTenantRole ? ['approved', 'pending'] : ['approved']
 
   // 1. Paid Up Capital (Modal)
   const totalCapital = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category === 'Modal')
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && t.category === 'Modal')
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
   // 2. Operating Revenue (Income excluding Modal, including negative amounts/cash out)
   const operatingRevenue = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'income' && t.status === 'approved' && t.category !== 'Modal')
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && t.category !== 'Modal')
     .reduce((sum: number, t: any) => {
       const amount = Number(t.amount)
       // Include both positive income and negative amounts (cash out/refunds)
@@ -320,7 +325,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // 3. Total Expenses
   const totalExpenses = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'expense' && t.status === 'approved')
+    ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status))
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
   // 4. Net Profit / Retained Earnings
@@ -557,12 +562,23 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       }
 
       // Build transaction data based on role
+      // Determine default status based on role
+      // - Admin/Superadmin: approved (they have authority)
+      // - Tenant: approved (it's their own personal Akaun)
+      // - Organizer/Staff: pending (may need review)
+      let defaultStatus: 'approved' | 'pending' = 'pending'
+      if (userRole === 'admin' || userRole === 'superadmin' || role === 'admin' || role === 'superadmin') {
+        defaultStatus = 'approved'
+      } else if (role === 'tenant' || userRole === 'tenant') {
+        defaultStatus = 'approved' // Tenant's own transactions are auto-approved
+      }
+
       let txData: any = {
         description: newTransaction.description,
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
-        status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
+        status: defaultStatus,
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
@@ -610,7 +626,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           .single()
         if (error) throw error
         await logAction('CREATE', 'transaction', newTx.id, txData)
-        toast.success(userRole === 'staff' ? "Transaksi direkod (Menunggu kelulusan)" : "Transaksi berjaya ditambah")
+        const successMessage = userRole === 'staff' || role === 'staff' 
+          ? "Transaksi direkod (Menunggu kelulusan)" 
+          : "Transaksi berjaya ditambah"
+        toast.success(successMessage)
       }
 
       mutate()
@@ -1309,7 +1328,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-serif text-2xl text-emerald-900">Penyata Aliran Tunai</CardTitle>
-                    <CardDescription className="text-emerald-700/70">Ringkasan kemasukan dan perbelanjaan tunai</CardDescription>
+                    <CardDescription className="text-emerald-700/70">
+                      Ringkasan kemasukan dan perbelanjaan tunai
+                      {isTenantRole && <span className="block text-xs mt-1 text-emerald-600/70">* Termasuk transaksi yang belum disahkan</span>}
+                    </CardDescription>
                   </div>
                   <div className="p-3 bg-white rounded-xl shadow-sm">
                     <ArrowUpRight className="w-6 h-6 text-emerald-600" />
