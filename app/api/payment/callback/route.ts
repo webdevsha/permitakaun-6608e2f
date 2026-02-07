@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
             const { data: adminTx, error: atError } = await supabase
                 .from('admin_transactions')
                 .update({
-                    status: 'completed',
+                    status: 'approved',
                     payment_reference: id?.toString(),
                     updated_at: new Date().toISOString()
                 })
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
             const { data: orgTx, error: otError } = await supabase
                 .from('organizer_transactions')
                 .update({
-                    status: 'completed',
+                    status: 'approved',
                     payment_reference: id?.toString(),
                     updated_at: new Date().toISOString()
                 })

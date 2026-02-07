@@ -124,10 +124,10 @@ export function AdminSubscriptionsTab() {
       
       // Calculate stats
       const pending = formattedPayments.filter(p => p.status === 'pending').length
-      const approved = formattedPayments.filter(p => p.status === 'completed' || p.status === 'approved').length
+      const approved = formattedPayments.filter(p => p.status === 'approved').length
       const rejected = formattedPayments.filter(p => p.status === 'rejected').length
       const totalAmount = formattedPayments
-        .filter(p => p.status === 'completed' || p.status === 'approved')
+        .filter(p => p.status === 'approved')
         .reduce((sum, p) => sum + p.amount, 0)
       
       setStats({
@@ -174,7 +174,7 @@ export function AdminSubscriptionsTab() {
       const { error: txError } = await supabase
         .from('admin_transactions')
         .update({ 
-          status: 'completed',
+          status: 'approved',
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedPayment.id)

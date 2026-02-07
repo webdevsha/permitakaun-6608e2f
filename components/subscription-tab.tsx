@@ -107,9 +107,9 @@ export function SubscriptionTab() {
         const latestPayment = userPayments[0]
         calculateNextPayment(latestPayment.date)
         
-        // Check if subscription is active (has at least one completed payment)
+        // Check if subscription is active (has at least one approved payment)
         const hasCompletedPayment = userPayments.some((p: any) => 
-          p.status === 'completed' || p.status === 'approved'
+          p.status === 'approved'
         )
         setHasActiveSubscription(hasCompletedPayment || latestPayment.status === 'pending')
       } else {
