@@ -5,6 +5,7 @@ import { createBillplzBill, createChipInPayment } from "@/utils/payment/gateways
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { getPaymentMode } from "@/actions/settings"
+import { updatePaymentTransactionWithRef } from "./public-payment"
 
 export async function initiatePayment(params: {
     amount: number,
@@ -93,18 +94,14 @@ export async function initiatePayment(params: {
         if (result && result.url) {
             // If transactionId provided (public payment), update the organizer_transaction
             if (params.transactionId) {
-                const { error: updateError } = await supabase
-                    .from('organizer_transactions')
-                    .update({
-                        payment_reference: result.id,
-                        receipt_url: result.url,
-                        status: 'pending',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', params.transactionId)
+                const updateResult = await updatePaymentTransactionWithRef(
+                    params.transactionId,
+                    result.id,
+                    result.url
+                )
 
-                if (updateError) {
-                    console.error("[Payment] Failed to update organizer_transaction:", updateError)
+                if (!updateResult.success) {
+                    console.error("[Payment] Failed to update organizer_transaction:", updateResult.error)
                 } else {
                     console.log("[Payment] Updated organizer_transaction with payment reference.")
                 }
