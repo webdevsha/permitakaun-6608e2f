@@ -29,32 +29,18 @@ export default function DashboardLayoutClient({
     const checkedRef = useRef(false)
     const [isSigningOut, setIsSigningOut] = useState(false)
 
-    // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
-    // Only fall back to auth context if initial data is not available
+    // Use server-provided initial data as source of truth
     const user = initialUser || authUser
     const role = initialRole || authRole
     const profile = initialProfile || authProfile
 
-    console.log('[Layout] Render:', { 
-        isLoading, 
-        isInitialized, 
-        hasInitialUser: !!initialUser, 
-        hasAuthUser: !!authUser,
-        hasEffectiveUser: !!user
-    })
-
     // Check subscription access for Akaun
     useEffect(() => {
-        console.log('[Layout] useEffect triggered:', { isInitialized, checked: checkedRef.current })
-        
         if (!isInitialized || checkedRef.current) return
         checkedRef.current = true
 
         const verifyAccess = async () => {
-            console.log('[Layout] Verifying access, user:', !!user)
-            
             if (!user) {
-                console.log('[Layout] No user, redirecting to login')
                 window.location.href = '/login'
                 return
             }
@@ -66,26 +52,19 @@ export default function DashboardLayoutClient({
             if (!pathname.startsWith('/dashboard/accounting')) return
 
             // Admin/Staff/Superadmin - always allow
-            if (role === 'admin' || role === 'staff' || role === 'superadmin') {
-                console.log('[Layout] Admin/Staff/Superadmin - allowing access')
-                return
-            }
+            if (role === 'admin' || role === 'staff' || role === 'superadmin') return
 
-            console.log('[Layout] Organizer/Tenant - letting module handle access check')
+            // For organizers and tenants - let the Accounting module handle the check
         }
 
         verifyAccess()
     }, [user, role, pathname, router, isInitialized])
 
     // Show loading state only during initial hydration  
-    // CRITICAL FIX: If server provided initialUser, don't show loading spinner
-    // because we already have valid data from the server
+    // If server provided initialUser, don't show loading spinner
     const effectiveUser = initialUser || authUser
     
-    // Show spinner only if:
-    // 1. Auth is still loading AND not initialized AND no user from either server or client
     if (isLoading && !isInitialized && !effectiveUser) {
-        console.log('[Layout] Showing loading spinner')
         return (
             <div className="min-h-screen flex items-center justify-center bg-secondary">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -93,13 +72,10 @@ export default function DashboardLayoutClient({
         )
     }
 
-    // Return null if no user at all (will redirect in useEffect or let error boundary handle)
     if (!user) {
-        console.log('[Layout] No user, returning null')
         return null
     }
 
-    console.log('[Layout] Rendering dashboard layout')
     return (
         <div className="min-h-screen flex w-full bg-secondary">
             <AppSidebar

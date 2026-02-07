@@ -31,9 +31,7 @@ export default async function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    console.log('[DashboardLayout] Starting render')
     const supabase = await createClient()
-    console.log('[DashboardLayout] Supabase client created')
 
     // Fetch User first (with timeout)
     let user: any;
@@ -50,10 +48,8 @@ export default async function DashboardLayout({
     }
 
     if (!user) {
-        console.log('[DashboardLayout] No user, redirecting to login')
         redirect("/login")
     }
-    console.log('[DashboardLayout] User found:', user.email)
 
     // Fetch Profile with timeout and proper user filter
     let profile: any = null;
@@ -75,10 +71,8 @@ export default async function DashboardLayout({
 
     // Determine Role using consistent shared utility
     const userRole = determineUserRole(profile, user.email)
-    console.log('[DashboardLayout] Role determined:', userRole)
 
     // Pass data to client component for hydration
-    console.log('[DashboardLayout] Rendering layout client')
     return (
         <DashboardLayoutClient
             initialUser={user}
