@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import { signOutAction } from "@/actions/auth"
@@ -27,21 +27,23 @@ const AuthContext = createContext<AuthContextType>({
   refreshAuth: async () => { },
 })
 
-// Helper to add timeout to promises
-function withTimeout<T>(promise: Promise<T>, ms: number, context: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error(`${context} timeout after ${ms}ms`)), ms)
-    )
-  ])
+// Inline role determination - no dependencies
+function determineRoleInline(profileData: any, userEmail?: string): string {
+  if (!profileData) return 'tenant'
+  let determinedRole = profileData.role
+  if (!determinedRole && userEmail) {
+    if (userEmail === 'admin@permit.com') determinedRole = 'admin'
+    else if (userEmail === 'staff@permit.com') determinedRole = 'staff'
+    else if (userEmail === 'organizer@permit.com') determinedRole = 'organizer'
+    else if (userEmail === 'rafisha92@gmail.com') determinedRole = 'superadmin'
+    else if (userEmail === 'admin@kumim.my') determinedRole = 'admin'
+  }
+  return determinedRole || 'tenant'
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
-  const router = useRouter()
-  const pathname = usePathname()
-
+  console.log('[AuthProvider] Render')
+  
   const [user, setUser] = useState<any | null>(null)
   const [session, setSession] = useState<any | null>(null)
   const [profile, setProfile] = useState<any | null>(null)
@@ -49,107 +51,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // Function to determine role from profile
-  const determineRole = useCallback((profileData: any, userEmail?: string) => {
-    if (!profileData) return null
-
-    // Priority: 1. Explicit role from profile, 2. Email-based fallback
-    let determinedRole = profileData.role
-
-    if (!determinedRole && userEmail) {
-      if (userEmail === 'admin@permit.com') determinedRole = 'admin'
-      else if (userEmail === 'staff@permit.com') determinedRole = 'staff'
-      else if (userEmail === 'organizer@permit.com') determinedRole = 'organizer'
-      else if (userEmail === 'rafisha92@gmail.com') determinedRole = 'superadmin'
-      else if (userEmail === 'admin@kumim.my') determinedRole = 'admin'
-    }
-
-    return determinedRole || 'tenant'
-  }, [])
-
-  // Fetch profile data - FIXED: pass userEmail as parameter to avoid stale closure
-  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
-    try {
-      const { data: profileData, error } = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single(),
-        5000,
-        'fetchProfile'
-      )
-
-      if (error) {
-        console.error('[Auth] Profile fetch error:', error)
-        return null
-      }
-
-      if (profileData) {
-        setProfile(profileData)
-        const determinedRole = determineRole(profileData, userEmail)
-        setRole(determinedRole)
-        return profileData
-      }
-      return null
-    } catch (error) {
-      console.error('[Auth] Profile fetch error:', error)
-      return null
-    }
-  }, [supabase, determineRole])
-
-  // Refresh auth state
-  const refreshAuth = useCallback(async () => {
-    try {
-      const { data: { session: currentSession } } = await withTimeout(
-        supabase.auth.getSession(),
-        5000,
-        'getSession'
-      )
-
-      if (currentSession?.user) {
-        setUser(currentSession.user)
-        setSession(currentSession)
-        await fetchProfile(currentSession.user.id, currentSession.user.email)
-      } else {
-        setUser(null)
-        setSession(null)
-        setProfile(null)
-        setRole(null)
-      }
-    } catch (error) {
-      console.error('[Auth] Refresh error:', error)
-    }
-  }, [supabase, fetchProfile])
-
+  // Main initialization effect - NO DEPENDENCIES to ensure it runs once
   useEffect(() => {
+    console.log('[AuthProvider] useEffect running')
+    
     let mounted = true
+    let subscription: any = null
 
-    // Initial auth check
     const initAuth = async () => {
+      console.log('[AuthProvider] initAuth started')
+      
       try {
-        // Add timeout to prevent hanging
-        const { data: { session: initialSession }, error: sessionError } = await withTimeout(
-          supabase.auth.getSession(),
-          8000,
-          'initAuth'
+        const supabase = createClient()
+        console.log('[AuthProvider] Client created')
+        
+        // Get session with timeout
+        const timeoutMs = 5000
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('timeout')), timeoutMs)
         )
-
-        if (sessionError) {
-          console.error('[Auth] Session error:', sessionError)
+        
+        let result: any
+        try {
+          result = await Promise.race([sessionPromise, timeoutPromise])
+        } catch (timeoutErr) {
+          console.log('[AuthProvider] getSession timeout, continuing without session')
+          result = { data: { session: null }, error: null }
         }
+        
+        const { data: { session: initialSession }, error: sessionError } = result
+        console.log('[AuthProvider] Session:', { hasSession: !!initialSession, error: !!sessionError })
 
         if (!mounted) return
+
+        if (sessionError) {
+          console.error('[AuthProvider] Session error:', sessionError)
+        }
 
         if (initialSession?.user) {
           setUser(initialSession.user)
           setSession(initialSession)
-          // CRITICAL FIX: Pass user.email directly to avoid stale closure
-          await fetchProfile(initialSession.user.id, initialSession.user.email)
+          
+          // Fetch profile - don't block on this
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', initialSession.user.id)
+            .single()
+            .then(({ data: profileData, error: profileError }: any) => {
+              if (!mounted) return
+              if (profileError) {
+                console.error('[AuthProvider] Profile error:', profileError)
+              } else if (profileData) {
+                setProfile(profileData)
+                setRole(determineRoleInline(profileData, initialSession.user.email))
+              }
+            })
+            .catch((err: any) => {
+              console.error('[AuthProvider] Profile fetch error:', err)
+            })
         }
+        
+        // Set up auth listener
+        try {
+          const { data } = supabase.auth.onAuthStateChange((event: any, newSession: any) => {
+            console.log('[AuthProvider] Auth change:', event)
+            if (!mounted) return
+            
+            if (event === 'SIGNED_OUT') {
+              setUser(null)
+              setSession(null)
+              setProfile(null)
+              setRole(null)
+            } else if (newSession?.user) {
+              setUser(newSession.user)
+              setSession(newSession)
+            }
+          })
+          subscription = data.subscription
+        } catch (e) {
+          console.error('[AuthProvider] Listener error:', e)
+        }
+        
       } catch (error) {
-        console.error('[Auth] Init error:', error)
+        console.error('[AuthProvider] Init error:', error)
       } finally {
+        console.log('[AuthProvider] Init complete')
         if (mounted) {
           setIsLoading(false)
           setIsInitialized(true)
@@ -159,44 +147,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return
-
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setSession(null)
-        setProfile(null)
-        setRole(null)
-      } else if (newSession?.user) {
-        setUser(newSession.user)
-        setSession(newSession)
-        await fetchProfile(newSession.user.id, newSession.user.email)
-      }
-    })
-
     return () => {
+      console.log('[AuthProvider] Cleanup')
       mounted = false
-      subscription.unsubscribe()
+      if (subscription) subscription.unsubscribe()
     }
-  }, [supabase, fetchProfile])
+  }, []) // NO DEPENDENCIES - run once on mount
 
   const signOut = async () => {
     try {
-      // Clear local state immediately for instant feedback
       setUser(null)
       setSession(null)
       setProfile(null)
       setRole(null)
-
-      // Call server action to clear cookies and redirect
       await signOutAction()
     } catch (error) {
-      console.error('Sign out error:', error)
-      // Force redirect even on error
       window.location.href = '/login'
     }
   }
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      if (currentSession?.user) {
+        setUser(currentSession.user)
+        setSession(currentSession)
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', currentSession.user.id)
+          .single()
+        if (profileData) {
+          setProfile(profileData)
+          setRole(determineRoleInline(profileData, currentSession.user.email))
+        }
+      } else {
+        setUser(null)
+        setSession(null)
+        setProfile(null)
+        setRole(null)
+      }
+    } catch (error) {
+      console.error('[AuthProvider] Refresh error:', error)
+    }
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, session, profile, role, isLoading, isInitialized, signOut, refreshAuth }}>

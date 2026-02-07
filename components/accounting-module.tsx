@@ -158,11 +158,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
         setUserRole(role)
 
-        // FAST-PATH: Admin/Staff/Superadmin
+        // FAST-PATH: Admin/Staff/Superadmin - no eligibility check needed
         if (role === 'superadmin' || role === 'admin' || role === 'staff') {
-          console.log('[Accounting] Privileged role')
+          console.log('[Accounting] Privileged role - instant access')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
+          setIsLoading(false)
           return
         }
 
@@ -180,6 +181,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               console.log('[Accounting] Organizer with active accounting')
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
+              setIsLoading(false)
               return
             }
           } catch (e) {
@@ -201,6 +203,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               if (daysRemaining > 0) {
                 setAccessDeniedStatus(null)
                 setIsModuleVerified(true)
+                setIsLoading(false)
                 return
               }
             }
@@ -212,6 +215,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             console.error('[Accounting] Error checking trial:', e)
             // Allow access on error
             setIsModuleVerified(true)
+            setIsLoading(false)
           }
 
         } else if (role === 'tenant') {
@@ -219,9 +223,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           console.log('[Accounting] Tenant access granted')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
+          setIsLoading(false)
         } else {
           // Unknown role - allow access
           setIsModuleVerified(true)
+          setIsLoading(false)
         }
 
       } catch (e) {
@@ -1260,7 +1266,31 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
                                 )}
-                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin" || ((userRole === "staff" || role === "staff") && transaction.status === 'pending')) && (
+                                {/* Organizer: Can edit/delete their own transactions */}
+                                {(userRole === "organizer" || role === "organizer") && (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
+                                      onClick={() => handleEdit(transaction)}
+                                      title="Kemaskini"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
+                                      onClick={() => handleDelete(transaction.id)}
+                                      title="Padam"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                                {/* Staff: Edit only (if pending) */}
+                                {((userRole === "staff" || role === "staff") && transaction.status === 'pending') && (
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -1270,15 +1300,26 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <Edit2 className="h-4 w-4" />
                                   </Button>
                                 )}
+                                {/* Admin/Superadmin: Edit, Delete */}
                                 {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin") && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
-                                    onClick={() => handleDelete(transaction.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
+                                      onClick={() => handleEdit(transaction)}
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
+                                      onClick={() => handleDelete(transaction.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
                                 )}
                                 {/* Tenant: Can edit/delete their own transactions */}
                                 {role === 'tenant' && (

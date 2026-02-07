@@ -29,15 +29,13 @@ export default function DashboardLayoutClient({
     const checkedRef = useRef(false)
     const [isSigningOut, setIsSigningOut] = useState(false)
 
-    // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
-    // Only fall back to auth context if initial data is not available
+    // Use server-provided initial data as source of truth
     const user = initialUser || authUser
     const role = initialRole || authRole
     const profile = initialProfile || authProfile
 
     // Check subscription access for Akaun
     useEffect(() => {
-        // Only check access once after auth is initialized
         if (!isInitialized || checkedRef.current) return
         checkedRef.current = true
 
@@ -54,26 +52,18 @@ export default function DashboardLayoutClient({
             if (!pathname.startsWith('/dashboard/accounting')) return
 
             // Admin/Staff/Superadmin - always allow
-            if (role === 'admin' || role === 'staff' || role === 'superadmin') {
-                console.log('[Layout] Admin/Staff/Superadmin - allowing access')
-                return
-            }
+            if (role === 'admin' || role === 'staff' || role === 'superadmin') return
 
             // For organizers and tenants - let the Accounting module handle the check
-            // Don't redirect here, let the module show appropriate UI
-            console.log('[Layout] Organizer/Tenant - letting module handle access check')
         }
 
         verifyAccess()
     }, [user, role, pathname, router, isInitialized])
 
     // Show loading state only during initial hydration  
-    // CRITICAL FIX: If server provided initialUser, don't show loading spinner
-    // because we already have valid data from the server
+    // If server provided initialUser, don't show loading spinner
     const effectiveUser = initialUser || authUser
     
-    // Show spinner only if:
-    // 1. Auth is still loading AND not initialized AND no user from either server or client
     if (isLoading && !isInitialized && !effectiveUser) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-secondary">
@@ -82,7 +72,6 @@ export default function DashboardLayoutClient({
         )
     }
 
-    // Return null if no user at all (will redirect in useEffect or let error boundary handle)
     if (!user) {
         return null
     }

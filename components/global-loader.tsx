@@ -10,9 +10,16 @@ export function GlobalLoader() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const [isNavigating, setIsNavigating] = useState(false)
+    // CRITICAL FIX: Force hide after 5 seconds max
+    const [forceHide, setForceHide] = useState(false)
+
+    useEffect(() => {
+        const timer = setTimeout(() => setForceHide(true), 5000)
+        return () => clearTimeout(timer)
+    }, [])
 
     // Show loader on initial auth check
-    const showLoader = isLoading || !isInitialized || isNavigating
+    const showLoader = (isLoading || !isInitialized || isNavigating) && !forceHide
 
     useEffect(() => {
         // Reset navigation state when path or params change
