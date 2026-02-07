@@ -88,9 +88,9 @@ async function fetchDashboardDataInternal(
                     .order('created_at', { ascending: false })
                     .limit(100) // Limit to prevent timeouts
 
-                if (adminOrgCode) {
-                    tQuery = tQuery.eq('organizer_code', adminOrgCode)
-                } else if (!isDeveloperAdmin) {
+                // admin@kumim.my sees ALL tenants (no filter)
+                // Other admins see tenants except ORG001 (seed data)
+                if (!adminOrgCode && !isDeveloperAdmin) {
                     tQuery = tQuery.neq('organizer_code', 'ORG001')
                 }
 
@@ -127,16 +127,9 @@ async function fetchDashboardDataInternal(
                     .order('date', { ascending: false })
                     .limit(50) // Limit to prevent timeouts
 
-                if (adminOrgCode) {
-                    const { data: orgData } = await supabase
-                        .from('organizers')
-                        .select('id')
-                        .eq('organizer_code', adminOrgCode)
-                        .single()
-                    if (orgData) {
-                        txQuery = txQuery.eq('organizer_id', orgData.id)
-                    }
-                } else if (!isDeveloperAdmin) {
+                // admin@kumim.my sees ALL transactions (no filter)
+                // Other admins see transactions except ORG001 (seed data)
+                if (!adminOrgCode && !isDeveloperAdmin) {
                     const { data: seedOrg } = await supabase
                         .from('organizers')
                         .select('id')
@@ -147,7 +140,7 @@ async function fetchDashboardDataInternal(
                     }
                 }
 
-                const { data: tx, error } = await withTimeout(() => txQuery, 5000, 'transactions query')
+                const { data: tx, error } = await withTimeout(() => txQuery, 5000, 'organizer transactions query')
                 if (error) throw error
                 
                 transactions = (tx || []).map(t => ({
@@ -157,6 +150,37 @@ async function fetchDashboardDataInternal(
             } catch (e) {
                 console.error('[Dashboard] Error fetching transactions:', e)
                 transactions = []
+            }
+
+            // Also fetch admin transactions (Langganan payments) for admin view
+            try {
+                const { data: adminTx, error: adminError } = await withTimeout(
+                    () => supabase
+                        .from('admin_transactions')
+                        .select('*')
+                        .order('date', { ascending: false })
+                        .limit(50),
+                    5000,
+                    'admin transactions query'
+                )
+                
+                if (adminError) throw adminError
+                
+                // Add admin transactions (Langganan) to the transactions list
+                const formattedAdminTx = (adminTx || []).map(t => ({
+                    ...t,
+                    table_source: 'admin_transactions',
+                    // Ensure consistent structure with organizer_transactions
+                    tenants: null
+                }))
+                
+                // Combine and sort by date (newest first)
+                transactions = [...transactions, ...formattedAdminTx]
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .slice(0, 50) // Keep only top 50 after combining
+            } catch (e) {
+                console.error('[Dashboard] Error fetching admin transactions:', e)
+                // Don't overwrite organizer transactions if admin fetch fails
             }
 
             // Fetch Organizers
