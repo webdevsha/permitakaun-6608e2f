@@ -35,14 +35,26 @@ export default function DashboardLayoutClient({
     const role = initialRole || authRole
     const profile = initialProfile || authProfile
 
+    console.log('[Layout] Render:', { 
+        isLoading, 
+        isInitialized, 
+        hasInitialUser: !!initialUser, 
+        hasAuthUser: !!authUser,
+        hasEffectiveUser: !!user
+    })
+
     // Check subscription access for Akaun
     useEffect(() => {
-        // Only check access once after auth is initialized
+        console.log('[Layout] useEffect triggered:', { isInitialized, checked: checkedRef.current })
+        
         if (!isInitialized || checkedRef.current) return
         checkedRef.current = true
 
         const verifyAccess = async () => {
+            console.log('[Layout] Verifying access, user:', !!user)
+            
             if (!user) {
+                console.log('[Layout] No user, redirecting to login')
                 window.location.href = '/login'
                 return
             }
@@ -59,8 +71,6 @@ export default function DashboardLayoutClient({
                 return
             }
 
-            // For organizers and tenants - let the Accounting module handle the check
-            // Don't redirect here, let the module show appropriate UI
             console.log('[Layout] Organizer/Tenant - letting module handle access check')
         }
 
@@ -75,6 +85,7 @@ export default function DashboardLayoutClient({
     // Show spinner only if:
     // 1. Auth is still loading AND not initialized AND no user from either server or client
     if (isLoading && !isInitialized && !effectiveUser) {
+        console.log('[Layout] Showing loading spinner')
         return (
             <div className="min-h-screen flex items-center justify-center bg-secondary">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -84,9 +95,11 @@ export default function DashboardLayoutClient({
 
     // Return null if no user at all (will redirect in useEffect or let error boundary handle)
     if (!user) {
+        console.log('[Layout] No user, returning null')
         return null
     }
 
+    console.log('[Layout] Rendering dashboard layout')
     return (
         <div className="min-h-screen flex w-full bg-secondary">
             <AppSidebar

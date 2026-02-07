@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import { signOutAction } from "@/actions/auth"
@@ -38,7 +38,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, context: string): Promi
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const router = useRouter()
   const pathname = usePathname()
 
@@ -49,11 +50,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
 
+  // CRITICAL: Safety timer to ensure we never get stuck loading
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('[Auth] Safety timer triggered - forcing isLoading=false')
+        setIsLoading(false)
+        setIsInitialized(true)
+      }
+    }, 15000) // 15 seconds max loading time
+
+    return () => clearTimeout(safetyTimer)
+  }, [isLoading])
+
   // Function to determine role from profile
   const determineRole = useCallback((profileData: any, userEmail?: string) => {
     if (!profileData) return null
 
-    // Priority: 1. Explicit role from profile, 2. Email-based fallback
     let determinedRole = profileData.role
 
     if (!determinedRole && userEmail) {
@@ -67,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return determinedRole || 'tenant'
   }, [])
 
-  // Fetch profile data - FIXED: pass userEmail as parameter to avoid stale closure
+  // Fetch profile data
   const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
     try {
       const { data: profileData, error } = await withTimeout(
@@ -124,32 +137,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    console.log('[Auth] Initializing...')
 
-    // Initial auth check
     const initAuth = async () => {
       try {
-        // Add timeout to prevent hanging
-        const { data: { session: initialSession }, error: sessionError } = await withTimeout(
-          supabase.auth.getSession(),
-          8000,
-          'initAuth'
-        )
+        console.log('[Auth] Getting session...')
+        
+        // First, try to get session with timeout
+        let sessionResult
+        try {
+          sessionResult = await withTimeout(
+            supabase.auth.getSession(),
+            8000,
+            'initAuth'
+          )
+        } catch (timeoutError) {
+          console.error('[Auth] getSession timeout:', timeoutError)
+          // Continue without session
+          sessionResult = { data: { session: null }, error: timeoutError }
+        }
+
+        const { data: { session: initialSession }, error: sessionError } = sessionResult
+
+        console.log('[Auth] Session result:', { 
+          hasSession: !!initialSession, 
+          hasUser: !!initialSession?.user,
+          error: sessionError?.message 
+        })
 
         if (sessionError) {
           console.error('[Auth] Session error:', sessionError)
         }
 
-        if (!mounted) return
+        if (!mounted) {
+          console.log('[Auth] Component unmounted, aborting')
+          return
+        }
 
         if (initialSession?.user) {
+          console.log('[Auth] User found, fetching profile...')
           setUser(initialSession.user)
           setSession(initialSession)
-          // CRITICAL FIX: Pass user.email directly to avoid stale closure
-          await fetchProfile(initialSession.user.id, initialSession.user.email)
+          
+          // Fetch profile but don't let it block initialization
+          try {
+            await fetchProfile(initialSession.user.id, initialSession.user.email)
+            console.log('[Auth] Profile fetch complete')
+          } catch (profileError) {
+            console.error('[Auth] Profile fetch failed:', profileError)
+          }
+        } else {
+          console.log('[Auth] No user session')
         }
       } catch (error) {
         console.error('[Auth] Init error:', error)
       } finally {
+        console.log('[Auth] Initialization complete, setting isLoading=false')
         if (mounted) {
           setIsLoading(false)
           setIsInitialized(true)
@@ -157,46 +200,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Start initialization
     initAuth()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return
+    // Set up auth state listener
+    let subscription: { unsubscribe: () => void } | null = null
+    try {
+      const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        console.log('[Auth] Auth state change:', event)
+        if (!mounted) return
 
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setSession(null)
-        setProfile(null)
-        setRole(null)
-      } else if (newSession?.user) {
-        setUser(newSession.user)
-        setSession(newSession)
-        await fetchProfile(newSession.user.id, newSession.user.email)
-      }
-    })
+        if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setSession(null)
+          setProfile(null)
+          setRole(null)
+        } else if (newSession?.user) {
+          setUser(newSession.user)
+          setSession(newSession)
+          await fetchProfile(newSession.user.id, newSession.user.email)
+        }
+      })
+      subscription = data.subscription
+    } catch (listenerError) {
+      console.error('[Auth] Failed to set up auth listener:', listenerError)
+    }
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [supabase, fetchProfile])
 
   const signOut = async () => {
     try {
-      // Clear local state immediately for instant feedback
       setUser(null)
       setSession(null)
       setProfile(null)
       setRole(null)
-
-      // Call server action to clear cookies and redirect
       await signOutAction()
     } catch (error) {
       console.error('Sign out error:', error)
-      // Force redirect even on error
       window.location.href = '/login'
     }
   }
+
+  console.log('[Auth] Render state:', { isLoading, isInitialized, hasUser: !!user })
 
   return (
     <AuthContext.Provider value={{ user, session, profile, role, isLoading, isInitialized, signOut, refreshAuth }}>
