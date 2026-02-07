@@ -228,13 +228,14 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           toast.warning(res.warning, { duration: 6000 })
         }
 
-        const counts = res.counts || { transactions: 0, rentals: 0, tenants: 0, locations: 0, organizers: 0 }
-        const totalDeleted = Object.values(counts).reduce((a, b) => a + b, 0)
+        const counts = res.counts || { tenant_transactions: 0, organizer_transactions: 0, rentals: 0, tenants: 0, locations: 0, organizers: 0 }
+        const totalTransactions = (counts.tenant_transactions || 0) + (counts.organizer_transactions || 0)
+        const totalDeleted = totalTransactions + (counts.rentals || 0) + (counts.tenants || 0) + (counts.locations || 0) + (counts.organizers || 0)
 
         if (totalDeleted === 0 && !res.warning) {
           toast.info("Tiada data untuk dipadam.")
         } else {
-          toast.success(`Berjaya memadam: ${counts.transactions} Transaksi, ${counts.organizers} Penganjur, ${counts.tenants} Peniaga, ${counts.locations} Lokasi, ${counts.rentals} Sewaan.`)
+          toast.success(`Berjaya memadam: ${totalTransactions} Transaksi, ${counts.organizers || 0} Penganjur, ${counts.tenants || 0} Peniaga, ${counts.locations || 0} Lokasi, ${counts.rentals || 0} Sewaan.`)
         }
 
         // Optional: refresh page or data

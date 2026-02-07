@@ -3,6 +3,7 @@
 import { PAYMENT_CONFIG } from "@/utils/payment/config"
 import { createBillplzBill, createChipInPayment } from "@/utils/payment/gateways"
 import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { redirect } from "next/navigation"
 import { getPaymentMode } from "@/actions/settings"
 import { updatePaymentTransactionWithRef } from "./public-payment"
@@ -92,6 +93,9 @@ export async function initiatePayment(params: {
         console.log("[Payment] Result:", result)
 
         if (result && result.url) {
+            // Check if this is a subscription payment
+            const isSubscription = params.metadata?.isSubscription === true
+            
             // If transactionId provided (public payment), update the organizer_transaction
             if (params.transactionId) {
                 const updateResult = await updatePaymentTransactionWithRef(
@@ -104,6 +108,59 @@ export async function initiatePayment(params: {
                     console.error("[Payment] Failed to update organizer_transaction:", updateResult.error)
                 } else {
                     console.log("[Payment] Updated organizer_transaction with payment reference.")
+                }
+            } else if (isSubscription) {
+                // For subscription payments - store in admin_transactions as income
+                const { data: { user } } = await supabase.auth.getUser()
+                
+                // Use admin client to bypass RLS
+                const adminSupabase = createAdminClient()
+                
+                const insertData: any = {
+                    description: params.description,
+                    amount: params.amount,
+                    type: 'income',
+                    category: 'Langganan',
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'pending',
+                    receipt_url: result.url,
+                    is_sandbox: mode === 'sandbox'
+                }
+                
+                // Only add these fields if columns exist (migration applied)
+                // Using try-catch to handle potential column mismatches
+                try {
+                    const { error: subTxError } = await adminSupabase.from('admin_transactions').insert({
+                        ...insertData,
+                        payment_method: 'billplz',
+                        payment_reference: result.id,
+                        metadata: {
+                            payer_email: email,
+                            payer_name: name,
+                            user_id: user?.id,
+                            plan_type: params.metadata?.planType || 'basic',
+                            is_subscription: true
+                        },
+                        created_by: user?.id
+                    })
+
+                    if (subTxError) {
+                        console.error("[Payment] Failed to record subscription payment:", subTxError)
+                        // Try again with minimal fields if columns might be missing
+                        await adminSupabase.from('admin_transactions').insert(insertData)
+                        console.log("[Payment] Recorded subscription payment (minimal fields).")
+                    } else {
+                        console.log("[Payment] Recorded subscription payment to admin_transactions.")
+                    }
+                } catch (insertError) {
+                    console.error("[Payment] Error inserting to admin_transactions:", insertError)
+                    // Fallback: insert minimal data
+                    try {
+                        await adminSupabase.from('admin_transactions').insert(insertData)
+                        console.log("[Payment] Recorded subscription payment (fallback).")
+                    } catch (fallbackError) {
+                        console.error("[Payment] Fallback insert failed:", fallbackError)
+                    }
                 }
             } else {
                 // For logged-in tenant payments - insert into tenant_payments

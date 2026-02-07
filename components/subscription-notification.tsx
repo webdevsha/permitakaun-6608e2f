@@ -30,47 +30,48 @@ export function SubscriptionNotification() {
     try {
       let latestPayment: any = null
 
-      // Check for subscription payments in transactions
-      if (role === 'tenant') {
-        const { data: tenantData } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('profile_id', user.id)
-          .single()
+      // Check for subscription payments in admin_transactions (correct place)
+      const { data: adminTxns, error } = await supabase
+        .from('admin_transactions')
+        .select('*')
+        .eq('category', 'Langganan')
+        .eq('type', 'income')
+        .eq('status', 'completed')
+        .order('date', { ascending: false })
+      
+      if (!error && adminTxns) {
+        // Filter for this user's payments
+        const userPayment = adminTxns.find((tx: any) => {
+          const metadata = tx.metadata || {}
+          return metadata.payer_email === user.email || metadata.user_id === user.id
+        })
         
-        if (tenantData) {
-          const { data } = await supabase
-            .from('tenant_transactions')
-            .select('*')
-            .eq('type', 'expense')
-            .ilike('description', '%Langganan%')
-            .eq('status', 'completed')
-            .order('date', { ascending: false })
-            .limit(1)
-          
-          if (data && data.length > 0) {
-            latestPayment = data[0]
-          }
+        if (userPayment) {
+          latestPayment = userPayment
         }
-      } else if (role === 'organizer') {
-        const { data: organizerData } = await supabase
-          .from('organizers')
-          .select('id')
-          .eq('profile_id', user.id)
-          .single()
-        
-        if (organizerData) {
-          const { data } = await supabase
-            .from('organizer_transactions')
-            .select('*')
-            .eq('type', 'expense')
-            .ilike('description', '%Langganan%')
-            .eq('status', 'completed')
-            .order('date', { ascending: false })
-            .limit(1)
+      }
+      
+      // Fallback: Check for active subscription status
+      if (!latestPayment) {
+        if (role === 'tenant') {
+          const { data: tenantData } = await supabase
+            .from('tenants')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .single()
           
-          if (data && data.length > 0) {
-            latestPayment = data[0]
+          if (tenantData?.accounting_status === 'active') {
+            setHasActiveSubscription(true)
+          }
+        } else if (role === 'organizer') {
+          const { data: organizerData } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .single()
+          
+          if (organizerData?.accounting_status === 'active') {
+            setHasActiveSubscription(true)
           }
         }
       }
@@ -100,7 +101,6 @@ export function SubscriptionNotification() {
           nextDate.setDate(nextDate.getDate() + 14) // 14 days trial
           
           setNextPaymentDate(nextDate)
-          setHasActiveSubscription(false)
           
           const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           setDaysUntilPayment(daysLeft)
