@@ -205,10 +205,11 @@ export default function PublicPaymentPage() {
                 throw new Error("Amaun tidak sah")
             }
 
-            // First, create a pending transaction record - with timeout
+            // First, create a pending transaction record in organizer_transactions - with timeout
+            // Public payments go to organizer_transactions (income for organizer)
             const txResult: any = await withTimeout(
                 () => supabase
-                    .from('transactions')
+                    .from('organizer_transactions')
                     .insert({
                         description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
                         amount: amount,
@@ -216,8 +217,9 @@ export default function PublicPaymentPage() {
                         category: 'Sewa',
                         status: 'pending',
                         date: new Date().toISOString().split('T')[0],
-                        payment_method: 'online',
                         organizer_id: selectedLocation.organizer_id,
+                        location_id: selectedLocation.id,
+                        is_auto_generated: false,
                         // Store payer info in metadata
                         metadata: {
                             payer_name: fullName,
@@ -230,7 +232,8 @@ export default function PublicPaymentPage() {
                             location_id: selectedLocation.id,
                             location_name: selectedLocation.name,
                             rate_type: selectedRateType,
-                            is_public_payment: true
+                            is_public_payment: true,
+                            payment_method: 'online'
                         }
                     })
                     .select()

@@ -55,9 +55,9 @@ function PaymentStatusContent() {
             }
 
             try {
-                // Fetch transaction with organizer details
+                // Fetch transaction from organizer_transactions (public payments)
                 const { data, error } = await supabase
-                    .from('transactions')
+                    .from('organizer_transactions')
                     .select(`
                         *,
                         organizers:organizer_id (name, organizer_code)
@@ -73,7 +73,7 @@ function PaymentStatusContent() {
                 // If payment was successful via gateway, update status
                 if (status === 'success' && data.status === 'pending') {
                     await supabase
-                        .from('transactions')
+                        .from('organizer_transactions')
                         .update({
                             status: 'completed',
                             updated_at: new Date().toISOString()
@@ -82,7 +82,7 @@ function PaymentStatusContent() {
 
                     // Refresh data
                     const { data: updated } = await supabase
-                        .from('transactions')
+                        .from('organizer_transactions')
                         .select(`
                             *,
                             organizers:organizer_id (name, organizer_code)
