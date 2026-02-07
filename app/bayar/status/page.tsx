@@ -55,15 +55,33 @@ function PaymentStatusContent() {
             }
 
             try {
-                // Fetch transaction from organizer_transactions (public payments)
-                const { data, error } = await supabase
-                    .from('organizer_transactions')
-                    .select(`
-                        *,
-                        organizers:organizer_id (name, organizer_code)
-                    `)
-                    .eq('id', txId)
-                    .single()
+                // Retry logic - sometimes there's a race condition between redirect and DB update
+                let retries = 0
+                const maxRetries = 3
+                let data = null
+                let error = null
+
+                while (retries < maxRetries) {
+                    const result = await supabase
+                        .from('organizer_transactions')
+                        .select(`
+                            *,
+                            organizers:organizer_id (name, organizer_code)
+                        `)
+                        .eq('id', txId)
+                        .single()
+                    
+                    data = result.data
+                    error = result.error
+
+                    if (data) break
+                    
+                    // Wait a bit before retrying
+                    if (retries < maxRetries - 1) {
+                        await new Promise(r => setTimeout(r, 500))
+                    }
+                    retries++
+                }
 
                 if (error) throw error
                 if (!data) throw new Error("Transaksi tidak dijumpai")
