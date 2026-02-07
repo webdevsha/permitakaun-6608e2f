@@ -30,9 +30,13 @@ export function SubscriptionTab() {
   const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
   const [daysUntilPayment, setDaysUntilPayment] = useState<number>(0)
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false)
+  const [userEmail, setUserEmail] = useState<string>("")
 
   useEffect(() => {
-    fetchSubscriptionData()
+    if (user?.email) {
+      setUserEmail(user.email)
+      fetchSubscriptionData()
+    }
   }, [user, role])
 
   const fetchSubscriptionData = async () => {
@@ -40,74 +44,99 @@ export function SubscriptionTab() {
     
     setLoading(true)
     try {
-      let query = supabase
-        .from('organizer_transactions')
-        .select('*')
-        .eq('type', 'expense')
-        .ilike('description', '%Langganan%')
-        .eq('status', 'completed')
-        .order('date', { ascending: false })
-
-      // If tenant, also check tenant_transactions
+      // Fetch user's own subscription PAYMENTS (Cash Out - expense) from their transactions
+      // This shows what THEY paid for their subscription
+      let userPayments: any[] = []
+      
       if (role === 'tenant') {
-        const { data: tenantData } = await supabase
+        const { data: tenant } = await supabase
           .from('tenants')
           .select('id')
           .eq('profile_id', user.id)
           .single()
         
-        if (tenantData) {
+        if (tenant) {
           const { data: tenantTxns } = await supabase
             .from('tenant_transactions')
             .select('*')
+            .eq('tenant_id', tenant.id)
+            .eq('category', 'Langganan')
             .eq('type', 'expense')
-            .ilike('description', '%Langganan%')
-            .eq('status', 'completed')
             .order('date', { ascending: false })
           
           if (tenantTxns) {
-            setSubscriptions(tenantTxns.map((t: any) => ({
-              id: t.id,
-              amount: t.amount,
-              date: t.date,
-              status: t.status,
-              description: t.description,
-              receipt_url: t.receipt_url,
-              payment_reference: t.payment_reference,
-              created_at: t.created_at
-            })))
-            
-            if (tenantTxns.length > 0) {
-              calculateNextPayment(tenantTxns[0].date)
-              setHasActiveSubscription(true)
-            }
+            userPayments = tenantTxns
           }
         }
       } else if (role === 'organizer') {
-        // For organizers, get their transactions
-        const { data: organizerData } = await supabase
+        const { data: organizer } = await supabase
           .from('organizers')
           .select('id')
           .eq('profile_id', user.id)
           .single()
         
-        if (organizerData) {
-          query = query.eq('organizer_id', organizerData.id)
-        }
-        
-        const { data, error } = await query
-        
-        if (data && !error) {
-          setSubscriptions(data)
-          if (data.length > 0) {
-            calculateNextPayment(data[0].date)
-            setHasActiveSubscription(true)
+        if (organizer) {
+          const { data: orgTxns } = await supabase
+            .from('organizer_transactions')
+            .select('*')
+            .eq('organizer_id', organizer.id)
+            .eq('category', 'Langganan')
+            .eq('type', 'expense')
+            .order('date', { ascending: false })
+          
+          if (orgTxns) {
+            userPayments = orgTxns
           }
         }
       }
       
-      // If no subscription records, calculate from profile creation date
-      if (subscriptions.length === 0) {
+      // Map user payments to subscription records
+      if (userPayments.length > 0) {
+        setSubscriptions(userPayments.map((t: any) => ({
+          id: t.id,
+          amount: t.amount,
+          date: t.date,
+          status: t.status,
+          description: t.description,
+          receipt_url: t.receipt_url,
+          payment_reference: t.payment_reference,
+          created_at: t.created_at
+        })))
+        
+        // Calculate next payment based on the most recent payment
+        const latestPayment = userPayments[0]
+        calculateNextPayment(latestPayment.date)
+        
+        // Check if subscription is active (has at least one approved payment)
+        const hasCompletedPayment = userPayments.some((p: any) => 
+          p.status === 'approved'
+        )
+        setHasActiveSubscription(hasCompletedPayment || latestPayment.status === 'pending')
+      } else {
+        // Check for active subscription in subscriptions table (for tenants)
+        if (role === 'tenant') {
+          const { data: tenantData } = await supabase
+            .from('tenants')
+            .select('id, accounting_status')
+            .eq('profile_id', user.id)
+            .single()
+          
+          if (tenantData?.accounting_status === 'active') {
+            setHasActiveSubscription(true)
+          }
+        } else if (role === 'organizer') {
+          const { data: organizerData } = await supabase
+            .from('organizers')
+            .select('id, accounting_status')
+            .eq('profile_id', user.id)
+            .single()
+          
+          if (organizerData?.accounting_status === 'active') {
+            setHasActiveSubscription(true)
+          }
+        }
+        
+        // If no subscription records, calculate from profile creation date
         const { data: profile } = await supabase
           .from('profiles')
           .select('created_at')
@@ -243,7 +272,7 @@ export function SubscriptionTab() {
                       {formatDate(sub.date)}
                     </TableCell>
                     <TableCell>
-                      {sub.description.replace('Bayaran Langganan - ', '')}
+                      {sub.description.replace('Langganan Pelan ', '')}
                     </TableCell>
                     <TableCell className="font-bold">
                       RM {sub.amount.toFixed(2)}

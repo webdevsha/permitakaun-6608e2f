@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { clearAllSetupData } from "@/app/setup/actions"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { SubscriptionTab } from "@/components/subscription-tab"
+import { AdminSubscriptionsTab } from "@/components/admin-subscriptions-tab"
 
 // Helper component defined outside to prevent re-renders causing focus loss
 const DataField = ({
@@ -54,8 +55,10 @@ const DataField = ({
   </div>
 )
 
-export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays = 14, currentUser }: { initialProfile?: any, initialBackups?: any[], trialPeriodDays?: number, currentUser?: any }) {
-  const { user, role } = useAuth() // Note: user from auth-provider might be slightly different context than currentUser passed from server, but IDs match. Using currentUser for creation date reliability.
+export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays = 14, currentUser, serverRole }: { initialProfile?: any, initialBackups?: any[], trialPeriodDays?: number, currentUser?: any, serverRole?: string | null }) {
+  const { user, role: clientRole } = useAuth()
+  // Use server-provided role if available, otherwise fall back to client-side role
+  const role = serverRole || clientRole
   const supabase = createClient()
 
   const [loading, setLoading] = useState(false)
@@ -228,13 +231,14 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           toast.warning(res.warning, { duration: 6000 })
         }
 
-        const counts = res.counts || { transactions: 0, rentals: 0, tenants: 0, locations: 0, organizers: 0 }
-        const totalDeleted = Object.values(counts).reduce((a, b) => a + b, 0)
+        const counts = res.counts || { tenant_transactions: 0, organizer_transactions: 0, rentals: 0, tenants: 0, locations: 0, organizers: 0 }
+        const totalTransactions = (counts.tenant_transactions || 0) + (counts.organizer_transactions || 0)
+        const totalDeleted = totalTransactions + (counts.rentals || 0) + (counts.tenants || 0) + (counts.locations || 0) + (counts.organizers || 0)
 
         if (totalDeleted === 0 && !res.warning) {
           toast.info("Tiada data untuk dipadam.")
         } else {
-          toast.success(`Berjaya memadam: ${counts.transactions} Transaksi, ${counts.organizers} Penganjur, ${counts.tenants} Peniaga, ${counts.locations} Lokasi, ${counts.rentals} Sewaan.`)
+          toast.success(`Berjaya memadam: ${totalTransactions} Transaksi, ${counts.organizers || 0} Penganjur, ${counts.tenants || 0} Peniaga, ${counts.locations || 0} Lokasi, ${counts.rentals || 0} Sewaan.`)
         }
 
         // Optional: refresh page or data
@@ -691,6 +695,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            </TabsTrigger>
+          )}
+          {(role === 'admin' || role === 'superadmin') && (
+            <TabsTrigger value="subscriptions" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <CreditCard className="w-4 h-4 mr-2" /> Langganan
             </TabsTrigger>
           )}
           {(role === 'organizer' || role === 'tenant') && (
@@ -1442,6 +1451,13 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         {(role === 'organizer' || role === 'tenant') && (
           <TabsContent value="subscription" className="space-y-6">
             <SubscriptionTab />
+          </TabsContent>
+        )}
+
+        {/* Admin Subscriptions Tab */}
+        {(role === 'admin' || role === 'superadmin') && (
+          <TabsContent value="subscriptions" className="space-y-6">
+            <AdminSubscriptionsTab />
           </TabsContent>
         )}
 

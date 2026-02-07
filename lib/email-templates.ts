@@ -21,13 +21,7 @@ export const getBaseTemplate = (content: string) => `
 <body>
   <div class="container">
     <div class="header">
-      <Image
-                  src="https://permitakaun.kumim.my/logo.png"
-                  alt="Permit Akaun"
-                  fill
-                  className="object-contain"
-                  priority
-                />
+      <img src="https://permitakaun.kumim.my/logo.png" alt="Permit Akaun" style="max-height: 60px; width: auto;" />
     </div>
     <div class="content">
       ${content}
@@ -68,4 +62,29 @@ export const accountActivatedEmail = (name: string) => getBaseTemplate(`
   <p>Permohonan anda telah diluluskan dan fitur **Akaun** anda kini telah **DIAKTIFKAN** sepenuhnya.</p>
   <p>Anda kini boleh mengakses modul perakaunan untuk merekod transaksi dan melihat prestasi kewangan perniagaan anda.</p>
   <center><a href="https://permitakaun.kumim.my/dashboard/accounting" class="button">Buka Akaun Saya</a></center>
+`)
+
+// Admin notification email for new payments
+export const adminPaymentNotificationEmail = (
+    payerName: string,
+    payerEmail: string,
+    amount: string,
+    date: string,
+    description: string,
+    paymentType: string
+) => getBaseTemplate(`
+  <h2>Pemberitahuan Pembayaran Baharu</h2>
+  <p>Hai Hazman,</p>
+  <p>Terdapat pembayaran baharu yang telah diterima melalui <strong>Permit Akaun</strong>.</p>
+  <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
+    <h3 style="margin-top: 0; color: #2563eb;">${paymentType}</h3>
+    <p style="margin: 8px 0;"><strong>Nama Pembayar:</strong> ${payerName}</p>
+    <p style="margin: 8px 0;"><strong>Email:</strong> ${payerEmail}</p>
+    <p style="margin: 8px 0;"><strong>Jumlah:</strong> <span style="font-size: 1.2em; color: #059669;">RM ${amount}</span></p>
+    <p style="margin: 8px 0;"><strong>Tarikh:</strong> ${date}</p>
+    <p style="margin: 8px 0;"><strong>Keterangan:</strong> ${description}</p>
+    <p style="margin: 8px 0;"><strong>Status:</strong> <span style="color: green; font-weight: bold;">BERJAYA</span></p>
+  </div>
+  <p>Sila log masuk ke dashboard untuk melihat maklumat lanjut.</p>
+  <center><a href="https://permitakaun.kumim.my/dashboard" class="button">Ke Dashboard</a></center>
 `)

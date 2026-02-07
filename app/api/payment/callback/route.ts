@@ -151,3 +151,76 @@ export async function POST(req: NextRequest) {
         console.log("[Payment Callback] ========== END ==========")
     }
 }
+
+// Helper function to update user subscription after payment
+async function updateUserSubscription(supabase: any, userId: string, amount: string, paymentRef: string, planType: string = 'basic') {
+    try {
+        // Get the tenant/organizer record for this user
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', userId)
+            .single()
+        
+        if (!profile) {
+            console.log("[Subscription Update] Profile not found for user:", userId)
+            return
+        }
+        
+        const now = new Date()
+        const endDate = new Date()
+        endDate.setDate(now.getDate() + 30) // Monthly subscription
+        
+        if (profile.role === 'tenant') {
+            // Get tenant record
+            const { data: tenant } = await supabase
+                .from('tenants')
+                .select('id')
+                .eq('profile_id', userId)
+                .single()
+            
+            if (tenant) {
+                // Insert or update subscription
+                await supabase.from('subscriptions').insert({
+                    tenant_id: tenant.id,
+                    plan_type: planType,
+                    status: 'active',
+                    start_date: now.toISOString(),
+                    end_date: endDate.toISOString(),
+                    amount: parseFloat(amount),
+                    payment_ref: paymentRef
+                })
+                
+                // Update tenant accounting status
+                await supabase
+                    .from('tenants')
+                    .update({ accounting_status: 'active' })
+                    .eq('id', tenant.id)
+                
+                console.log("[Subscription Update] Tenant subscription activated:", tenant.id, "Plan:", planType)
+            }
+        } else if (profile.role === 'organizer') {
+            // Get organizer record
+            const { data: organizer } = await supabase
+                .from('organizers')
+                .select('id')
+                .eq('profile_id', userId)
+                .single()
+            
+            if (organizer) {
+                // Update organizer accounting status and store subscription info
+                await supabase
+                    .from('organizers')
+                    .update({ 
+                        accounting_status: 'active',
+                        updated_at: now.toISOString()
+                    })
+                    .eq('id', organizer.id)
+                
+                console.log("[Subscription Update] Organizer subscription activated:", organizer.id, "Plan:", planType)
+            }
+        }
+    } catch (error) {
+        console.error("[Subscription Update] Error:", error)
+    }
+}

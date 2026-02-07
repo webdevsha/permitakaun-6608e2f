@@ -41,7 +41,7 @@ export default async function AdminDashboardPage() {
         data = { tenants: [], organizers: [], transactions: [], user: user, role: role }
     }
 
-    const { tenants, organizers } = data
+    const { tenants, organizers, transactions } = data
 
     // Calculate metrics
     const totalTenants = tenants?.length || 0
