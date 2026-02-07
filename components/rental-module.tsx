@@ -179,16 +179,12 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
   // Helper to determine display color and sign for Tenant
   const getTransactionDisplay = (tx: any) => {
-    // If it's a payment (Income for Admin), it's Expense for Tenant
-    // categories: 'Sewa', 'Deposit', 'Lain-lain' (if paid to admin)
+    // tenant_transactions table stores type as 'expense' for rent payments
+    // This is already from the tenant's perspective - rent payments are expenses (Cash Out)
+    
+    const isExpense = tx.type === 'expense' || tx.is_rent_payment
 
-    // Default: use DB type. 
-    // BUT for 'Sewa' (Rent), it is usually recorded as Income by Admin.
-    // So for Tenant, if category is 'Sewa', it should be Negative.
-
-    const isExpenseForTenant = tx.category === 'Sewa' || tx.category === 'Deposit' || tx.category === 'Caj Lewat' // Add more categories if needed
-
-    if (isExpenseForTenant) {
+    if (isExpense) {
       return {
         amountPrefix: "-",
         amountClass: "text-red-500",
@@ -196,7 +192,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       }
     }
 
-    // Valid "Income" for tenant? Maybe refunds?
+    // Income for tenant (e.g., refunds)
     return {
       amountPrefix: "+",
       amountClass: "text-brand-green",
@@ -685,7 +681,13 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                   {history.map((pay) => (
                     <TableRow key={pay.id}>
                       <TableCell className="pl-6 font-mono text-xs text-muted-foreground">
-                        {new Date(pay.payment_date).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {(() => {
+                          const dateStr = pay.payment_date || pay.date
+                          if (!dateStr) return '-'
+                          const date = new Date(dateStr)
+                          if (isNaN(date.getTime())) return '-'
+                          return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                        })()}
                       </TableCell>
                       <TableCell>{pay.remarks || "Bayaran Sewa"}</TableCell>
                       {(() => {

@@ -381,7 +381,7 @@ export default function TestEmailPage() {
                             <li>Gunakan emel anda sendiri untuk menguji penerimaan</li>
                             <li>Semak folder Spam/Junk jika emel tidak diterima</li>
                             <li>Pastikan BREVO_API_KEY sah dan aktif di dashboard Brevo</li>
-                            <li>Domain pengirim (noreply@permitakaun.com) perlu diverifikasi di Brevo</li>
+                            <li>Domain pengirim (hai@shafiranoh.com) perlu diverifikasi di Brevo</li>
                         </ul>
                     </CardContent>
                 </Card>

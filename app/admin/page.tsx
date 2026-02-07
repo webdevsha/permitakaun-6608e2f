@@ -1,26 +1,15 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { Users, Building, Shield, CreditCard, PlusCircle, MapPin, UserPlus, FileText, Activity } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Users, Building, Shield, CreditCard } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
-import { AddStaffDialog } from "@/components/add-staff-dialog"
-import { PaymentSettings } from "@/components/settings-toggle"
-import { StaffActivityLog } from "@/components/staff-activity-log"
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
-/**
- * Admin Dashboard Page
- * 
- * Restricted to admin, superadmin, and staff roles.
- * Server-side role verification prevents unauthorized access.
- */
 export default async function AdminDashboardPage() {
-    // Verify user and role server-side
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -36,9 +25,7 @@ export default async function AdminDashboardPage() {
     
     const role = determineUserRole(profile, user.email)
     
-    // Only admin, superadmin, and staff can access this page
     if (!['admin', 'superadmin', 'staff'].includes(role)) {
-        // Redirect non-admin users to their respective dashboards
         if (role === 'organizer') {
             redirect('/dashboard/organizer')
         } else {
@@ -46,241 +33,88 @@ export default async function AdminDashboardPage() {
         }
     }
 
-    const data = await fetchDashboardData()
-
-    // Auth Check: If data fetch returned no user context, it means we are logged out/invalid
-    if (!data.user) {
-        redirect('/login')
+    // Fetch data
+    let data: any
+    try {
+        data = await fetchDashboardData()
+    } catch (e) {
+        console.error('[Admin] Error fetching dashboard data:', e)
+        data = { tenants: [], organizers: [], transactions: [], user: user, role: role }
     }
-
-    const { role: currentUserRole } = data
-
-    // Get current user to determine their organization
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-    // Determine the organizer code for the current admin
-    let adminOrgCode = null
-    if (currentUser?.email === 'admin@permit.com') {
-        adminOrgCode = 'ORG001'
-    } else if (currentUser?.email === 'admin@kumim.my') {
-        adminOrgCode = 'ORG002'
-    }
-
-    // Fetch Staff List - only staff belonging to this admin's organization
-    let staffQuery = supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'staff')
-        .order('created_at', { ascending: false })
-
-    // Filter by organizer_code if admin has an organization
-    if (adminOrgCode) {
-        staffQuery = staffQuery.eq('organizer_code', adminOrgCode)
-    }
-
-    const { data: staffList } = await staffQuery
-    const staffCount = staffList?.length || 0
-    const maxStaff = 2
 
     const { tenants, organizers } = data
 
-    // Fetch admin/organizer info for staff display
-    let adminInfo = null
-    if (role === 'staff' && profile?.organizer_code) {
-        const { data: org } = await supabase
-            .from('organizers')
-            .select('name, organizer_code')
-            .eq('organizer_code', profile.organizer_code)
-            .single()
-        if (org) {
-            adminInfo = org
-        } else {
-            // Fallback: check if admin profile exists
-            const { data: adminProfile } = await supabase
-                .from('profiles')
-                .select('full_name, email')
-                .eq('organizer_code', profile.organizer_code)
-                .eq('role', 'admin')
-                .single()
-            if (adminProfile) {
-                adminInfo = { name: adminProfile.full_name || adminProfile.email, organizer_code: profile.organizer_code }
-            }
-        }
-    }
+    // Calculate metrics
+    const totalTenants = tenants?.length || 0
+    const totalOrganizers = organizers?.length || 0
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-4 border-border/30">
-                <div className="space-y-2">
-                    <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground tracking-tighter">
-                        Admin Panel
-                    </h1>
-                    <p className="text-muted-foreground text-lg font-medium">
-                        Pusat kawalan sistem, kewangan dan pengurusan staf.
-                    </p>
-                    {/* Show admin info for staff */}
-                    {role === 'staff' && adminInfo && (
-                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <p className="text-sm text-blue-800">
-                                <span className="font-semibold">Anda adalah Staf bagi:</span> {adminInfo.name} ({adminInfo.organizer_code})
-                            </p>
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div>
+                <h1 className="text-3xl font-bold font-serif">Admin Dashboard</h1>
+                <p className="text-muted-foreground">
+                    {role === 'staff' ? 'Staff Access' : 'Pentadbiran Sistem'}
+                </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Peniaga</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalTenants}</div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Penganjur</CardTitle>
+                        <Building className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalOrganizers}</div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Akaun</CardTitle>
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            <Link href="/dashboard/accounting" className="text-primary hover:underline">
+                                Buka
+                            </Link>
                         </div>
-                    )}
-                </div>
-            </header>
-
-            {/* Quick Actions */}
-            {currentUserRole !== 'staff' && (
-                <div className="space-y-4">
-                    <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                        <Activity className="w-5 h-5" /> Tindakan Pantas
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Link href="/dashboard/locations">
-                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
-                                <MapPin className="w-6 h-6 text-primary" />
-                                <span className="text-xs font-bold">Tambah Lokasi</span>
-                            </Button>
-                        </Link>
-                        <Link href="/dashboard/tenants">
-                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
-                                <UserPlus className="w-6 h-6 text-primary" />
-                                <span className="text-xs font-bold">Tambah Peniaga</span>
-                            </Button>
-                        </Link>
-                        <Link href="/dashboard/organizers">
-                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
-                                <Building className="w-6 h-6 text-primary" />
-                                <span className="text-xs font-bold">Tambah Penganjur</span>
-                            </Button>
-                        </Link>
-                        <Link href="/dashboard/accounting">
-                            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-dashed border-2 hover:border-primary hover:bg-primary/5">
-                                <FileText className="w-6 h-6 text-primary" />
-                                <span className="text-xs font-bold">Rekod Transaksi</span>
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            )}
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Jumlah Penganjur</CardDescription>
-                        <CardTitle className="text-4xl font-sans font-bold">{organizers.length}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Link href="/dashboard/organizers">
-                            <Button variant="ghost" className="text-primary p-0 h-auto font-bold text-xs">
-                                Lihat Semua <ArrowRight className="ml-1 w-3 h-3" />
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Jumlah Peniaga</CardDescription>
-                        <CardTitle className="text-4xl font-sans font-bold">{tenants.length}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Link href="/dashboard/tenants">
-                            <Button variant="ghost" className="text-primary p-0 h-auto font-bold text-xs">
-                                Lihat Semua <ArrowRight className="ml-1 w-3 h-3" />
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-primary/5 border-primary/20 shadow-sm rounded-[2rem]">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="text-primary/70 font-medium text-xs uppercase tracking-wider">Staf Berdaftar</CardDescription>
-                        <CardTitle className="text-4xl font-sans font-bold text-primary">
-                            {staffCount}<span className="text-lg text-muted-foreground"> staf</span>
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <AddStaffDialog currentStaffCount={staffCount} maxStaff={maxStaff} organizerCode={adminOrgCode} />
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Payment Settings */}
-            <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                        <CreditCard className="w-5 h-5" /> Tetapan Pembayaran
-                    </h2>
-                </div>
-                <PaymentSettings />
+            <div className="grid gap-6 md:grid-cols-3">
+                <Button asChild variant="outline" className="h-auto py-6 flex flex-col items-center gap-2">
+                    <Link href="/dashboard/tenants">
+                        <Users className="h-6 w-6" />
+                        <span>Senarai Peniaga</span>
+                    </Link>
+                </Button>
+
+                <Button asChild variant="outline" className="h-auto py-6 flex flex-col items-center gap-2">
+                    <Link href="/dashboard/organizers">
+                        <Building className="h-6 w-6" />
+                        <span>Senarai Penganjur</span>
+                    </Link>
+                </Button>
+
+                <Button asChild variant="outline" className="h-auto py-6 flex flex-col items-center gap-2">
+                    <Link href="/dashboard/accounting">
+                        <CreditCard className="h-6 w-6" />
+                        <span>Akaun & Kewangan</span>
+                    </Link>
+                </Button>
             </div>
-
-            {/* Staff Management Section - Hide for Staff */}
-            {currentUserRole !== 'staff' && (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                            <Shield className="w-5 h-5" /> Pengurusan Staf
-                        </h2>
-                        <span className="text-xs text-muted-foreground">
-                            {staffCount >= maxStaff && (
-                                <span className="text-amber-600 font-medium">Had maksimum {maxStaff} staf dicapai</span>
-                            )}
-                        </span>
-                    </div>
-
-                    <div className="bg-white border border-border/50 rounded-3xl overflow-hidden shadow-sm">
-                        <div className="p-6">
-                            {staffList && staffList.length > 0 ? (
-                                <div className="divide-y divide-border/30">
-                                    {staffList.map((staff: any) => (
-                                        <div key={staff.id} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-primary font-bold">
-                                                    {staff.email.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-sm">{staff.full_name || staff.email}</p>
-                                                    <p className="text-xs text-muted-foreground">{staff.email}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Aktif</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    <p>Tiada staf didaftarkan lagi.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Staff Activity Log - Only for Admin/Superadmin */}
-            {(currentUserRole === 'admin' || currentUserRole === 'superadmin') && staffCount > 0 && (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                            <Activity className="w-5 h-5" /> Log Aktiviti Staf
-                        </h2>
-                    </div>
-                    <StaffActivityLog staffIds={staffList?.map((s: any) => s.id)} />
-                </div>
-            )}
         </div>
-    )
-}
-
-function ArrowRight({ className }: { className?: string }) {
-    return (
-        <svg className={className} width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6.1584 3.13508C6.35985 2.94621 6.67627 2.95642 6.86514 3.15788L10.6151 7.15788C10.7985 7.35357 10.7985 7.64643 10.6151 7.84212L6.86514 11.8421C6.67627 12.0436 6.35985 12.0538 6.1584 11.8649C5.95694 11.676 5.94673 11.3596 6.1356 11.1581L9.5915 7.50002L6.1356 3.84194C5.94673 3.64048 5.95694 3.32406 6.1584 3.13508Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
-        </svg>
     )
 }
