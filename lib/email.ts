@@ -24,7 +24,7 @@ export async function sendEmail({ to, subject, html }: SendEmailProps) {
             body: JSON.stringify({
                 sender: {
                     name: "Permit Akaun",
-                    email: "noreply@permitakaun.com", // Or a verified sender
+                    email: "hai@shafiranoh.com",
                 },
                 to: [{ email: to }],
                 subject: subject,
