@@ -11,7 +11,7 @@ import { format } from "date-fns"
 import { ms } from "date-fns/locale"
 
 interface TransactionData {
-    id: string
+    id: number
     description: string
     amount: number
     status: string
