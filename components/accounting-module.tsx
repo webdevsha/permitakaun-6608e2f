@@ -157,11 +157,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
         setUserRole(role)
 
-        // FAST-PATH: Admin/Staff/Superadmin
+        // FAST-PATH: Admin/Staff/Superadmin - no eligibility check needed
         if (role === 'superadmin' || role === 'admin' || role === 'staff') {
-          console.log('[Accounting] Privileged role')
+          console.log('[Accounting] Privileged role - instant access')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
+          setIsLoading(false)
           return
         }
 
@@ -179,6 +180,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               console.log('[Accounting] Organizer with active accounting')
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
+              setIsLoading(false)
               return
             }
           } catch (e) {
@@ -200,6 +202,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               if (daysRemaining > 0) {
                 setAccessDeniedStatus(null)
                 setIsModuleVerified(true)
+                setIsLoading(false)
                 return
               }
             }
@@ -211,6 +214,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             console.error('[Accounting] Error checking trial:', e)
             // Allow access on error
             setIsModuleVerified(true)
+            setIsLoading(false)
           }
 
         } else if (role === 'tenant') {
@@ -218,9 +222,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           console.log('[Accounting] Tenant access granted')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
+          setIsLoading(false)
         } else {
           // Unknown role - allow access
           setIsModuleVerified(true)
+          setIsLoading(false)
         }
 
       } catch (e) {
