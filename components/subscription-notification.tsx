@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bell, AlertCircle, Calendar, ArrowRight, X } from "lucide-react"
+import { Bell, AlertCircle, Calendar, ArrowRight, X, CheckCircle } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import Link from "next/link"
@@ -18,67 +18,91 @@ export function SubscriptionNotification() {
   const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
+  const [accountStatus, setAccountStatus] = useState<'trial' | 'active' | 'expired'>('trial')
 
   useEffect(() => {
     fetchSubscriptionStatus()
   }, [user, role])
 
   const fetchSubscriptionStatus = async () => {
-    if (!user || !role) return
+    if (!user || !role) {
+      setLoading(false)
+      return
+    }
     
-    setLoading(true)
+    // FAST-PATH: Set loading false after max 3 seconds no matter what
+    const timeoutId = setTimeout(() => {
+      setLoading(false)
+    }, 3000)
+    
     try {
-      let latestPayment: any = null
-
-      // Check for subscription payments in admin_transactions (correct place)
-      const { data: adminTxns, error } = await supabase
-        .from('admin_transactions')
-        .select('*')
-        .eq('category', 'Langganan')
-        .eq('type', 'income')
-        .eq('status', 'completed')
-        .order('date', { ascending: false })
+      // PRIORITY 1: Check user's own expense transactions (fastest - direct query)
+      let hasSubscription = false
+      let latestPaymentDate: string | null = null
       
-      if (!error && adminTxns) {
-        // Filter for this user's payments
-        const userPayment = adminTxns.find((tx: any) => {
-          const metadata = tx.metadata || {}
-          return metadata.payer_email === user.email || metadata.user_id === user.id
-        })
+      if (role === 'tenant') {
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('id, accounting_status')
+          .eq('profile_id', user.id)
+          .single()
         
-        if (userPayment) {
-          latestPayment = userPayment
+        if (tenant?.accounting_status === 'active') {
+          hasSubscription = true
+          setAccountStatus('active')
+        }
+        
+        if (tenant) {
+          const { data: payments } = await supabase
+            .from('tenant_transactions')
+            .select('date, status')
+            .eq('tenant_id', tenant.id)
+            .eq('category', 'Langganan')
+            .eq('type', 'expense')
+            .eq('status', 'approved')
+            .order('date', { ascending: false })
+            .limit(1)
+          
+          if (payments && payments.length > 0) {
+            hasSubscription = true
+            latestPaymentDate = payments[0].date
+            setAccountStatus('active')
+          }
+        }
+      } else if (role === 'organizer') {
+        const { data: organizer } = await supabase
+          .from('organizers')
+          .select('id, accounting_status')
+          .eq('profile_id', user.id)
+          .single()
+        
+        if (organizer?.accounting_status === 'active') {
+          hasSubscription = true
+          setAccountStatus('active')
+        }
+        
+        if (organizer) {
+          const { data: payments } = await supabase
+            .from('organizer_transactions')
+            .select('date, status')
+            .eq('organizer_id', organizer.id)
+            .eq('category', 'Langganan')
+            .eq('type', 'expense')
+            .eq('status', 'approved')
+            .order('date', { ascending: false })
+            .limit(1)
+          
+          if (payments && payments.length > 0) {
+            hasSubscription = true
+            latestPaymentDate = payments[0].date
+            setAccountStatus('active')
+          }
         }
       }
       
-      // Fallback: Check for active subscription status
-      if (!latestPayment) {
-        if (role === 'tenant') {
-          const { data: tenantData } = await supabase
-            .from('tenants')
-            .select('accounting_status')
-            .eq('profile_id', user.id)
-            .single()
-          
-          if (tenantData?.accounting_status === 'active') {
-            setHasActiveSubscription(true)
-          }
-        } else if (role === 'organizer') {
-          const { data: organizerData } = await supabase
-            .from('organizers')
-            .select('accounting_status')
-            .eq('profile_id', user.id)
-            .single()
-          
-          if (organizerData?.accounting_status === 'active') {
-            setHasActiveSubscription(true)
-          }
-        }
-      }
-      
-      if (latestPayment) {
+      if (hasSubscription && latestPaymentDate) {
         // Calculate next payment date (30 days after last payment)
-        const lastDate = new Date(latestPayment.date)
+        const lastDate = new Date(latestPaymentDate)
         const nextDate = new Date(lastDate)
         nextDate.setDate(nextDate.getDate() + 30)
         
@@ -87,8 +111,8 @@ export function SubscriptionNotification() {
         
         const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         setDaysUntilPayment(daysLeft)
-      } else {
-        // No payment yet, calculate from profile creation
+      } else if (!hasSubscription) {
+        // No subscription - check trial period
         const { data: profile } = await supabase
           .from('profiles')
           .select('created_at')
@@ -104,11 +128,18 @@ export function SubscriptionNotification() {
           
           const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           setDaysUntilPayment(daysLeft)
+          
+          if (daysLeft <= 0) {
+            setAccountStatus('expired')
+          } else {
+            setAccountStatus('trial')
+          }
         }
       }
     } catch (error) {
       console.error('Error fetching subscription status:', error)
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
     }
   }
@@ -122,28 +153,38 @@ export function SubscriptionNotification() {
   }
 
   const getUrgencyColor = () => {
+    if (accountStatus === 'active') return 'border-l-green-500 bg-green-50/80'
     if (daysUntilPayment <= 3) return 'border-l-red-500 bg-red-50/80'
     if (daysUntilPayment <= 7) return 'border-l-yellow-500 bg-yellow-50/80'
     return 'border-l-blue-500 bg-blue-50/80'
   }
 
   const getUrgencyText = () => {
+    if (accountStatus === 'active') return 'text-green-700'
     if (daysUntilPayment <= 3) return 'text-red-700'
     if (daysUntilPayment <= 7) return 'text-yellow-700'
     return 'text-blue-700'
   }
 
   const getIconColor = () => {
+    if (accountStatus === 'active') return 'text-green-500'
     if (daysUntilPayment <= 3) return 'text-red-500'
     if (daysUntilPayment <= 7) return 'text-yellow-500'
     return 'text-blue-500'
   }
 
-  if (loading || !isVisible || daysUntilPayment > 14) {
-    return null
-  }
+  // DON'T show notification if:
+  // 1. Still loading
+  // 2. User has active subscription (don't show trial expired warning)
+  // 3. Hidden by user
+  if (loading) return null
+  
+  // If subscription is active and more than 7 days until next payment, don't show
+  if (accountStatus === 'active' && daysUntilPayment > 7) return null
+  
+  if (!isVisible) return null
 
-  const isUrgent = daysUntilPayment <= 7
+  const isUrgent = daysUntilPayment <= 7 && accountStatus !== 'active'
 
   return (
     <Card className={`border-l-4 ${getUrgencyColor()} shadow-sm animate-in slide-in-from-top-2 duration-300`}>
@@ -151,40 +192,57 @@ export function SubscriptionNotification() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className={`mt-0.5 ${getIconColor()}`}>
-              {isUrgent ? <AlertCircle className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+              {accountStatus === 'active' ? (
+                <CheckCircle className="w-5 h-5" />
+              ) : isUrgent ? (
+                <AlertCircle className="w-5 h-5" />
+              ) : (
+                <Bell className="w-5 h-5" />
+              )}
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h4 className={`font-semibold ${getUrgencyText()}`}>
-                  {hasActiveSubscription 
-                    ? 'Bayaran Langganan Seterusnya'
-                    : 'Tempoh Percubaan Akan Tamat'
+                  {accountStatus === 'active' 
+                    ? 'Langganan Aktif'
+                    : accountStatus === 'expired'
+                    ? 'Tempoh Percubaan Tamat'
+                    : 'Bayaran Langganan Seterusnya'
                   }
                 </h4>
-                {isUrgent && (
+                {accountStatus === 'active' ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-[10px]">
+                    Aktif
+                  </Badge>
+                ) : isUrgent && (
                   <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-[10px]">
                     Segera
                   </Badge>
                 )}
               </div>
               <p className="text-sm text-muted-foreground">
-                {hasActiveSubscription 
-                  ? `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari (${formatDate(nextPaymentDate!)})`
-                  : `Tempoh percubaan percuma anda akan tamat dalam ${daysUntilPayment} hari`
+                {accountStatus === 'active' 
+                  ? `Langganan anda aktif. Pembayaran seterusnya dalam ${daysUntilPayment} hari (${formatDate(nextPaymentDate!)})`
+                  : accountStatus === 'expired'
+                  ? 'Tempoh percubaan anda telah tamat. Sila langgan untuk terus menggunakan ciri Akaun.'
+                  : `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
                 }
               </p>
               <div className="flex items-center gap-2 pt-1">
-                <Link href="/dashboard/settings?tab=subscription">
-                  <Button 
-                    size="sm" 
-                    className={`rounded-lg ${isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-primary'}`}
-                  >
-                    Bayar Langganan <ArrowRight className="w-3 h-3 ml-1" />
-                  </Button>
-                </Link>
+                {accountStatus !== 'active' && (
+                  <Link href="/dashboard/settings?tab=subscription">
+                    <Button 
+                      size="sm" 
+                      className={`rounded-lg ${isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-primary'}`}
+                    >
+                      {accountStatus === 'expired' ? 'Langgan Sekarang' : 'Bayar Langganan'}
+                      <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </Link>
+                )}
                 <Link href="/dashboard/settings">
                   <Button variant="ghost" size="sm" className="rounded-lg text-muted-foreground">
-                    Lihat Butiran
+                    {accountStatus === 'active' ? 'Lihat Butiran' : 'Lihat Status'}
                   </Button>
                 </Link>
               </div>

@@ -85,6 +85,91 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const myTrialStatus = currentUser ? getTrialStatus(currentUser.created_at) : null
 
+  // Account Status State
+  const [accountStatus, setAccountStatus] = useState<'trial' | 'active' | 'expired'>('trial')
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null)
+
+  // Fetch subscription status for tenant/organizer
+  useEffect(() => {
+    if (!user?.id || !role || (role !== 'tenant' && role !== 'organizer')) return
+    
+    const checkSubscription = async () => {
+      try {
+        let hasActive = false
+        
+        if (role === 'tenant') {
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('id, accounting_status')
+            .eq('profile_id', user.id)
+            .single()
+          
+          if (tenant?.accounting_status === 'active') {
+            hasActive = true
+          } else {
+            // Check for approved payments
+            const { data: payments } = await supabase
+              .from('tenant_transactions')
+              .select('date, status')
+              .eq('tenant_id', tenant?.id)
+              .eq('category', 'Langganan')
+              .eq('status', 'approved')
+              .order('date', { ascending: false })
+              .limit(1)
+            
+            if (payments && payments.length > 0) {
+              hasActive = true
+              // Calculate end date
+              const lastPayment = new Date(payments[0].date)
+              const endDate = new Date(lastPayment)
+              endDate.setDate(endDate.getDate() + 30)
+              setSubscriptionEndDate(endDate.toLocaleDateString('ms-MY'))
+            }
+          }
+        } else if (role === 'organizer') {
+          const { data: organizer } = await supabase
+            .from('organizers')
+            .select('id, accounting_status')
+            .eq('profile_id', user.id)
+            .single()
+          
+          if (organizer?.accounting_status === 'active') {
+            hasActive = true
+          } else {
+            const { data: payments } = await supabase
+              .from('organizer_transactions')
+              .select('date, status')
+              .eq('organizer_id', organizer?.id)
+              .eq('category', 'Langganan')
+              .eq('status', 'approved')
+              .order('date', { ascending: false })
+              .limit(1)
+            
+            if (payments && payments.length > 0) {
+              hasActive = true
+              const lastPayment = new Date(payments[0].date)
+              const endDate = new Date(lastPayment)
+              endDate.setDate(endDate.getDate() + 30)
+              setSubscriptionEndDate(endDate.toLocaleDateString('ms-MY'))
+            }
+          }
+        }
+        
+        if (hasActive) {
+          setAccountStatus('active')
+        } else if (myTrialStatus?.isExpired) {
+          setAccountStatus('expired')
+        } else {
+          setAccountStatus('trial')
+        }
+      } catch (error) {
+        console.error('Error checking subscription:', error)
+      }
+    }
+    
+    checkSubscription()
+  }, [user?.id, role, myTrialStatus?.isExpired])
+
   // UI State
   const [isEditing, setIsEditing] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
@@ -750,28 +835,48 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                       <p className="font-mono text-lg font-medium">{myTrialStatus.startDate}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Status Semasa</p>
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Status Akaun</p>
                       <div className="flex items-center gap-2">
                         {role === 'admin' || role === 'staff' || role === 'superadmin' ? (
                           <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold border border-purple-200">
                             Full System Access
                           </span>
-                        ) : myTrialStatus.isExpired ? (
+                        ) : accountStatus === 'active' ? (
+                          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
+                            Akaun Aktif (Langganan)
+                          </span>
+                        ) : accountStatus === 'expired' ? (
                           <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold border border-red-200">
-                            Tamat Tempoh Percubaan ({trialPeriodDays} Hari)
+                            Tamat Tempoh
                           </span>
                         ) : (
-                          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
-                            Aktif: Percubaan ({myTrialStatus.daysRemaining} hari lagi)
+                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200">
+                            Percubaan Percuma ({myTrialStatus?.daysRemaining || 0} hari lagi)
                           </span>
                         )}
                       </div>
                     </div>
-                    {(role === 'tenant' || role === 'organizer') && !myTrialStatus.isExpired && (
+                    {(role === 'tenant' || role === 'organizer') && (
                       <div className="md:ml-auto">
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-primary">{myTrialStatus.daysRemaining}</p>
-                          <p className="text-xs text-muted-foreground">Hari Baki</p>
+                          {accountStatus === 'active' ? (
+                            <>
+                              <p className="text-sm font-medium text-green-600">Langganan Aktif</p>
+                              {subscriptionEndDate && (
+                                <p className="text-xs text-muted-foreground">Sehingga {subscriptionEndDate}</p>
+                              )}
+                            </>
+                          ) : accountStatus === 'expired' ? (
+                            <>
+                              <p className="text-2xl font-bold text-red-600">0</p>
+                              <p className="text-xs text-muted-foreground">Hari Baki</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-2xl font-bold text-primary">{myTrialStatus?.daysRemaining || 0}</p>
+                              <p className="text-xs text-muted-foreground">Hari Baki</p>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
