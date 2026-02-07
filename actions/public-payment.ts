@@ -1,6 +1,6 @@
 'use server'
 
-import { createAdminClient } from "@/utils/supabase/admin"
+import { createClient } from "@/utils/supabase/server"
 
 export async function createPublicPaymentTransaction(data: {
     description: string
@@ -23,29 +23,41 @@ export async function createPublicPaymentTransaction(data: {
     }
 }) {
     try {
-        // Use admin client to bypass RLS for public payments
-        const supabase = createAdminClient()
+        const supabase = await createClient()
         
-        const { data: transaction, error } = await supabase
-            .from('organizer_transactions')
-            .insert({
-                description: data.description,
-                amount: data.amount,
-                type: 'income',
-                category: 'Sewa',
-                status: 'pending',
-                date: new Date().toISOString().split('T')[0],
-                organizer_id: data.organizer_id,
-                location_id: data.location_id,
-                is_auto_generated: false,
-                metadata: data.metadata
+        // Use RPC function to bypass RLS
+        const { data: result, error } = await supabase
+            .rpc('create_public_payment_transaction', {
+                p_description: data.description,
+                p_amount: data.amount,
+                p_organizer_id: data.organizer_id,
+                p_location_id: data.location_id,
+                p_metadata: data.metadata
             })
-            .select()
-            .single()
 
         if (error) {
-            console.error('[Public Payment] Error creating transaction:', error)
+            console.error('[Public Payment] RPC error:', error)
             return { success: false, error: error.message }
+        }
+
+        if (!result || !result.success) {
+            return { success: false, error: 'Failed to create transaction' }
+        }
+
+        // Fetch the created transaction to return full data
+        const { data: transaction, error: fetchError } = await supabase
+            .from('organizer_transactions')
+            .select('*')
+            .eq('id', result.id)
+            .single()
+
+        if (fetchError) {
+            console.error('[Public Payment] Fetch error:', fetchError)
+            // Return partial data
+            return { 
+                success: true, 
+                transaction: { id: result.id }
+            }
         }
 
         return { success: true, transaction }
@@ -61,25 +73,24 @@ export async function updatePaymentTransactionWithRef(
     receiptUrl: string
 ) {
     try {
-        const supabase = createAdminClient()
+        const supabase = await createClient()
         
-        const { error } = await supabase
-            .from('organizer_transactions')
-            .update({
-                payment_reference: paymentRef,
-                receipt_url: receiptUrl,
-                updated_at: new Date().toISOString()
+        // Use RPC function to bypass RLS
+        const { data: result, error } = await supabase
+            .rpc('update_payment_transaction_ref', {
+                p_transaction_id: transactionId,
+                p_payment_ref: paymentRef,
+                p_receipt_url: receiptUrl
             })
-            .eq('id', transactionId)
 
         if (error) {
-            console.error('[Public Payment] Error updating transaction:', error)
+            console.error('[Public Payment] RPC update error:', error)
             return { success: false, error: error.message }
         }
 
         return { success: true }
     } catch (error: any) {
-        console.error('[Public Payment] Exception:', error)
+        console.error('[Public Payment] Update exception:', error)
         return { success: false, error: error.message }
     }
 }
