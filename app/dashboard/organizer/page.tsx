@@ -65,9 +65,13 @@ export const revalidate = 0
  * Server-side role verification prevents unauthorized access.
  */
 // Helper for timeout
-const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+async function withTimeout<T>(
+    queryFn: () => any,
+    ms: number,
+    context: string
+): Promise<T> {
     return Promise.race([
-        queryBuilder as Promise<T>,
+        Promise.resolve(queryFn()),
         new Promise<T>((_, reject) => 
             setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
         )
@@ -82,7 +86,7 @@ export default async function OrganizerDashboardPage() {
     let user: any;
     try {
         const authResult: any = await withTimeout(
-            supabase.auth.getUser(),
+            () => supabase.auth.getUser(),
             5000,
             'getUser'
         )
@@ -100,7 +104,7 @@ export default async function OrganizerDashboardPage() {
     let profile;
     try {
         const profileResult: any = await withTimeout(
-            supabase
+            () => supabase
                 .from('profiles')
                 .select('role, organizer_code, full_name, email')
                 .eq('id', user.id)
@@ -127,8 +131,8 @@ export default async function OrganizerDashboardPage() {
     let dashboardData: any, locations: any;
     try {
         [dashboardData, locations] = await Promise.all([
-            withTimeout(fetchDashboardData(), 8000, 'fetchDashboardData'),
-            withTimeout(fetchLocations(), 5000, 'fetchLocations')
+            withTimeout(() => fetchDashboardData(), 8000, 'fetchDashboardData'),
+            withTimeout(() => fetchLocations(), 5000, 'fetchLocations')
         ])
     } catch (e) {
         console.error('[OrganizerDashboard] Timeout fetching data:', e)
@@ -143,7 +147,7 @@ export default async function OrganizerDashboardPage() {
     let access: any;
     try {
         access = await withTimeout(
-            checkAccessServer(user, role),
+            () => checkAccessServer(user, role),
             3000,
             'checkAccessServer'
         )

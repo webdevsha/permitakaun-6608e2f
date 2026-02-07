@@ -35,10 +35,14 @@ let cachedLocations: LocationWithOrganizer[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 60000; // 1 minute cache
 
-// Helper to add timeout to promises - converts query builder to promise
-const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+// Helper to add timeout to Supabase queries
+async function withTimeout<T>(
+    queryFn: () => any,
+    ms: number,
+    context: string
+): Promise<T> {
     return Promise.race([
-        queryBuilder as Promise<T>,
+        Promise.resolve(queryFn()),
         new Promise<T>((_, reject) => 
             setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
         )
@@ -82,7 +86,7 @@ export default function PublicPaymentPage() {
         try {
             // Get all active organizers first (excluding ORG001) - with 3 second timeout
             const orgResult: any = await withTimeout(
-                supabase
+                () => supabase
                     .from('organizers')
                     .select('id, name, organizer_code')
                     .eq('status', 'active')
@@ -105,7 +109,7 @@ export default function PublicPaymentPage() {
             // Get all active locations for these organizers - with 3 second timeout
             const organizerIds = organizers.map((o: any) => o.id)
             const locResult: any = await withTimeout(
-                supabase
+                () => supabase
                     .from('locations')
                     .select('*')
                     .in('organizer_id', organizerIds)
@@ -203,7 +207,7 @@ export default function PublicPaymentPage() {
 
             // First, create a pending transaction record - with timeout
             const txResult: any = await withTimeout(
-                supabase
+                () => supabase
                     .from('transactions')
                     .insert({
                         description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
@@ -241,7 +245,7 @@ export default function PublicPaymentPage() {
 
             // Initiate payment - with timeout
             const result: any = await withTimeout(
-                initiatePayment({
+                () => initiatePayment({
                     amount,
                     description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
                     redirectPath: `/bayar/status?tx=${transaction.id}`

@@ -2,9 +2,13 @@ import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 
 // Timeout wrapper to prevent infinite hangs
-const withTimeout = <T>(promise: Promise<T>, ms: number, context: string): Promise<T> => {
+async function withTimeout<T>(
+    queryFn: () => any,
+    ms: number,
+    context: string
+): Promise<T> {
     return Promise.race([
-        promise,
+        Promise.resolve(queryFn()),
         new Promise<T>((_, reject) => 
             setTimeout(() => reject(new Error(`Timeout: ${context} took longer than ${ms}ms`)), ms)
         )
@@ -17,12 +21,12 @@ export async function fetchDashboardData() {
     // Get User Role Context (with timeout to prevent infinite hang)
     let user: any;
     try {
-        const { data: { user: u } } = await withTimeout(
-            supabase.auth.getUser(),
+        const authResult: any = await withTimeout(
+            () => supabase.auth.getUser(),
             5000,
             'getUser'
         )
-        user = u
+        user = authResult.data?.user
     } catch (e) {
         console.error('[fetchDashboardData] Timeout getting user:', e)
         return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
@@ -566,14 +570,14 @@ export async function fetchLocations() {
     const supabase = await createClient()
     
     // Get user with timeout protection
-    let user;
+    let user: any;
     try {
-        const { data: { user: u } } = await withTimeout(
-            supabase.auth.getUser(),
+        const authResult: any = await withTimeout(
+            () => supabase.auth.getUser(),
             5000,
             'fetchLocations getUser'
         )
-        user = u
+        user = authResult.data?.user
     } catch (e) {
         console.error('[fetchLocations] Timeout getting user:', e)
         return []

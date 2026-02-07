@@ -6,10 +6,14 @@ import { redirect } from "next/navigation"
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// Helper to add timeout to promises - converts query builder to promise
-const withTimeout = <T,>(queryBuilder: any, ms: number, context: string): Promise<T> => {
+// Helper to add timeout to Supabase queries
+async function withTimeout<T>(
+    queryFn: () => any,
+    ms: number,
+    context: string
+): Promise<T> {
     return Promise.race([
-        queryBuilder as Promise<T>,
+        Promise.resolve(queryFn()),
         new Promise<T>((_, reject) => 
             setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
         )
@@ -33,7 +37,7 @@ export default async function DashboardLayout({
     let user: any;
     try {
         const authResult: any = await withTimeout(
-            supabase.auth.getUser(),
+            () => supabase.auth.getUser(),
             5000,
             'getUser'
         )
@@ -51,7 +55,7 @@ export default async function DashboardLayout({
     let profile: any = null;
     try {
         const profileResult: any = await withTimeout(
-            supabase
+            () => supabase
                 .from("profiles")
                 .select("*")
                 .eq("id", user.id)
