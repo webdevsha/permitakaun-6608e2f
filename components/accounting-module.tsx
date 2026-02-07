@@ -296,26 +296,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // FINANCIAL CALCULATION ENGINE
   // ------------------------------------------------------------------
 
-  // PERSPECTIVE TRANSFORMATION: Convert transactions to viewer's perspective
-  // Transactions are stored from payer's perspective, but calculations need viewer's perspective
-  const viewerTenantIds = tenants
-    ?.filter((t: any) => t.profile_id === user?.id)
-    .map((t: any) => t.id) || []
-
-  const perspectiveTransactions = transactions?.map((t: any) => {
-    // Is the viewer the payer of this transaction?
-    const viewerIsPayer = viewerTenantIds.includes(t.tenant_id)
-
-    // If viewer is NOT the payer but sees a rent payment, flip the perspective
-    if (!viewerIsPayer && t.category === 'Sewa') {
-      return {
-        ...t,
-        type: t.type === 'expense' ? 'income' : 'expense' // Flip for recipient
-      }
-    }
-
-    return t // Keep as-is for viewer's own transactions
-  }) || []
+  // Note: With role-specific tables (tenant_transactions vs organizer_transactions),
+  // the transactions are already in the viewer's correct perspective:
+  // - Tenant sees their transactions from tenant_transactions (expenses are already 'expense')
+  // - Organizer sees their transactions from organizer_transactions (income is already 'income')
+  // No perspective transformation needed!
+  
+  const perspectiveTransactions = transactions || []
 
   // 1. Paid Up Capital (Modal)
   const totalCapital = perspectiveTransactions
@@ -552,27 +539,63 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         entityId = newTenant?.id || null
       }
 
-      const txData = {
+      // Determine which table to use based on role
+      const isTenant = (userRole === 'tenant' || role === 'tenant')
+      const tableName = isTenant ? 'tenant_transactions' : 'organizer_transactions'
+
+      // Get organizer_id for organizer/staff/admin transactions
+      let organizerId = null
+      if (!isTenant && user) {
+        const { data: orgData } = await supabase
+          .from('organizers')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (orgData) {
+          organizerId = orgData.id
+        }
+      }
+
+      // Build transaction data based on role
+      let txData: any = {
         description: newTransaction.description,
         category: newTransaction.category || "Lain-lain",
         amount: amount,
         type: newTransaction.type,
         status: (userRole === 'admin' || userRole === 'superadmin') ? 'approved' : 'pending',
-        tenant_id: entityId,
         date: newTransaction.date,
         receipt_url: receiptUrl
       }
 
-      // Validate entity ID is resolved
-      if (!txData.tenant_id) {
-        toast.error("Ralat: Tidak dapat mengenal pasti entiti pengguna. Sila cuba lagi.")
-        setIsSaving(false)
-        return
+      // Add role-specific foreign keys
+      if (isTenant) {
+        txData.tenant_id = entityId
+        // Check if this is a rent payment
+        txData.is_rent_payment = newTransaction.category === 'Sewa'
+        
+        // Validate tenant ID
+        if (!txData.tenant_id) {
+          toast.error("Ralat: Tidak dapat mengenal pasti entiti pengguna. Sila cuba lagi.")
+          setIsSaving(false)
+          return
+        }
+      } else {
+        // Organizer/Staff/Admin transactions
+        txData.organizer_id = organizerId
+        txData.tenant_id = entityId // May be null for non-rent transactions
+        txData.is_auto_generated = false // Manual entry
+        
+        // Validate organizer ID
+        if (!txData.organizer_id) {
+          toast.error("Ralat: Tidak dapat mengenal pasti organizer. Sila cuba lagi.")
+          setIsSaving(false)
+          return
+        }
       }
 
       if (editingTransaction) {
         const { error } = await supabase
-          .from('transactions')
+          .from(tableName)
           .update(txData)
           .eq('id', editingTransaction.id)
 
@@ -581,7 +604,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         toast.success("Transaksi berjaya dikemaskini")
       } else {
         const { data: newTx, error } = await supabase
-          .from('transactions')
+          .from(tableName)
           .insert(txData)
           .select()
           .single()
@@ -608,7 +631,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
 
     try {
-      const { error } = await supabase.from('transactions').delete().eq('id', id)
+      // Determine which table to delete from based on role
+      const tableName = (userRole === 'tenant' || role === 'tenant') 
+        ? 'tenant_transactions' 
+        : 'organizer_transactions'
+      
+      const { error } = await supabase.from(tableName).delete().eq('id', id)
       if (error) throw error
 
       await logAction('DELETE', 'transaction', id, {})
@@ -621,7 +649,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const handleApproveTransaction = async (id: number) => {
     try {
-      const { error } = await supabase.from('transactions').update({ status: 'approved' }).eq('id', id)
+      // Determine which table to update based on role
+      const tableName = (userRole === 'tenant' || role === 'tenant') 
+        ? 'tenant_transactions' 
+        : 'organizer_transactions'
+      
+      const { error } = await supabase.from(tableName).update({ status: 'approved' }).eq('id', id)
       if (error) throw error
       await logAction('APPROVE', 'transaction', id, { status: 'approved' })
       toast.success("Transaksi diluluskan")
@@ -1107,36 +1140,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       {displayedTransactions?.map((transaction: any) => {
                         const receipt = transaction.receipt_url
 
-                        // PERSPECTIVE LOGIC: Determine if viewer is the payer or recipient
-                        // Transactions are stored from PAYER's perspective (tenant_id = payer)
-                        // But we need to show from VIEWER's perspective
-
-                        // Check if this is a public payment (no tenant_id, has metadata.is_public_payment)
-                        const isPublicPayment = !transaction.tenant_id && transaction.metadata?.is_public_payment
-
-                        // Find viewer's tenant ID(s)
-                        const viewerTenantIds = tenants
-                          ?.filter((t: any) => t.profile_id === user?.id)
-                          .map((t: any) => t.id) || []
-
-                        // Is the viewer the payer of this transaction?
-                        const viewerIsPayer = viewerTenantIds.includes(transaction.tenant_id)
-
-                        // Determine display type and sign
-                        let displayType = transaction.type
-                        let displaySign = transaction.type === 'income' ? '+' : '-'
-
-                        // For public payments: organizer is always the recipient (income)
-                        if (isPublicPayment) {
-                          displayType = 'income'
-                          displaySign = '+'
-                        } else if (!viewerIsPayer && transaction.category === 'Sewa') {
-                          // Viewer is NOT the payer, but sees this rent payment
-                          // This means viewer is the RECIPIENT (organizer)
-                          // Flip the perspective: payer's expense = recipient's income
-                          displayType = transaction.type === 'expense' ? 'income' : 'expense'
-                          displaySign = displayType === 'income' ? '+' : '-'
-                        }
+                        // Simple display: transactions are already in correct perspective
+                        // - tenant_transactions: expenses show as 'expense' (negative)
+                        // - organizer_transactions: income shows as 'income' (positive)
+                        const displayType = transaction.type
+                        const displaySign = transaction.type === 'income' ? '+' : '-'
 
                         return (
                           <TableRow

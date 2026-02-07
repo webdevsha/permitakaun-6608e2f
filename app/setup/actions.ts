@@ -47,11 +47,23 @@ export async function clearAllSetupData() {
 
         // 2. Perform filtered deletion in correct order (respecting foreign keys)
 
-        // Step 1: Delete transactions (references tenants)
-        let q0 = supabase.from('transactions').delete()
-        if (keepTenantIds.length > 0) q0 = q0.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
-        const { data: d0, error: e0 } = await q0.neq('id', 0).select()
-        if (e0) throw new Error(`Error deleting transactions: ${e0.message}`)
+        // Step 1: Delete transactions from all transaction tables
+        // Delete from tenant_transactions
+        let q0a = supabase.from('tenant_transactions').delete()
+        if (keepTenantIds.length > 0) q0a = q0a.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
+        const { data: d0a, error: e0a } = await q0a.neq('id', 0).select()
+        if (e0a) console.error(`Error deleting tenant_transactions: ${e0a.message}`)
+        
+        // Delete from organizer_transactions
+        let q0b = supabase.from('organizer_transactions').delete()
+        if (keepTenantIds.length > 0) q0b = q0b.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
+        const { data: d0b, error: e0b } = await q0b.neq('id', 0).select()
+        if (e0b) console.error(`Error deleting organizer_transactions: ${e0b.message}`)
+        
+        // Also delete from legacy transactions table (for backward compatibility)
+        let q0c = supabase.from('transactions_backup').delete()
+        if (keepTenantIds.length > 0) q0c = q0c.not('tenant_id', 'in', `(${keepTenantIds.join(',')})`)
+        await q0c.neq('id', 0).select() // Ignore errors for backup table
 
         // Step 2: Delete tenant_locations (references both tenants and locations)
         let q1 = supabase.from('tenant_locations').delete()
@@ -85,7 +97,8 @@ export async function clearAllSetupData() {
             success: true,
             warning: !serviceRoleKey ? "⚠️ Service Role Key MISSING. Deletion used normal permissions and may have failed for others' data." : undefined,
             counts: {
-                transactions: d0?.length || 0,
+                tenant_transactions: d0a?.length || 0,
+                organizer_transactions: d0b?.length || 0,
                 rentals: d1?.length || 0,
                 tenants: d2?.length || 0,
                 locations: d3?.length || 0,
@@ -126,12 +139,13 @@ export async function cleanHazmanData() {
         // 2. Delete dependent data
 
         // Transactions (linked to Tenants of ORG002)
-        // Need to find tenant IDs first because transactions don't have organizer_code directly?
-        // Actually tenants table has organizer_code now.
+        // Need to find tenant IDs first
         const { data: tenants } = await supabase.from('tenants').select('id').eq('organizer_code', 'ORG002')
         if (tenants && tenants.length > 0) {
             const tenantIds = tenants.map(t => t.id)
-            await supabase.from('transactions').delete().in('tenant_id', tenantIds)
+            // Delete from both transaction tables
+            await supabase.from('tenant_transactions').delete().in('tenant_id', tenantIds)
+            await supabase.from('organizer_transactions').delete().in('tenant_id', tenantIds)
             await supabase.from('tenant_locations').delete().in('tenant_id', tenantIds)
         }
 
@@ -180,8 +194,12 @@ export async function wipeSystemData() {
         }
 
         // Delete all operational data
-        // Transactions
-        await supabase.from('transactions').delete().neq('id', 0)
+        // Delete from all transaction tables
+        await supabase.from('tenant_transactions').delete().neq('id', 0)
+        await supabase.from('organizer_transactions').delete().neq('id', 0)
+        await supabase.from('admin_transactions').delete().neq('id', 0)
+        // Also clean legacy backup table
+        await supabase.from('transactions_backup').delete().neq('id', 0)
         // Tenant Locations
         await supabase.from('tenant_locations').delete().neq('id', 0)
         // Tenants

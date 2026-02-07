@@ -153,22 +153,41 @@ export async function fetchDashboardData() {
         }
 
 
+        // Admin uses organizer_transactions to see income from all tenants
         let txQuery = supabase
-            .from('transactions')
-            .select('*, tenants!inner(full_name, business_name, organizer_code)')
+            .from('organizer_transactions')
+            .select('*, tenants(full_name, business_name, organizer_code)')
             .order('date', { ascending: false })
 
         if (adminOrgCode) {
             // Specific admin only sees their org transactions
-            txQuery = txQuery.eq('tenants.organizer_code', adminOrgCode)
+            // Filter by organizer's organizer_code via tenants join or organizer_id
+            const { data: orgData } = await supabase
+                .from('organizers')
+                .select('id')
+                .eq('organizer_code', adminOrgCode)
+                .single()
+            if (orgData) {
+                txQuery = txQuery.eq('organizer_id', orgData.id)
+            }
         } else if (!isDeveloperAdmin) {
-            // Need to filter transactions where tenant's organizer_code is NOT ORG001
-            // The !inner join on tenants allows filtering by tenant fields
-            txQuery = txQuery.neq('tenants.organizer_code', 'ORG001')
+            // Exclude ORG001 transactions for non-dev admins
+            const { data: seedOrg } = await supabase
+                .from('organizers')
+                .select('id')
+                .eq('organizer_code', 'ORG001')
+                .maybeSingle()
+            if (seedOrg) {
+                txQuery = txQuery.neq('organizer_id', seedOrg.id)
+            }
         }
 
         const { data: tx } = await txQuery
-        transactions = tx || []
+        transactions = (tx || []).map(t => ({
+            ...t,
+            // Map organizer_transactions to common format expected by UI
+            table_source: 'organizer_transactions'
+        }))
 
         let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
         if (!isDeveloperAdmin) {
@@ -332,40 +351,22 @@ export async function fetchDashboardData() {
                         })
                 }
 
-                // Fetch Transactions for these tenants
-                // For Staff/Organizers: Show ALL transactions (Sewa and others) for full visibility
-                console.log(`[Dashboard DEBUG] Fetching transactions for IDs:`, tIds)
+                // Fetch Transactions from organizer_transactions table
+                // Organizer/Staff sees their own Akaun (income from tenants)
+                console.log(`[Dashboard DEBUG] Fetching organizer transactions for orgId:`, orgId)
                 const { data: tx, error: txErr } = await supabase
-                    .from('transactions')
+                    .from('organizer_transactions')
                     .select('*, tenants(full_name, business_name)')
-                    .in('tenant_id', tIds)
-                    .order('date', { ascending: false })
-
-                if (txErr) console.error('[Dashboard DEBUG] Transaction Fetch Error:', txErr)
-                console.log(`[Dashboard DEBUG] Transactions Found: ${tx?.length || 0}`)
-
-                // Also fetch the organizer's OWN manual transactions (their personal Cash In/Out)
-                const { data: ownTx } = await supabase
-                    .from('transactions')
-                    .select('*, tenants(full_name, business_name)')
-                    .in('tenant_id', tenants.filter((t: any) => t.profile_id === user.id).map((t: any) => t.id))
-                    .order('date', { ascending: false })
-
-                // Fetch PUBLIC PAYMENTS (payments from non-registered users via /bayar)
-                // These have organizer_id set but no tenant_id
-                const { data: publicTx, error: publicTxErr } = await supabase
-                    .from('transactions')
-                    .select('*')
                     .eq('organizer_id', orgId)
-                    .is('tenant_id', null)
                     .order('date', { ascending: false })
 
-                if (publicTxErr) console.error('[Dashboard DEBUG] Public Payment Fetch Error:', publicTxErr)
-                console.log(`[Dashboard DEBUG] Public Payments Found: ${publicTx?.length || 0}`)
+                if (txErr) console.error('[Dashboard DEBUG] Organizer Transaction Fetch Error:', txErr)
+                console.log(`[Dashboard DEBUG] Organizer Transactions Found: ${tx?.length || 0}`)
 
-                // Combine: Rent from managed tenants + Own manual transactions + Public payments
-                transactions = [...(tx || []), ...(ownTx || []), ...(publicTx || [])]
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                transactions = (tx || []).map(t => ({
+                    ...t,
+                    table_source: 'organizer_transactions'
+                }))
 
             } else {
                 transactions = []
@@ -447,24 +448,29 @@ export async function fetchDashboardData() {
                 })
             }
 
-            // 3. Get History
+            // 3. Get History from tenant_transactions table
+            // Tenant sees their own Akaun (expenses/payments)
             const { data: txData } = await supabase
-                .from('transactions')
+                .from('tenant_transactions')
                 .select('*')
                 .eq('tenant_id', currentTenant.id)
+                .neq('category', 'Langganan') // Exclude system subscriptions
+                .neq('category', 'Subscription')
                 .order('date', { ascending: false })
 
             if (txData) {
                 transactions = txData.map(tx => ({
                     id: tx.id,
-                    date: tx.date, // Fix: Use 'date' instead of 'payment_date'
-                    description: tx.description, // Fix: Use 'description' instead of 'remarks'
-                    category: tx.category, // Pass category
+                    date: tx.date,
+                    description: tx.description,
+                    category: tx.category,
                     amount: tx.amount,
-                    type: tx.type, // Pass type (income/expense)
+                    type: tx.type, // This is 'expense' for rent payments
                     status: tx.status,
                     receipt_url: tx.receipt_url,
-                    tenant_id: tx.tenant_id
+                    tenant_id: tx.tenant_id,
+                    table_source: 'tenant_transactions',
+                    is_rent_payment: tx.is_rent_payment
                 }))
             }
 

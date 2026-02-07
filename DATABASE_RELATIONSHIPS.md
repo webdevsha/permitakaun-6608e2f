@@ -34,6 +34,27 @@
 │ organizer_code  │────▶│ rate_khemah     │     │ rate_type       │
 │ profile_id (FK) │     │ rate_cbs        │     │ status          │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    AKaun (TRANSACTIONS)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────┐ │
+│  │ admin_transactions  │    │organizer_transactions│   │tenant_  │ │
+│  ├─────────────────────┤    ├─────────────────────┤    │transact-│ │
+│  │ id (PK)             │    │ id (PK)             │    │ions     │ │
+│  │ admin_id (FK)       │    │ organizer_id (FK)───┼───▶├─────────┤ │
+│  │ amount              │    │ tenant_id (FK)──────┼───▶│id (PK)  │ │
+│  │ type (income/exp)   │    │ location_id (FK)    │    │tenant_id│ │
+│  │ category            │    │ amount              │    │(FK)     │ │
+│  │ status              │    │ type (income/exp)   │    │organizer│ │
+│  │ date                │    │ category            │    │_id (FK) │ │
+│  └─────────────────────┘    │ status              │    │amount   │ │
+│                             │ is_auto_generated   │    │type     │ │
+│                             └─────────────────────┘    │is_rent_ │ │
+│                                                        │payment  │ │
+│                                                        └─────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Relationship Rules
@@ -103,6 +124,60 @@ FROM organizers o
 WHERE o.organizer_code = 'ORG002';
 ```
 
+## Transaction (Akaun) Queries
+
+### Get Tenant's Akaun (Transaction History)
+```sql
+SELECT 
+    tt.date,
+    tt.description,
+    tt.type,
+    tt.amount,
+    tt.status,
+    tt.is_rent_payment,
+    o.name as organizer_name
+FROM tenant_transactions tt
+LEFT JOIN organizers o ON o.id = tt.organizer_id
+WHERE tt.tenant_id = 3  -- Ahmad's tenant_id
+ORDER BY tt.date DESC;
+```
+
+### Get Organizer's Akaun (Income from Tenants)
+```sql
+SELECT 
+    ot.date,
+    ot.description,
+    ot.type,
+    ot.amount,
+    ot.status,
+    t.business_name as tenant_name
+FROM organizer_transactions ot
+LEFT JOIN tenants t ON t.id = ot.tenant_id
+WHERE ot.organizer_id = 'organizer-uuid-here'
+ORDER BY ot.date DESC;
+```
+
+### Get Organizer's Akaun Summary
+```sql
+SELECT 
+    COALESCE(SUM(CASE WHEN type = 'income' AND status = 'approved' THEN amount ELSE 0 END), 0) as total_income,
+    COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'approved' THEN amount ELSE 0 END), 0) as total_expense,
+    COALESCE(SUM(CASE WHEN type = 'income' AND status = 'approved' THEN amount ELSE -amount END), 0) as balance
+FROM organizer_transactions
+WHERE organizer_id = 'organizer-uuid-here';
+```
+
+### Get Tenant's Akaun Summary
+```sql
+SELECT 
+    COALESCE(SUM(CASE WHEN type = 'income' AND status = 'approved' THEN amount ELSE 0 END), 0) as total_income,
+    COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'approved' THEN amount ELSE 0 END), 0) as total_expense,
+    COALESCE(SUM(CASE WHEN type = 'income' AND status = 'approved' THEN amount ELSE -amount END), 0) as balance,
+    COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_payments
+FROM tenant_transactions
+WHERE tenant_id = 3;  -- Ahmad's tenant_id
+```
+
 ## Data Integrity Rules
 
 1. **One Admin per Organizer Code** (typically)
@@ -118,3 +193,8 @@ WHERE o.organizer_code = 'ORG002';
 4. **Tenants are separate from Users**
    - Tenants are businesses, not login accounts
    - Optional: tenants.profile_id links to a user account
+
+5. **Transaction Type Consistency**
+   - Rent payment = EXPENSE in `tenant_transactions`
+   - Rent received = INCOME in `organizer_transactions`
+   - Both created simultaneously on payment approval

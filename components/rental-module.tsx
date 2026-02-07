@@ -108,16 +108,16 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
 
   const fetchHistory = async (tenantId: number) => {
-    // UPDATED: Fetch from 'transactions' table to include all records (including seeded data)
-    // tenant_payments is only for specific payment flow, transactions is the master ledger
+    // Fetch from tenant_transactions table for tenant's Akaun view
     const { data: txData } = await supabase
-      .from('transactions')
+      .from('tenant_transactions')
       .select('*')
       .eq('tenant_id', tenantId)
       .order('date', { ascending: false })
 
     if (txData) {
       // Map transaction data to the history structure used in UI
+      // tenant_transactions stores type as 'expense' for rent payments (tenant's perspective)
       const mappedHistory = txData.map(tx => ({
         id: tx.id,
         payment_date: tx.date,
@@ -126,7 +126,8 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         status: tx.status,
         receipt_url: tx.receipt_url,
         category: tx.category,
-        type: tx.type
+        type: tx.type, // 'expense' for rent payments
+        is_rent_payment: tx.is_rent_payment
       }))
       setHistory(mappedHistory)
     }
@@ -239,8 +240,19 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
         if (pendingRecord) {
           await supabase.from('tenant_payments').update({ status: 'approved' }).eq('id', pendingRecord.id)
+          // Update status in BOTH transaction tables
           if (pendingRecord.transaction_id) {
-            await supabase.from('transactions').update({ status: 'approved' }).eq('id', pendingRecord.transaction_id)
+            // Try tenant_transactions first (for tenant view)
+            const { error: ttError } = await supabase
+              .from('tenant_transactions')
+              .update({ status: 'approved' })
+              .eq('id', pendingRecord.transaction_id)
+            
+            // Also try organizer_transactions (for organizer view)
+            const { error: otError } = await supabase
+              .from('organizer_transactions')
+              .update({ status: 'approved' })
+              .eq('id', pendingRecord.transaction_id)
           }
 
           toast.dismiss(toastId)

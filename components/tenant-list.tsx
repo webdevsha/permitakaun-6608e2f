@@ -233,8 +233,10 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setIsDetailOpen(true)
       setLoadingDetails(true)
 
+      // Fetch from organizer_transactions to see income from this tenant
+      // (organizer's perspective of the tenant's payments)
       const { data: txData } = await supabase
-         .from('transactions')
+         .from('organizer_transactions')
          .select('*')
          .eq('tenant_id', tenant.id)
          .order('date', { ascending: false })
