@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle, BookOpen } from "lucide-react"
+import { Loader2, Upload, FileText, Check, Database, Download, Trash2, RefreshCw, Shield, ShieldAlert, HardDrive, Pencil, X, Utensils, FolderOpen, Users, Lock, UserPlus, Activity, ScrollText, PlusCircle, Pencil as PencilIcon, XCircle, CheckCircle, BookOpen, CreditCard } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
@@ -19,6 +19,7 @@ import { PaymentSettings } from "@/components/settings-toggle"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { clearAllSetupData } from "@/app/setup/actions"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
+import { SubscriptionTab } from "@/components/subscription-tab"
 
 // Helper component defined outside to prevent re-renders causing focus loss
 const DataField = ({
@@ -690,6 +691,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            </TabsTrigger>
+          )}
+          {(role === 'organizer' || role === 'tenant') && (
+            <TabsTrigger value="subscription" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <CreditCard className="w-4 h-4 mr-2" /> Langganan
             </TabsTrigger>
           )}
         </TabsList>
@@ -1432,6 +1438,12 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
+        {/* Subscription Tab for Organizers and Tenants */}
+        {(role === 'organizer' || role === 'tenant') && (
+          <TabsContent value="subscription" className="space-y-6">
+            <SubscriptionTab />
+          </TabsContent>
+        )}
 
       </Tabs>
     </div>

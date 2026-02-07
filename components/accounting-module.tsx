@@ -53,6 +53,7 @@ import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
 import { cn } from "@/lib/utils"
 import { SubscriptionPlans } from "@/components/subscription-plans"
+import { SubscriptionNotification } from "@/components/subscription-notification"
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
 
@@ -736,6 +737,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Subscription Notification for Organizers and Tenants */}
+      {(role === 'organizer' || role === 'tenant') && <SubscriptionNotification />}
+      
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>
