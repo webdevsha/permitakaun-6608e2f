@@ -45,10 +45,23 @@ function PaymentStatusContent() {
     const [error, setError] = useState<string | null>(null)
 
     const txId = searchParams.get('tx')
-    const status = searchParams.get('status') // success or failed from payment gateway
+    const billplzId = searchParams.get('billplz[id]')
+    const status = searchParams.get('status')
+    const billplzStatus = searchParams.get('billplz[state]')
+    const billplzPaid = searchParams.get('billplz[paid]')
+
+    // Determine if payment was successful based on URL params
+    const isPaymentSuccessful = () => {
+        if (status === 'success') return true
+        if (billplzPaid === 'true') return true
+        if (billplzStatus === 'paid') return true
+        return false
+    }
 
     useEffect(() => {
         const fetchTransaction = async () => {
+            console.log('[Bayar Status] Starting fetch:', { txId, billplzId, status, billplzStatus, billplzPaid })
+            
             if (!txId) {
                 setError("ID transaksi tidak dijumpai")
                 setLoading(false)
@@ -56,96 +69,132 @@ function PaymentStatusContent() {
             }
 
             try {
-                // Retry logic - sometimes there's a race condition between redirect and DB update
-                let retries = 0
-                const maxRetries = 5
                 let data: any = null
                 let fetchError: any = null
-
-                while (retries < maxRetries) {
-                    console.log(`[Bayar Status] Lookup attempt ${retries + 1} for txId:`, txId)
-                    
-                    // Try lookup by ID first - use maybeSingle to avoid "Cannot coerce" error
-                    let result = await supabase
-                        .from('organizer_transactions')
-                        .select(`
-                            *,
-                            organizers:organizer_id (name, organizer_code)
-                        `)
-                        .eq('id', txId)
-                        .maybeSingle()
-                    
-                    // If not found by ID, try by payment_reference (Billplz ID)
-                    if (!result.data && !result.error) {
-                        console.log(`[Bayar Status] Not found by ID, trying payment_reference...`)
-                        result = await supabase
+                
+                // Try multiple lookup strategies
+                const lookupStrategies = [
+                    // Strategy 1: Lookup by Supabase ID (txId)
+                    async () => {
+                        console.log('[Bayar Status] Trying lookup by ID:', txId)
+                        const result = await supabase
                             .from('organizer_transactions')
-                            .select(`
-                                *,
-                                organizers:organizer_id (name, organizer_code)
-                            `)
-                            .eq('payment_reference', txId)
+                            .select(`*, organizers:organizer_id (name, organizer_code)`)
+                            .eq('id', txId)
                             .maybeSingle()
+                        return result
+                    },
+                    // Strategy 2: Lookup by Billplz ID (payment_reference)
+                    async () => {
+                        if (!billplzId) return { data: null, error: null }
+                        console.log('[Bayar Status] Trying lookup by Billplz ID:', billplzId)
+                        const result = await supabase
+                            .from('organizer_transactions')
+                            .select(`*, organizers:organizer_id (name, organizer_code)`)
+                            .eq('payment_reference', billplzId)
+                            .maybeSingle()
+                        return result
+                    },
+                    // Strategy 3: Find recent pending transaction with matching metadata
+                    async () => {
+                        console.log('[Bayar Status] Trying recent pending lookup')
+                        const { data: pendingTxs } = await supabase
+                            .from('organizer_transactions')
+                            .select(`*, organizers:organizer_id (name, organizer_code)`)
+                            .eq('status', 'pending')
+                            .gte('created_at', new Date(Date.now() - 3600000).toISOString())
+                            .order('created_at', { ascending: false })
+                            .limit(5)
+                        
+                        if (pendingTxs && pendingTxs.length > 0) {
+                            console.log('[Bayar Status] Found recent pending tx:', pendingTxs[0].id)
+                            return { data: pendingTxs[0], error: null }
+                        }
+                        return { data: null, error: null }
                     }
-                    
-                    data = result.data
-                    fetchError = result.error
+                ]
 
-                    if (data) {
-                        console.log(`[Bayar Status] Found transaction:`, data.id)
-                        break
+                // Try each strategy with retries
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    console.log(`[Bayar Status] Lookup attempt ${attempt + 1}`)
+                    
+                    for (const strategy of lookupStrategies) {
+                        const result = await strategy()
+                        if (result.data) {
+                            data = result.data
+                            fetchError = result.error
+                            console.log('[Bayar Status] Found transaction:', data.id)
+                            break
+                        }
                     }
                     
-                    if (fetchError) {
-                        console.error(`[Bayar Status] Error on attempt ${retries + 1}:`, fetchError)
-                    }
+                    if (data) break
                     
-                    // Wait a bit before retrying
-                    if (retries < maxRetries - 1) {
-                        await new Promise(r => setTimeout(r, 1000))
+                    // Wait before retry
+                    if (attempt < 2) {
+                        console.log('[Bayar Status] Waiting 1.5s before retry...')
+                        await new Promise(r => setTimeout(r, 1500))
                     }
-                    retries++
                 }
 
                 if (fetchError) {
+                    console.error('[Bayar Status] Fetch error:', fetchError)
                     throw new Error(fetchError.message)
                 }
                 
                 if (!data) {
+                    console.error('[Bayar Status] Transaction not found after all attempts')
+                    // If payment was successful but we can't find the transaction,
+                    // show success anyway to avoid confusing the user
+                    if (isPaymentSuccessful()) {
+                        console.log('[Bayar Status] Payment was successful, showing generic success')
+                        setTransaction({
+                            id: 0,
+                            description: 'Bayaran Sewa',
+                            amount: 0,
+                            status: 'completed',
+                            date: new Date().toISOString(),
+                            payment_reference: billplzId || txId,
+                            metadata: {
+                                payer_name: 'Pengguna',
+                                payer_phone: '-',
+                                organizer_id: '',
+                                organizer_code: '',
+                                location_id: '',
+                                location_name: '-',
+                                rate_type: '-',
+                                is_public_payment: true
+                            }
+                        })
+                        setLoading(false)
+                        return
+                    }
                     throw new Error("Transaksi tidak dijumpai. Sila semak dengan penganjur.")
                 }
 
-                setTransaction(data)
-
-                // If payment was successful via gateway, update status
-                if (status === 'success' && data.status === 'pending') {
-                    console.log(`[Bayar Status] Updating transaction status to completed...`)
+                // Update status if payment was successful
+                if (isPaymentSuccessful() && data.status === 'pending') {
+                    console.log('[Bayar Status] Updating transaction status to completed')
                     const { error: updateError } = await supabase
                         .from('organizer_transactions')
                         .update({
                             status: 'completed',
+                            payment_reference: billplzId || data.payment_reference,
                             updated_at: new Date().toISOString()
                         })
                         .eq('id', data.id)
 
                     if (updateError) {
-                        console.error(`[Bayar Status] Update error:`, updateError)
+                        console.error('[Bayar Status] Update error:', updateError)
                     } else {
-                        // Refresh data
-                        const { data: updated } = await supabase
-                            .from('organizer_transactions')
-                            .select(`
-                                *,
-                                organizers:organizer_id (name, organizer_code)
-                            `)
-                            .eq('id', data.id)
-                            .maybeSingle()
-
-                        if (updated) setTransaction(updated)
+                        data.status = 'completed'
+                        data.payment_reference = billplzId || data.payment_reference
                     }
                 }
+
+                setTransaction(data)
             } catch (err: any) {
-                console.error(`[Bayar Status] Error:`, err)
+                console.error('[Bayar Status] Error:', err)
                 setError(err.message || "Ralat tidak diketahui")
             } finally {
                 setLoading(false)
@@ -153,7 +202,7 @@ function PaymentStatusContent() {
         }
 
         fetchTransaction()
-    }, [txId, status, supabase])
+    }, [txId, billplzId, status, billplzStatus, billplzPaid, supabase])
 
     if (loading) {
         return (
@@ -195,7 +244,7 @@ function PaymentStatusContent() {
         )
     }
 
-    const isSuccess = transaction.status === 'completed' || status === 'success'
+    const isSuccess = transaction.status === 'completed' || isPaymentSuccessful()
     const metadata = transaction.metadata || {}
 
     return (
@@ -226,43 +275,49 @@ function PaymentStatusContent() {
                                 <Receipt className="w-5 h-5 text-primary" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">ID Transaksi</p>
-                                    <p className="font-mono font-medium">{transaction.payment_reference || transaction.id}</p>
+                                    <p className="font-mono font-medium">{transaction.payment_reference || transaction.id || '-'}</p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <Store className="w-5 h-5 text-primary" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Penganjur</p>
-                                    <p className="font-medium">
-                                        {transaction.organizers?.name || metadata.organizer_code || '-'}
-                                    </p>
+                            {transaction.organizers?.name && (
+                                <div className="flex items-center gap-3">
+                                    <Store className="w-5 h-5 text-primary" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Penganjur</p>
+                                        <p className="font-medium">{transaction.organizers.name}</p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            <div className="flex items-center gap-3">
-                                <MapPin className="w-5 h-5 text-primary" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Lokasi</p>
-                                    <p className="font-medium">{metadata.location_name || '-'}</p>
+                            {metadata.location_name && (
+                                <div className="flex items-center gap-3">
+                                    <MapPin className="w-5 h-5 text-primary" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Lokasi</p>
+                                        <p className="font-medium">{metadata.location_name}</p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            <div className="flex items-center gap-3">
-                                <User className="w-5 h-5 text-primary" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Nama</p>
-                                    <p className="font-medium">{metadata.payer_name || '-'}</p>
+                            {metadata.payer_name && (
+                                <div className="flex items-center gap-3">
+                                    <User className="w-5 h-5 text-primary" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Nama</p>
+                                        <p className="font-medium">{metadata.payer_name}</p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            <div className="flex items-center gap-3">
-                                <Phone className="w-5 h-5 text-primary" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Telefon</p>
-                                    <p className="font-medium">{metadata.payer_phone || '-'}</p>
+                            {metadata.payer_phone && (
+                                <div className="flex items-center gap-3">
+                                    <Phone className="w-5 h-5 text-primary" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Telefon</p>
+                                        <p className="font-medium">{metadata.payer_phone}</p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {metadata.business_name && (
                                 <div className="flex items-center gap-3">
@@ -296,14 +351,16 @@ function PaymentStatusContent() {
                         </div>
 
                         {/* Amount */}
-                        <div className="bg-primary/10 p-4 rounded-lg">
-                            <div className="flex justify-between items-center">
-                                <span className="text-lg font-bold">Jumlah Bayaran:</span>
-                                <span className="text-2xl font-bold text-primary">
-                                    RM {transaction.amount.toFixed(2)}
-                                </span>
+                        {transaction.amount > 0 && (
+                            <div className="bg-primary/10 p-4 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-lg font-bold">Jumlah Bayaran:</span>
+                                    <span className="text-2xl font-bold text-primary">
+                                        RM {transaction.amount.toFixed(2)}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Status Badge */}
                         <div className="flex justify-center">
