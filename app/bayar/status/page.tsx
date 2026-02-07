@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, Suspense, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,11 +39,13 @@ interface TransactionData {
 function PaymentStatusContent() {
     const searchParams = useSearchParams()
     const supabase = createClient()
+    const hasFetched = useRef(false)
 
     const [loading, setLoading] = useState(true)
     const [transaction, setTransaction] = useState<TransactionData | null>(null)
     const [error, setError] = useState<string | null>(null)
 
+    // Get all params once to avoid changing dependency array
     const txId = searchParams.get('tx')
     const billplzId = searchParams.get('billplz[id]')
     const status = searchParams.get('status')
@@ -51,14 +53,13 @@ function PaymentStatusContent() {
     const billplzPaid = searchParams.get('billplz[paid]')
 
     // Determine if payment was successful based on URL params
-    const isPaymentSuccessful = () => {
-        if (status === 'success') return true
-        if (billplzPaid === 'true') return true
-        if (billplzStatus === 'paid') return true
-        return false
-    }
+    const isPaymentSuccessful = status === 'success' || billplzPaid === 'true' || billplzStatus === 'paid'
 
     useEffect(() => {
+        // Prevent double fetch in React StrictMode
+        if (hasFetched.current) return
+        hasFetched.current = true
+
         const fetchTransaction = async () => {
             console.log('[Bayar Status] Starting fetch:', { txId, billplzId, status, billplzStatus, billplzPaid })
             
@@ -70,65 +71,56 @@ function PaymentStatusContent() {
 
             try {
                 let data: any = null
-                let fetchError: any = null
                 
-                // Try multiple lookup strategies
-                const lookupStrategies = [
+                // Try multiple lookup strategies with retries
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    console.log(`[Bayar Status] Lookup attempt ${attempt + 1}`)
+                    
                     // Strategy 1: Lookup by Supabase ID (txId)
-                    async () => {
-                        console.log('[Bayar Status] Trying lookup by ID:', txId)
-                        const result = await supabase
-                            .from('organizer_transactions')
-                            .select(`*, organizers:organizer_id (name, organizer_code)`)
-                            .eq('id', txId)
-                            .maybeSingle()
-                        return result
-                    },
+                    console.log('[Bayar Status] Trying lookup by ID:', txId)
+                    let result = await supabase
+                        .from('organizer_transactions')
+                        .select(`*, organizers:organizer_id (name, organizer_code)`)
+                        .eq('id', txId)
+                        .maybeSingle()
+                    
+                    if (result.data) {
+                        data = result.data
+                        console.log('[Bayar Status] Found by ID:', data.id)
+                        break
+                    }
+                    
                     // Strategy 2: Lookup by Billplz ID (payment_reference)
-                    async () => {
-                        if (!billplzId) return { data: null, error: null }
+                    if (billplzId) {
                         console.log('[Bayar Status] Trying lookup by Billplz ID:', billplzId)
-                        const result = await supabase
+                        result = await supabase
                             .from('organizer_transactions')
                             .select(`*, organizers:organizer_id (name, organizer_code)`)
                             .eq('payment_reference', billplzId)
                             .maybeSingle()
-                        return result
-                    },
-                    // Strategy 3: Find recent pending transaction with matching metadata
-                    async () => {
-                        console.log('[Bayar Status] Trying recent pending lookup')
-                        const { data: pendingTxs } = await supabase
-                            .from('organizer_transactions')
-                            .select(`*, organizers:organizer_id (name, organizer_code)`)
-                            .eq('status', 'pending')
-                            .gte('created_at', new Date(Date.now() - 3600000).toISOString())
-                            .order('created_at', { ascending: false })
-                            .limit(5)
                         
-                        if (pendingTxs && pendingTxs.length > 0) {
-                            console.log('[Bayar Status] Found recent pending tx:', pendingTxs[0].id)
-                            return { data: pendingTxs[0], error: null }
-                        }
-                        return { data: null, error: null }
-                    }
-                ]
-
-                // Try each strategy with retries
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    console.log(`[Bayar Status] Lookup attempt ${attempt + 1}`)
-                    
-                    for (const strategy of lookupStrategies) {
-                        const result = await strategy()
                         if (result.data) {
                             data = result.data
-                            fetchError = result.error
-                            console.log('[Bayar Status] Found transaction:', data.id)
+                            console.log('[Bayar Status] Found by Billplz ID:', data.id)
                             break
                         }
                     }
                     
-                    if (data) break
+                    // Strategy 3: Find recent pending transaction
+                    console.log('[Bayar Status] Trying recent pending lookup')
+                    const { data: pendingTxs } = await supabase
+                        .from('organizer_transactions')
+                        .select(`*, organizers:organizer_id (name, organizer_code)`)
+                        .eq('status', 'pending')
+                        .gte('created_at', new Date(Date.now() - 3600000).toISOString())
+                        .order('created_at', { ascending: false })
+                        .limit(5)
+                    
+                    if (pendingTxs && pendingTxs.length > 0) {
+                        data = pendingTxs[0]
+                        console.log('[Bayar Status] Found recent pending tx:', data.id)
+                        break
+                    }
                     
                     // Wait before retry
                     if (attempt < 2) {
@@ -137,16 +129,11 @@ function PaymentStatusContent() {
                     }
                 }
 
-                if (fetchError) {
-                    console.error('[Bayar Status] Fetch error:', fetchError)
-                    throw new Error(fetchError.message)
-                }
-                
                 if (!data) {
                     console.error('[Bayar Status] Transaction not found after all attempts')
                     // If payment was successful but we can't find the transaction,
                     // show success anyway to avoid confusing the user
-                    if (isPaymentSuccessful()) {
+                    if (isPaymentSuccessful) {
                         console.log('[Bayar Status] Payment was successful, showing generic success')
                         setTransaction({
                             id: 0,
@@ -173,7 +160,7 @@ function PaymentStatusContent() {
                 }
 
                 // Update status if payment was successful
-                if (isPaymentSuccessful() && data.status === 'pending') {
+                if (isPaymentSuccessful && data.status === 'pending') {
                     console.log('[Bayar Status] Updating transaction status to completed')
                     const { error: updateError } = await supabase
                         .from('organizer_transactions')
@@ -202,7 +189,8 @@ function PaymentStatusContent() {
         }
 
         fetchTransaction()
-    }, [txId, billplzId, status, billplzStatus, billplzPaid, supabase])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // Empty dependency array - only run once on mount
 
     if (loading) {
         return (
@@ -244,7 +232,7 @@ function PaymentStatusContent() {
         )
     }
 
-    const isSuccess = transaction.status === 'completed' || isPaymentSuccessful()
+    const isSuccess = transaction.status === 'completed' || isPaymentSuccessful
     const metadata = transaction.metadata || {}
 
     return (
