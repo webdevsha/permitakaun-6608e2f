@@ -59,7 +59,7 @@ const fetchTenants = async () => {
    const enrichedTenants = await Promise.all(tenants.map(async (tenant: any) => {
       const { data: locs } = await supabase.from('tenant_locations').select('*, locations(*)').eq('tenant_id', tenant.id)
       const { data: payments } = await supabase.from('tenant_payments').select('*').eq('tenant_id', tenant.id).eq('status', 'approved').order('payment_date', { ascending: false }).limit(1)
-      
+
       // Fetch organizer name
       let organizerName = '-'
       if (tenant.organizer_code) {
@@ -93,6 +93,7 @@ const fetchTenants = async () => {
 // ... imports
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
+import { toggleAccountingStatusAction } from "@/actions/tenant"
 
 // ... (fetchTenants remains same, or updated if needed, but sticking to client interactions)
 
@@ -287,12 +288,14 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
    // )}
 
 
-   const handleAccountingStatusChange = async (tenantId: number, newAcctStatus: string) => {
+   const handleAccountingStatusChange = async (tenantId: number, currentStatus: string) => {
+      // Toggle logic
+      const newAcctStatus = currentStatus === 'active' ? 'inactive' : 'active'
       setIsUpdating(true)
       try {
-         // Note: 'accounting_status' column must exist
-         const { error } = await supabase.from('tenants').update({ accounting_status: newAcctStatus }).eq('id', tenantId)
-         if (error) throw error
+         const result = await toggleAccountingStatusAction(tenantId, newAcctStatus)
+         if (!result.success) throw new Error(result.error)
+
          toast.success(`Akses akaun dikemaskini ke ${newAcctStatus}`)
          mutate()
       } catch (err: any) {
@@ -534,7 +537,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                               <div className="flex justify-center items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100">
                                  <Switch
                                     checked={tenant.accounting_status === 'active'}
-                                    onCheckedChange={() => handleAccountingStatusChange(tenant.id, tenant.accounting_status === 'active' ? 'inactive' : 'active')}
+                                    onCheckedChange={() => handleAccountingStatusChange(tenant.id, tenant.accounting_status)}
                                     disabled={isUpdating}
                                     className="data-[state=checked]:bg-blue-600"
                                  />

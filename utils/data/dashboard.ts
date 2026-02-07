@@ -9,7 +9,7 @@ async function withTimeout<T>(
 ): Promise<T> {
     return Promise.race([
         Promise.resolve(queryFn()),
-        new Promise<T>((_, reject) => 
+        new Promise<T>((_, reject) =>
             setTimeout(() => reject(new Error(`Timeout: ${context} took longer than ${ms}ms`)), ms)
         )
     ])
@@ -31,17 +31,17 @@ export async function fetchDashboardData() {
         console.error('[fetchDashboardData] Timeout getting user:', e)
         return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
     }
-    
+
     if (!user) return { transactions: [], tenants: [], overdueTenants: [], organizers: [], myLocations: [], availableLocations: [], role: null, userProfile: null }
 
     const { data: profile } = await supabase.from('profiles').select('role, organizer_code, full_name, email').eq('id', user.id).single()
 
     // Use shared role determination logic for consistency
     const role = determineUserRole(profile, user.email)
-    
+
     // Get organizer_code from appropriate table based on role
     let organizerCode = profile?.organizer_code
-    
+
     // For staff, get organizer_code from staff table (mirrors admin's data)
     if (role === 'staff') {
         const { data: staffData } = await supabase.from('staff').select('organizer_code').eq('profile_id', user.id).single()
@@ -75,7 +75,7 @@ export async function fetchDashboardData() {
 
         // Developer-Admin Logic: Only admin@permit.com sees Seed Data (ORG001)
         const isDeveloperAdmin = user.email === 'admin@permit.com'
-        
+
         // Specific admin organization codes - these admins ONLY see their own org data
         const adminOrgCode = user.email === 'admin@kumim.my' ? 'ORG002' : null
 
@@ -103,7 +103,7 @@ export async function fetchDashboardData() {
         const organizerCodes = new Set(allOrganizers?.map(o => o.organizer_code).filter(Boolean) || [])
         // Create a map of organizer_code to name
         const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
-        
+
         // Also get admin/staff profiles to exclude
         const { data: adminProfiles } = await supabase.from('profiles').select('id').in('role', ['admin', 'superadmin', 'staff'])
         const adminProfileIds = new Set(adminProfiles?.map(p => p.id) || [])
@@ -129,8 +129,8 @@ export async function fetchDashboardData() {
 
             // For admin@kumim.my: Only show "Ahmad" as sample (hide others for demo purposes)
             if (user.email === 'admin@kumim.my') {
-                filteredTenants = filteredTenants.filter(tenant => 
-                    tenant.full_name?.toLowerCase().includes('ahmad') || 
+                filteredTenants = filteredTenants.filter(tenant =>
+                    tenant.full_name?.toLowerCase().includes('ahmad') ||
                     tenant.full_name?.toLowerCase().includes('sample')
                 )
             }
@@ -411,6 +411,7 @@ export async function fetchDashboardData() {
         }
 
         if (currentTenant) {
+            tenants = [currentTenant] // Fix: Populate tenants array so AccountingModule can identify viewer
             userProfile = currentTenant
 
             // 2. Get My Locations
@@ -456,11 +457,14 @@ export async function fetchDashboardData() {
             if (txData) {
                 transactions = txData.map(tx => ({
                     id: tx.id,
-                    payment_date: tx.date,
-                    remarks: tx.description,
+                    date: tx.date, // Fix: Use 'date' instead of 'payment_date'
+                    description: tx.description, // Fix: Use 'description' instead of 'remarks'
+                    category: tx.category, // Pass category
                     amount: tx.amount,
+                    type: tx.type, // Pass type (income/expense)
                     status: tx.status,
-                    receipt_url: tx.receipt_url
+                    receipt_url: tx.receipt_url,
+                    tenant_id: tx.tenant_id
                 }))
             }
 
@@ -568,7 +572,7 @@ export async function fetchDashboardData() {
 
 export async function fetchLocations() {
     const supabase = await createClient()
-    
+
     // Get user with timeout protection
     let user: any;
     try {
@@ -582,7 +586,7 @@ export async function fetchLocations() {
         console.error('[fetchLocations] Timeout getting user:', e)
         return []
     }
-    
+
     if (!user) return []
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
@@ -628,7 +632,7 @@ export async function fetchLocations() {
                 .from('tenant_locations')
                 .select('*', { count: 'exact', head: true })
                 .eq('location_id', loc.id)
-            
+
             if (countError) {
                 console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
                 return { ...loc, tenant_count: 0 }

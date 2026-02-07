@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
+import { signOutAction } from "@/actions/auth"
 
 interface AuthContextType {
   user: any | null
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
   const router = useRouter()
   const pathname = usePathname()
-  
+
   const [user, setUser] = useState<any | null>(null)
   const [session, setSession] = useState<any | null>(null)
   const [profile, setProfile] = useState<any | null>(null)
@@ -41,10 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Function to determine role from profile
   const determineRole = useCallback((profileData: any, userEmail?: string) => {
     if (!profileData) return null
-    
+
     // Priority: 1. Explicit role from profile, 2. Email-based fallback
     let determinedRole = profileData.role
-    
+
     if (!determinedRole && userEmail) {
       if (userEmail === 'admin@permit.com') determinedRole = 'admin'
       else if (userEmail === 'staff@permit.com') determinedRole = 'staff'
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       else if (userEmail === 'rafisha92@gmail.com') determinedRole = 'superadmin'
       else if (userEmail === 'admin@kumim.my') determinedRole = 'admin'
     }
-    
+
     return determinedRole || 'tenant'
   }, [])
 
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .single()
-    
+
     if (profileData) {
       setProfile(profileData)
       const determinedRole = determineRole(profileData, user?.email)
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Refresh auth state
   const refreshAuth = useCallback(async () => {
     const { data: { session: currentSession } } = await supabase.auth.getSession()
-    
+
     if (currentSession?.user) {
       setUser(currentSession.user)
       setSession(currentSession)
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Initial auth check
     const initAuth = async () => {
       const { data: { session: initialSession } } = await supabase.auth.getSession()
-      
+
       if (!mounted) return
 
       if (initialSession?.user) {
@@ -101,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(initialSession)
         await fetchProfile(initialSession.user.id)
       }
-      
+
       setIsLoading(false)
       setIsInitialized(true)
     }
@@ -137,12 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setProfile(null)
       setRole(null)
-      
-      // Sign out from Supabase first (this clears cookies)
-      await supabase.auth.signOut()
-      
-      // Force hard redirect to login (clears all state and cache)
-      window.location.href = '/login'
+
+      // Call server action to clear cookies and redirect
+      await signOutAction()
     } catch (error) {
       console.error('Sign out error:', error)
       // Force redirect even on error
