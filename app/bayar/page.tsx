@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, MapPin, User, Store, CreditCard, ArrowRight, Building, Calendar, CheckCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { initiatePayment } from "@/actions/payment"
+import { createPublicPaymentTransaction } from "@/actions/public-payment"
 import { cn } from "@/lib/utils"
 
 interface LocationWithOrganizer {
@@ -205,46 +206,33 @@ export default function PublicPaymentPage() {
                 throw new Error("Amaun tidak sah")
             }
 
-            // First, create a pending transaction record in organizer_transactions - with timeout
-            // Public payments go to organizer_transactions (income for organizer)
-            const txResult: any = await withTimeout(
-                () => supabase
-                    .from('organizer_transactions')
-                    .insert({
-                        description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
-                        amount: amount,
-                        type: 'income',
-                        category: 'Sewa',
-                        status: 'pending',
-                        date: new Date().toISOString().split('T')[0],
-                        organizer_id: selectedLocation.organizer_id,
-                        location_id: selectedLocation.id,
-                        is_auto_generated: false,
-                        // Store payer info in metadata
-                        metadata: {
-                            payer_name: fullName,
-                            payer_phone: phoneNumber,
-                            payer_email: email,
-                            business_name: businessName,
-                            stall_number: stallNumber,
-                            organizer_id: selectedLocation.organizer_id,
-                            organizer_code: selectedLocation.organizer_code,
-                            location_id: selectedLocation.id,
-                            location_name: selectedLocation.name,
-                            rate_type: selectedRateType,
-                            is_public_payment: true,
-                            payment_method: 'online'
-                        }
-                    })
-                    .select()
-                    .single(),
-                5000,
-                'createTransaction'
-            )
+            // Create pending transaction via server action (bypasses RLS)
+            const txResult = await createPublicPaymentTransaction({
+                description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
+                amount: amount,
+                organizer_id: selectedLocation.organizer_id,
+                location_id: selectedLocation.id,
+                metadata: {
+                    payer_name: fullName,
+                    payer_phone: phoneNumber,
+                    payer_email: email,
+                    business_name: businessName,
+                    stall_number: stallNumber,
+                    organizer_id: selectedLocation.organizer_id,
+                    organizer_code: selectedLocation.organizer_code,
+                    location_id: selectedLocation.id,
+                    location_name: selectedLocation.name,
+                    rate_type: selectedRateType,
+                    is_public_payment: true,
+                    payment_method: 'online'
+                }
+            })
 
-            if (txResult.error) throw txResult.error
-            const transaction = txResult.data
-            if (!transaction) throw new Error('Transaksi tidak dapat dicipta')
+            if (!txResult.success || !txResult.transaction) {
+                throw new Error(txResult.error || 'Transaksi tidak dapat dicipta')
+            }
+            
+            const transaction = txResult.transaction
 
             // Initiate payment - with timeout
             // Pass transaction details for public payment flow
