@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { clearAllSetupData } from "@/app/setup/actions"
 import { AddStaffDialog } from "@/components/add-staff-dialog"
 import { SubscriptionTab } from "@/components/subscription-tab"
+import { AdminSubscriptionsTab } from "@/components/admin-subscriptions-tab"
 
 // Helper component defined outside to prevent re-renders causing focus loss
 const DataField = ({
@@ -54,8 +55,10 @@ const DataField = ({
   </div>
 )
 
-export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays = 14, currentUser }: { initialProfile?: any, initialBackups?: any[], trialPeriodDays?: number, currentUser?: any }) {
-  const { user, role } = useAuth() // Note: user from auth-provider might be slightly different context than currentUser passed from server, but IDs match. Using currentUser for creation date reliability.
+export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays = 14, currentUser, serverRole }: { initialProfile?: any, initialBackups?: any[], trialPeriodDays?: number, currentUser?: any, serverRole?: string | null }) {
+  const { user, role: clientRole } = useAuth()
+  // Use server-provided role if available, otherwise fall back to client-side role
+  const role = serverRole || clientRole
   const supabase = createClient()
 
   const [loading, setLoading] = useState(false)
@@ -692,6 +695,11 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            </TabsTrigger>
+          )}
+          {(role === 'admin' || role === 'superadmin') && (
+            <TabsTrigger value="subscriptions" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <CreditCard className="w-4 h-4 mr-2" /> Langganan
             </TabsTrigger>
           )}
           {(role === 'organizer' || role === 'tenant') && (
@@ -1443,6 +1451,13 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         {(role === 'organizer' || role === 'tenant') && (
           <TabsContent value="subscription" className="space-y-6">
             <SubscriptionTab />
+          </TabsContent>
+        )}
+
+        {/* Admin Subscriptions Tab */}
+        {(role === 'admin' || role === 'superadmin') && (
+          <TabsContent value="subscriptions" className="space-y-6">
+            <AdminSubscriptionsTab />
           </TabsContent>
         )}
 
