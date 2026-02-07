@@ -16,6 +16,7 @@ interface TransactionData {
     amount: number
     status: string
     date: string
+    payment_reference?: string
     metadata: {
         payer_name: string
         payer_phone: string
@@ -58,11 +59,13 @@ function PaymentStatusContent() {
                 // Retry logic - sometimes there's a race condition between redirect and DB update
                 let retries = 0
                 const maxRetries = 5
-                let data = null
-                let error = null
+                let data: any = null
+                let fetchError: any = null
 
                 while (retries < maxRetries) {
-                    // Try lookup by ID first
+                    console.log(`[Bayar Status] Lookup attempt ${retries + 1} for txId:`, txId)
+                    
+                    // Try lookup by ID first - use maybeSingle to avoid "Cannot coerce" error
                     let result = await supabase
                         .from('organizer_transactions')
                         .select(`
@@ -70,10 +73,11 @@ function PaymentStatusContent() {
                             organizers:organizer_id (name, organizer_code)
                         `)
                         .eq('id', txId)
-                        .single()
+                        .maybeSingle()
                     
                     // If not found by ID, try by payment_reference (Billplz ID)
                     if (!result.data && !result.error) {
+                        console.log(`[Bayar Status] Not found by ID, trying payment_reference...`)
                         result = await supabase
                             .from('organizer_transactions')
                             .select(`
@@ -81,13 +85,20 @@ function PaymentStatusContent() {
                                 organizers:organizer_id (name, organizer_code)
                             `)
                             .eq('payment_reference', txId)
-                            .single()
+                            .maybeSingle()
                     }
                     
                     data = result.data
-                    error = result.error
+                    fetchError = result.error
 
-                    if (data) break
+                    if (data) {
+                        console.log(`[Bayar Status] Found transaction:`, data.id)
+                        break
+                    }
+                    
+                    if (fetchError) {
+                        console.error(`[Bayar Status] Error on attempt ${retries + 1}:`, fetchError)
+                    }
                     
                     // Wait a bit before retrying
                     if (retries < maxRetries - 1) {
@@ -96,14 +107,20 @@ function PaymentStatusContent() {
                     retries++
                 }
 
-                if (error) throw error
-                if (!data) throw new Error("Transaksi tidak dijumpai")
+                if (fetchError) {
+                    throw new Error(fetchError.message)
+                }
+                
+                if (!data) {
+                    throw new Error("Transaksi tidak dijumpai. Sila semak dengan penganjur.")
+                }
 
                 setTransaction(data)
 
                 // If payment was successful via gateway, update status
                 if (status === 'success' && data.status === 'pending') {
-                    await supabase
+                    console.log(`[Bayar Status] Updating transaction status to completed...`)
+                    const { error: updateError } = await supabase
                         .from('organizer_transactions')
                         .update({
                             status: 'completed',
@@ -111,20 +128,25 @@ function PaymentStatusContent() {
                         })
                         .eq('id', data.id)
 
-                    // Refresh data
-                    const { data: updated } = await supabase
-                        .from('organizer_transactions')
-                        .select(`
-                            *,
-                            organizers:organizer_id (name, organizer_code)
-                        `)
-                        .eq('id', data.id)
-                        .single()
+                    if (updateError) {
+                        console.error(`[Bayar Status] Update error:`, updateError)
+                    } else {
+                        // Refresh data
+                        const { data: updated } = await supabase
+                            .from('organizer_transactions')
+                            .select(`
+                                *,
+                                organizers:organizer_id (name, organizer_code)
+                            `)
+                            .eq('id', data.id)
+                            .maybeSingle()
 
-                    if (updated) setTransaction(updated)
+                        if (updated) setTransaction(updated)
+                    }
                 }
             } catch (err: any) {
-                setError(err.message)
+                console.error(`[Bayar Status] Error:`, err)
+                setError(err.message || "Ralat tidak diketahui")
             } finally {
                 setLoading(false)
             }

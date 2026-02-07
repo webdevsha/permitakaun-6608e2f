@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { sendPaymentReceiptAction } from "@/actions/email"
 
 export async function POST(req: NextRequest) {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     try {
         const formData = await req.formData()
@@ -57,84 +57,62 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ success: true, type: 'tenant_payment' })
             }
 
-            // For public payments, try to find and update via RPC
-            // First, try to find by payment_reference
-            const { data: byRef } = await supabase
+            // If not found in tenant_payments, try organizer_transactions (for public payments)
+            // Try by payment_reference first
+            let { data: orgTx, error: otError } = await supabase
                 .from('organizer_transactions')
-                .select('*')
+                .update({
+                    status: 'completed',
+                    receipt_url: receipt_url?.toString(),
+                    updated_at: new Date().toISOString()
+                })
                 .eq('payment_reference', billplzId)
+                .select('*')
                 .single()
 
-            if (byRef) {
-                // Update via RPC to bypass RLS
-                await supabase.rpc('update_payment_transaction_ref', {
-                    p_transaction_id: byRef.id,
-                    p_payment_ref: billplzId,
-                    p_receipt_url: receipt_url?.toString()
-                })
+            // If not found by reference, try to find recent pending transaction
+            if (!orgTx) {
+                console.log("[Payment Callback] Not found by payment_reference, trying recent pending...")
+                const { data: pendingTxs } = await supabase
+                    .from('organizer_transactions')
+                    .select('*')
+                    .eq('status', 'pending')
+                    .gte('created_at', new Date(Date.now() - 3600000).toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(5)
 
-                // Also update status to completed
-                await supabase.rpc('update_transaction_status', {
-                    p_transaction_id: byRef.id,
-                    p_status: 'completed'
-                })
-
-                console.log("[Payment Callback] Updated organizer_transactions by reference")
-                
-                // Send receipt
-                const metadata = byRef.metadata || {}
-                const payerEmail = metadata.payer_email || email
-                const payerName = metadata.payer_name || name || 'Pengguna'
-                
-                if (payerEmail) {
-                    const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
-                    const date = new Date().toLocaleString('ms-MY')
-                    await sendPaymentReceiptAction(
-                        payerEmail.toString(),
-                        payerName.toString(),
-                        formattedAmount,
-                        date,
-                        "Pembayaran Sewa/Permit"
-                    )
+                if (pendingTxs && pendingTxs.length > 0) {
+                    const recentTx = pendingTxs[0]
+                    
+                    const { data: updated } = await supabase
+                        .from('organizer_transactions')
+                        .update({
+                            status: 'completed',
+                            payment_reference: billplzId,
+                            receipt_url: receipt_url?.toString(),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', recentTx.id)
+                        .select('*')
+                        .single()
+                    
+                    orgTx = updated
+                    console.log("[Payment Callback] Updated recent pending transaction:", recentTx.id)
                 }
-                
-                return NextResponse.json({ success: true, type: 'organizer_transaction' })
             }
 
-            // If not found by reference, try to find recent pending transaction
-            const { data: pendingTxs } = await supabase
-                .from('organizer_transactions')
-                .select('*')
-                .eq('status', 'pending')
-                .gte('created_at', new Date(Date.now() - 3600000).toISOString())
-                .order('created_at', { ascending: false })
-                .limit(5)
-
-            if (pendingTxs && pendingTxs.length > 0) {
-                const recentTx = pendingTxs[0]
+            if (orgTx) {
+                console.log("[Payment Callback] Updated organizer_transactions record")
                 
-                // Update via RPC
-                await supabase.rpc('update_payment_transaction_ref', {
-                    p_transaction_id: recentTx.id,
-                    p_payment_ref: billplzId,
-                    p_receipt_url: receipt_url?.toString()
-                })
-
-                await supabase.rpc('update_transaction_status', {
-                    p_transaction_id: recentTx.id,
-                    p_status: 'completed'
-                })
-
-                console.log("[Payment Callback] Updated recent pending transaction:", recentTx.id)
-                
-                // Send receipt
-                const metadata = recentTx.metadata || {}
+                // For public payments, try to send receipt to the payer email from metadata
+                const metadata = orgTx.metadata || {}
                 const payerEmail = metadata.payer_email || email
                 const payerName = metadata.payer_name || name || 'Pengguna'
                 
                 if (payerEmail) {
                     const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
                     const date = new Date().toLocaleString('ms-MY')
+                    
                     await sendPaymentReceiptAction(
                         payerEmail.toString(),
                         payerName.toString(),
@@ -142,6 +120,7 @@ export async function POST(req: NextRequest) {
                         date,
                         "Pembayaran Sewa/Permit"
                     )
+                    console.log("[Payment Callback] Receipt email sent to payer", payerEmail)
                 }
                 
                 return NextResponse.json({ success: true, type: 'organizer_transaction' })
