@@ -88,9 +88,9 @@ async function fetchDashboardDataInternal(
                     .order('created_at', { ascending: false })
                     .limit(100) // Limit to prevent timeouts
 
-                if (adminOrgCode) {
-                    tQuery = tQuery.eq('organizer_code', adminOrgCode)
-                } else if (!isDeveloperAdmin) {
+                // admin@kumim.my sees ALL tenants (no filter)
+                // Other admins see tenants except ORG001 (seed data)
+                if (!adminOrgCode && !isDeveloperAdmin) {
                     tQuery = tQuery.neq('organizer_code', 'ORG001')
                 }
 
@@ -127,16 +127,9 @@ async function fetchDashboardDataInternal(
                     .order('date', { ascending: false })
                     .limit(50) // Limit to prevent timeouts
 
-                if (adminOrgCode) {
-                    const { data: orgData } = await supabase
-                        .from('organizers')
-                        .select('id')
-                        .eq('organizer_code', adminOrgCode)
-                        .single()
-                    if (orgData) {
-                        txQuery = txQuery.eq('organizer_id', orgData.id)
-                    }
-                } else if (!isDeveloperAdmin) {
+                // admin@kumim.my sees ALL transactions (no filter)
+                // Other admins see transactions except ORG001 (seed data)
+                if (!adminOrgCode && !isDeveloperAdmin) {
                     const { data: seedOrg } = await supabase
                         .from('organizers')
                         .select('id')
