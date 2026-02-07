@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,14 +35,14 @@ interface TransactionData {
     }
 }
 
-export default function PaymentStatusPage() {
+function PaymentStatusContent() {
     const searchParams = useSearchParams()
     const supabase = createClient()
-    
+
     const [loading, setLoading] = useState(true)
     const [transaction, setTransaction] = useState<TransactionData | null>(null)
     const [error, setError] = useState<string | null>(null)
-    
+
     const txId = searchParams.get('tx')
     const status = searchParams.get('status') // success or failed from payment gateway
 
@@ -74,12 +74,12 @@ export default function PaymentStatusPage() {
                 if (status === 'success' && data.status === 'pending') {
                     await supabase
                         .from('transactions')
-                        .update({ 
+                        .update({
                             status: 'completed',
                             updated_at: new Date().toISOString()
                         })
                         .eq('id', txId)
-                    
+
                     // Refresh data
                     const { data: updated } = await supabase
                         .from('transactions')
@@ -89,7 +89,7 @@ export default function PaymentStatusPage() {
                         `)
                         .eq('id', txId)
                         .single()
-                    
+
                     if (updated) setTransaction(updated)
                 }
             } catch (err: any) {
@@ -161,8 +161,8 @@ export default function PaymentStatusPage() {
                             {isSuccess ? 'Pembayaran Berjaya!' : 'Pembayaran Gagal'}
                         </CardTitle>
                         <CardDescription>
-                            {isSuccess 
-                                ? 'Terima kasih atas bayaran anda. Resit telah dihantar ke penganjur.' 
+                            {isSuccess
+                                ? 'Terima kasih atas bayaran anda. Resit telah dihantar ke penganjur.'
                                 : 'Pembayaran anda tidak berjaya. Sila cuba lagi.'}
                         </CardDescription>
                     </CardHeader>
@@ -254,11 +254,10 @@ export default function PaymentStatusPage() {
 
                         {/* Status Badge */}
                         <div className="flex justify-center">
-                            <span className={`px-4 py-2 rounded-full font-medium ${
-                                isSuccess 
-                                    ? 'bg-green-100 text-green-800' 
+                            <span className={`px-4 py-2 rounded-full font-medium ${isSuccess
+                                    ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800'
-                            }`}>
+                                }`}>
                                 {isSuccess ? 'Berjaya' : 'Gagal'}
                             </span>
                         </div>
@@ -271,7 +270,7 @@ export default function PaymentStatusPage() {
                                 </Button>
                             </Link>
                             {isSuccess && (
-                                <Button 
+                                <Button
                                     className="flex-1"
                                     onClick={() => window.print()}
                                 >
@@ -290,5 +289,20 @@ export default function PaymentStatusPage() {
                 </Card>
             </div>
         </div>
+    )
+}
+
+export default function PaymentStatusPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-secondary/30 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground">Memuatkan status pembayaran...</p>
+                </div>
+            </div>
+        }>
+            <PaymentStatusContent />
+        </Suspense>
     )
 }
