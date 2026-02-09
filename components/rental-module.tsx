@@ -113,6 +113,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       .from('tenant_transactions')
       .select('*')
       .eq('tenant_id', tenantId)
+      .eq('is_rent_payment', true)
       .order('date', { ascending: false })
 
     if (txData) {
@@ -181,7 +182,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   const getTransactionDisplay = (tx: any) => {
     // tenant_transactions table stores type as 'expense' for rent payments
     // This is already from the tenant's perspective - rent payments are expenses (Cash Out)
-    
+
     const isExpense = tx.type === 'expense' || tx.is_rent_payment
 
     if (isExpense) {
@@ -243,7 +244,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
               .from('tenant_transactions')
               .update({ status: 'approved' })
               .eq('id', pendingRecord.transaction_id)
-            
+
             // Also try organizer_transactions (for organizer view)
             const { error: otError } = await supabase
               .from('organizer_transactions')
