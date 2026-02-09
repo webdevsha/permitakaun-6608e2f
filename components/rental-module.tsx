@@ -111,9 +111,10 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     // Fetch from tenant_transactions table for tenant's Akaun view
     const { data: txData } = await supabase
       .from('tenant_transactions')
-      .select('*')
+      .select('*, locations:location_id(name)')
       .eq('tenant_id', tenantId)
       .eq('is_rent_payment', true)
+      .not('location_id', 'is', null) // Ensure location exists
       .order('date', { ascending: false })
 
     if (txData) {
@@ -128,7 +129,8 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         receipt_url: tx.receipt_url,
         category: tx.category,
         type: tx.type, // 'expense' for rent payments
-        is_rent_payment: tx.is_rent_payment
+        is_rent_payment: tx.is_rent_payment,
+        location_name: tx.locations?.name // Map location name
       }))
       setHistory(mappedHistory)
     }
@@ -690,7 +692,15 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                           return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
                         })()}
                       </TableCell>
-                      <TableCell>{pay.remarks || "Bayaran Sewa"}</TableCell>
+                      <TableCell>
+                        <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
+                        {pay.location_name && (
+                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                            <Store className="w-3 h-3" />
+                            {pay.location_name}
+                          </div>
+                        )}
+                      </TableCell>
                       {(() => {
                         const display = getTransactionDisplay(pay)
                         return (

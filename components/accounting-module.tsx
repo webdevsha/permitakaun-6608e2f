@@ -188,6 +188,27 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             console.error('[Accounting] Error checking organizer:', e)
           }
 
+          // FALLBACK: If they are also a TENANT, allow access (don't block on organizer trial)
+          // This fixes the issue where hybrid users (Organizer + Tenant) get blocked by trial logic
+          try {
+            // We can check if they have a tenant record
+            const { data: tenantProfile } = await supabase
+              .from('tenants')
+              .select('id')
+              .eq('profile_id', user.id)
+              .maybeSingle()
+
+            if (tenantProfile) {
+              console.log('[Accounting] User is also a Tenant - bypassing organizer trial check')
+              setAccessDeniedStatus(null)
+              setIsModuleVerified(true)
+              setIsLoading(false)
+              return
+            }
+          } catch (e) {
+            console.error('[Accounting] Error checking tenant status:', e)
+          }
+
           // Check trial as fallback
           try {
             const { data: profile } = await supabase

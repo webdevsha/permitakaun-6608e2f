@@ -151,20 +151,20 @@ function PaymentStatusContent() {
     return (
         <div className="min-h-screen bg-secondary/30 py-8 px-4">
             <div className="max-w-lg mx-auto">
-                <Card className={`shadow-lg ${transaction.status === 'completed' ? 'border-green-200' : 'border-red-200'}`}>
+                <Card className={`shadow-lg ${transaction.status === 'approved' ? 'border-green-200' : 'border-red-200'}`}>
                     <CardHeader className="text-center">
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${transaction.status === 'completed' ? 'bg-green-100' : 'bg-red-100'}`}>
-                            {transaction.status === 'completed' ? (
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${transaction.status === 'approved' ? 'bg-green-100' : 'bg-red-100'}`}>
+                            {transaction.status === 'approved' ? (
                                 <CheckCircle className="w-12 h-12 text-green-600" />
                             ) : (
                                 <XCircle className="w-12 h-12 text-red-600" />
                             )}
                         </div>
-                        <CardTitle className={`text-2xl font-serif ${transaction.status === 'completed' ? 'text-green-800' : 'text-red-800'}`}>
-                            {transaction.status === 'completed' ? 'Pembayaran Berjaya!' : 'Pembayaran Gagal'}
+                        <CardTitle className={`text-2xl font-serif ${transaction.status === 'approved' ? 'text-green-800' : 'text-red-800'}`}>
+                            {transaction.status === 'approved' ? 'Pembayaran Berjaya!' : 'Pembayaran Gagal'}
                         </CardTitle>
                         <CardDescription>
-                            {transaction.status === 'completed'
+                            {transaction.status === 'approved'
                                 ? 'Terima kasih atas bayaran anda.'
                                 : 'Pembayaran anda tidak berjaya. Sila cuba lagi.'}
                         </CardDescription>
@@ -237,7 +237,7 @@ function PaymentStatusContent() {
                                     Bayar Lagi
                                 </Button>
                             </Link>
-                            {transaction.status === 'completed' && (
+                            {transaction.status === 'approved' && (
                                 <Button className="flex-1" onClick={() => window.print()}>
                                     Cetak Resit
                                 </Button>
