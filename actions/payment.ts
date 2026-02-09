@@ -5,6 +5,7 @@ import { createBillplzBill, createChipInPayment } from "@/utils/payment/gateways
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { redirect } from "next/navigation"
+import { headers } from "next/headers"
 import { getPaymentMode } from "@/actions/settings"
 import { updatePaymentTransactionWithRef } from "./public-payment"
 
@@ -18,12 +19,12 @@ export async function initiatePayment(params: {
     payerName?: string      // For public payments - use provided name
 }) {
     const supabase = await createClient()
-    
+
     // For public payments, use provided email/name
     // For logged-in users, get from auth
     let email = params.payerEmail
     let name = params.payerName
-    
+
     if (!email) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || !user.email) {
@@ -48,7 +49,36 @@ export async function initiatePayment(params: {
         transactionId: params.transactionId || 'None (will create tenant_payment)'
     })
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // Determine Base URL dynamically
+    // 1. Explicit override via env var
+    // 2. Request headers (works for custom domains)
+    // 3. Vercel System URL (fallback)
+    // 4. Localhost (dev fallback)
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (!baseUrl) {
+        try {
+            const headersList = await headers()
+            const host = headersList.get('host')
+            // Default to https for non-localhost unless protocol is explicitly http
+            const protocol = headersList.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https')
+            if (host) {
+                baseUrl = `${protocol}://${host}`
+            }
+        } catch (e) {
+            console.warn("[Payment] Could not get headers for baseUrl resolution:", e)
+        }
+    }
+
+    if (!baseUrl && process.env.VERCEL_URL) {
+        baseUrl = `https://${process.env.VERCEL_URL}`
+    }
+
+    if (!baseUrl) {
+        baseUrl = 'http://localhost:3000'
+    }
+
+    console.log(`[Payment] Resolved Base URL: ${baseUrl}`)
+
     const statusPageUrl = `${baseUrl}/payment/status`
     // Encode the path to return to after status page
     const nextPathEncoded = encodeURIComponent(params.redirectPath)
@@ -95,7 +125,7 @@ export async function initiatePayment(params: {
         if (result && result.url) {
             // Check if this is a subscription payment
             const isSubscription = params.metadata?.isSubscription === true
-            
+
             // If transactionId provided (public payment), update the organizer_transaction
             if (params.transactionId) {
                 const updateResult = await updatePaymentTransactionWithRef(
@@ -112,10 +142,10 @@ export async function initiatePayment(params: {
             } else if (isSubscription) {
                 // For subscription payments - store in admin_transactions as income
                 const { data: { user } } = await supabase.auth.getUser()
-                
+
                 // Use admin client to bypass RLS
                 const adminSupabase = createAdminClient()
-                
+
                 const insertData: any = {
                     description: params.description,
                     amount: params.amount,
@@ -126,7 +156,7 @@ export async function initiatePayment(params: {
                     receipt_url: result.url,
                     is_sandbox: mode === 'sandbox'
                 }
-                
+
                 // Only add these fields if columns exist (migration applied)
                 // Using try-catch to handle potential column mismatches
                 try {
