@@ -1260,8 +1260,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                             )}
                             <TableCell className="px-8 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                {/* Admin/Superadmin: Approve, Edit, Delete */}
-                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin") && transaction.status === 'pending' && (
+                                {/* Admin/Superadmin/Organizer: Approve */}
+                                {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin" || userRole === "organizer" || role === "organizer") && transaction.status === 'pending' && (
                                   <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id)} title="Luluskan">
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
