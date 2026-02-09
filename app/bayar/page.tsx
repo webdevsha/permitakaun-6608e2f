@@ -44,7 +44,7 @@ async function withTimeout<T>(
 ): Promise<T> {
     return Promise.race([
         Promise.resolve(queryFn()),
-        new Promise<T>((_, reject) => 
+        new Promise<T>((_, reject) =>
             setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
         )
     ])
@@ -52,18 +52,18 @@ async function withTimeout<T>(
 
 export default function PublicPaymentPage() {
     const supabase = createClient()
-    
+
     // Form states
     const [step, setStep] = useState<1 | 2 | 3>(1)
     const [loading, setLoading] = useState(false)
     const [fetchingLocations, setFetchingLocations] = useState(true)
     const [locationsError, setLocationsError] = useState<string | null>(null)
     const [locations, setLocations] = useState<LocationWithOrganizer[]>([])
-    
+
     // Selected values
     const [selectedLocation, setSelectedLocation] = useState<LocationWithOrganizer | null>(null)
     const [selectedRateType, setSelectedRateType] = useState<"khemah" | "cbs" | "monthly_khemah" | "monthly_cbs" | "monthly">("khemah")
-    
+
     // User details
     const [fullName, setFullName] = useState("")
     const [phoneNumber, setPhoneNumber] = useState("")
@@ -83,7 +83,7 @@ export default function PublicPaymentPage() {
 
         setFetchingLocations(true)
         setLocationsError(null)
-        
+
         try {
             // Get all active organizers first (excluding ORG001) - with 3 second timeout
             const orgResult: any = await withTimeout(
@@ -95,7 +95,7 @@ export default function PublicPaymentPage() {
                 3000,
                 'fetchOrganizers'
             )
-            
+
             if (orgResult.error) throw orgResult.error
 
             const organizers = orgResult.data || []
@@ -137,12 +137,12 @@ export default function PublicPaymentPage() {
             // Update cache
             cachedLocations = combined
             cacheTimestamp = Date.now()
-            
+
             setLocations(combined)
         } catch (error: any) {
             console.error('Error fetching locations:', error)
-            const errorMsg = error.message?.includes('Timeout') 
-                ? 'Sambungan lambat. Sila cuba lagi.' 
+            const errorMsg = error.message?.includes('Timeout')
+                ? 'Sambungan lambat. Sila cuba lagi.'
                 : 'Gagal memuatkan senarai lokasi'
             setLocationsError(errorMsg)
             // Use cached data if available even if expired
@@ -161,7 +161,7 @@ export default function PublicPaymentPage() {
 
     const calculateAmount = () => {
         if (!selectedLocation) return 0
-        
+
         switch (selectedRateType) {
             case 'khemah':
                 return (selectedLocation.rate_khemah || 0) * 4
@@ -198,7 +198,7 @@ export default function PublicPaymentPage() {
 
     const handlePayment = async () => {
         if (!selectedLocation) return
-        
+
         setLoading(true)
         try {
             const amount = calculateAmount()
@@ -231,7 +231,7 @@ export default function PublicPaymentPage() {
             if (!txResult.success || !txResult.transaction) {
                 throw new Error(txResult.error || 'Transaksi tidak dapat dicipta')
             }
-            
+
             const transaction = txResult.transaction
 
             // Initiate payment - with timeout
@@ -284,8 +284,8 @@ export default function PublicPaymentPage() {
                 <div className="text-center py-12">
                     <MapPin className="w-12 h-12 text-red-400 mx-auto mb-4" />
                     <p className="text-red-600 font-medium mb-4">{locationsError}</p>
-                    <Button 
-                        onClick={() => fetchLocations(true)} 
+                    <Button
+                        onClick={() => fetchLocations(true)}
                         variant="outline"
                         className="gap-2"
                     >
@@ -301,8 +301,8 @@ export default function PublicPaymentPage() {
                 <div className="text-center py-12">
                     <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground">Tiada lokasi tersedia buat masa ini.</p>
-                    <Button 
-                        onClick={() => fetchLocations(true)} 
+                    <Button
+                        onClick={() => fetchLocations(true)}
                         variant="outline"
                         size="sm"
                         className="mt-4 gap-2"
@@ -410,9 +410,9 @@ export default function PublicPaymentPage() {
                         </div>
 
                         {/* Change Selection Button */}
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setSelectedLocation(null)}
                             className="w-full"
                         >
@@ -429,8 +429,8 @@ export default function PublicPaymentPage() {
                         </p>
                         <div className="grid gap-4 max-h-[400px] overflow-y-auto pr-2">
                             {locations.map((loc: LocationWithOrganizer) => (
-                                <Card 
-                                    key={loc.id} 
+                                <Card
+                                    key={loc.id}
                                     className="cursor-pointer hover:border-primary transition-all"
                                     onClick={() => handleLocationSelect(loc)}
                                 >
@@ -453,7 +453,7 @@ export default function PublicPaymentPage() {
                                             <span className="font-medium">{loc.organizer_name}</span>
                                             <span className="text-muted-foreground">({loc.organizer_code})</span>
                                         </div>
-                                        
+
                                         {/* Quick rate preview */}
                                         <div className="flex gap-2 text-xs">
                                             {loc.type === 'daily' ? (
@@ -473,9 +473,9 @@ export default function PublicPaymentPage() {
                                         </div>
                                     </CardContent>
                                     <CardFooter className="pt-0">
-                                        <Button 
-                                            variant="ghost" 
-                                            size="sm" 
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
                                             className="w-full text-primary"
                                             onClick={(e) => {
                                                 e.stopPropagation()
@@ -493,8 +493,8 @@ export default function PublicPaymentPage() {
                 )}
 
                 {/* Next Button */}
-                <Button 
-                    onClick={() => setStep(2)} 
+                <Button
+                    onClick={() => setStep(2)}
                     disabled={!selectedLocation}
                     className="w-full h-12"
                 >
@@ -523,8 +523,8 @@ export default function PublicPaymentPage() {
 
             <div className="space-y-2">
                 <Label>Nama Penuh <span className="text-red-500">*</span></Label>
-                <Input 
-                    value={fullName} 
+                <Input
+                    value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Contoh: Ahmad bin Abdullah"
                     className="h-12"
@@ -533,8 +533,8 @@ export default function PublicPaymentPage() {
 
             <div className="space-y-2">
                 <Label>Nombor Telefon <span className="text-red-500">*</span></Label>
-                <Input 
-                    value={phoneNumber} 
+                <Input
+                    value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="Contoh: 012-3456789"
                     className="h-12"
@@ -543,9 +543,9 @@ export default function PublicPaymentPage() {
 
             <div className="space-y-2">
                 <Label>Email (pilihan)</Label>
-                <Input 
+                <Input
                     type="email"
-                    value={email} 
+                    value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Contoh: ahmad@email.com"
                     className="h-12"
@@ -554,8 +554,8 @@ export default function PublicPaymentPage() {
 
             <div className="space-y-2">
                 <Label>Nama Perniagaan</Label>
-                <Input 
-                    value={businessName} 
+                <Input
+                    value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
                     placeholder="Contoh: Kedai Runcit Ahmad"
                     className="h-12"
@@ -564,8 +564,8 @@ export default function PublicPaymentPage() {
 
             <div className="space-y-2">
                 <Label>Nombor Petak/Gerai</Label>
-                <Input 
-                    value={stallNumber} 
+                <Input
+                    value={stallNumber}
                     onChange={(e) => setStallNumber(e.target.value)}
                     placeholder="Contoh: A12"
                     className="h-12"
@@ -573,14 +573,14 @@ export default function PublicPaymentPage() {
             </div>
 
             <div className="flex gap-4">
-                <Button 
+                <Button
                     variant="outline"
-                    onClick={() => setStep(1)} 
+                    onClick={() => setStep(1)}
                     className="flex-1 h-12"
                 >
                     Kembali
                 </Button>
-                <Button 
+                <Button
                     onClick={handleProceedToPayment}
                     disabled={!fullName || !phoneNumber}
                     className="flex-1 h-12"
@@ -598,7 +598,7 @@ export default function PublicPaymentPage() {
             <div className="space-y-6">
                 <div className="bg-muted p-6 rounded-lg space-y-4">
                     <h3 className="font-bold text-lg">Ringkasan Pembayaran</h3>
-                    
+
                     <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Lokasi:</span>
@@ -643,18 +643,18 @@ export default function PublicPaymentPage() {
                 </div>
 
                 <div className="flex gap-4">
-                    <Button 
+                    <Button
                         variant="outline"
-                        onClick={() => setStep(2)} 
+                        onClick={() => setStep(2)}
                         disabled={loading}
                         className="flex-1 h-12"
                     >
                         Kembali
                     </Button>
-                    <Button 
+                    <Button
                         onClick={handlePayment}
                         disabled={loading}
-                        className="flex-1 h-12"
+                        className={`flex-1 h-12 relative overflow-hidden ${loading ? 'pointer-events-none opacity-80' : ''}`}
                     >
                         {loading ? (
                             <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Memproses...</>

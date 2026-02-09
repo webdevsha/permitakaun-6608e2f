@@ -18,9 +18,16 @@ export async function sendWelcomeEmailAction(email: string, name: string) {
     }
 }
 
-export async function sendPaymentReceiptAction(email: string, name: string, amount: string, date: string, description: string) {
+export async function sendPaymentReceiptAction(
+    email: string,
+    name: string,
+    amount: string,
+    date: string,
+    description: string,
+    extra?: { organizerName?: string, locationName?: string }
+) {
     try {
-        const html = paymentReceiptEmail(name, amount, date, description)
+        const html = paymentReceiptEmail(name, amount, date, description, extra)
         const result = await sendEmail({
             to: email,
             subject: "Resit Pembayaran - Permit Akaun",
@@ -59,13 +66,13 @@ export async function sendPaymentNotificationToAdminAction(params: {
 }) {
     try {
         const { payerName, payerEmail, amount, date, description, paymentType } = params
-        
+
         const typeLabels: Record<string, string> = {
             tenant: 'Pembayaran Peniaga',
             subscription: 'Langganan Baru',
             public: 'Pembayaran Awam'
         }
-        
+
         const html = adminPaymentNotificationEmail(
             payerName,
             payerEmail,
@@ -74,13 +81,13 @@ export async function sendPaymentNotificationToAdminAction(params: {
             description,
             typeLabels[paymentType] || 'Pembayaran'
         )
-        
+
         const result = await sendEmail({
             to: "admin@kumim.my", // Hazman's email
             subject: `[Permit Akaun] ${typeLabels[paymentType]} - RM ${amount}`,
             html
         })
-        
+
         console.log("[Email] Admin notification sent to admin@kumim.my")
         return result
     } catch (error) {

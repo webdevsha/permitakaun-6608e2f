@@ -59,7 +59,7 @@ import { logAction } from "@/utils/logging"
 
 
 export function AccountingModule({ initialTransactions, tenants }: { initialTransactions?: any[], tenants?: any[] }) {
-  const { role, user } = useAuth()
+  const { role, user, isLoading: authLoading } = useAuth()
   const [userRole, setUserRole] = useState<string>("")
   // Use server-provided transactions (already filtered by role in fetchDashboardData)
   const transactions = initialTransactions || []
@@ -128,11 +128,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     let isMounted = true
 
     const init = async () => {
-      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id, 'isLoading:', isLoading)
+      console.log('[Accounting] INIT START - role:', role, 'user:', user?.id, 'isLoading:', isLoading, 'authLoading:', authLoading)
 
       // If auth is still loading, wait
-      if (!role && !user) {
-        console.log('[Accounting] Waiting for auth...')
+      if (authLoading) {
+        console.log('[Accounting] Waiting for auth loading...')
         return
       }
 
@@ -249,7 +249,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       isMounted = false
       clearTimeout(timeoutId)
     }
-  }, [role, user?.id])
+  }, [role, user?.id, authLoading])
 
   const handleSaveConfig = async () => {
     // Validate total 100%
@@ -320,9 +320,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // - Tenant sees their transactions from tenant_transactions (expenses are already 'expense')
   // - Organizer sees their transactions from organizer_transactions (income is already 'income')
   // No perspective transformation needed!
-  
+
   const perspectiveTransactions = transactions || []
-  
+
   // For tenants, include pending transactions in calculations (it's their own Akaun)
   // For organizers/admins, only count approved transactions
   // Use 'role' from auth (available immediately) rather than userRole state
@@ -608,7 +608,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         txData.tenant_id = entityId
         // Check if this is a rent payment
         txData.is_rent_payment = newTransaction.category === 'Sewa'
-        
+
         // Validate tenant ID
         if (!txData.tenant_id) {
           toast.error("Ralat: Tidak dapat mengenal pasti entiti pengguna. Sila cuba lagi.")
@@ -620,7 +620,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         txData.organizer_id = organizerId
         txData.tenant_id = entityId // May be null for non-rent transactions
         txData.is_auto_generated = false // Manual entry
-        
+
         // Validate organizer ID
         if (!txData.organizer_id) {
           toast.error("Ralat: Tidak dapat mengenal pasti organizer. Sila cuba lagi.")
@@ -646,8 +646,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           .single()
         if (error) throw error
         await logAction('CREATE', 'transaction', newTx.id, txData)
-        const successMessage = userRole === 'staff' || role === 'staff' 
-          ? "Transaksi direkod (Menunggu kelulusan)" 
+        const successMessage = userRole === 'staff' || role === 'staff'
+          ? "Transaksi direkod (Menunggu kelulusan)"
           : "Transaksi berjaya ditambah"
         toast.success(successMessage)
       }
@@ -665,10 +665,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const handleDelete = async (id: number) => {
     // Allow admin, superadmin, or tenant to delete
-    const isAuthorized = userRole === "admin" || userRole === "superadmin" || 
-                         role === "admin" || role === "superadmin" || 
-                         role === "tenant" || userRole === "tenant"
-    
+    const isAuthorized = userRole === "admin" || userRole === "superadmin" ||
+      role === "admin" || role === "superadmin" ||
+      role === "tenant" || userRole === "tenant"
+
     if (!isAuthorized) {
       toast.error("Tidak dibenarkan memadam transaksi")
       return
@@ -676,10 +676,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
     try {
       // Determine which table to delete from based on role
-      const tableName = (userRole === 'tenant' || role === 'tenant') 
-        ? 'tenant_transactions' 
+      const tableName = (userRole === 'tenant' || role === 'tenant')
+        ? 'tenant_transactions'
         : 'organizer_transactions'
-      
+
       const { error } = await supabase.from(tableName).delete().eq('id', id)
       if (error) throw error
 
@@ -694,10 +694,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const handleApproveTransaction = async (id: number) => {
     try {
       // Determine which table to update based on role
-      const tableName = (userRole === 'tenant' || role === 'tenant') 
-        ? 'tenant_transactions' 
+      const tableName = (userRole === 'tenant' || role === 'tenant')
+        ? 'tenant_transactions'
         : 'organizer_transactions'
-      
+
       const { error } = await supabase.from(tableName).update({ status: 'approved' }).eq('id', id)
       if (error) throw error
       await logAction('APPROVE', 'transaction', id, { status: 'approved' })
@@ -745,7 +745,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Subscription Notification for Organizers and Tenants */}
       {(role === 'organizer' || role === 'tenant') && <SubscriptionNotification />}
-      
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>

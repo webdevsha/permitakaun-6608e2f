@@ -12,7 +12,7 @@ import Link from "next/link"
 export function SubscriptionNotification() {
   const { user, role } = useAuth()
   const supabase = createClient()
-  
+
   const [loading, setLoading] = useState(true)
   const [daysUntilPayment, setDaysUntilPayment] = useState<number>(0)
   const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
@@ -29,29 +29,29 @@ export function SubscriptionNotification() {
       setLoading(false)
       return
     }
-    
+
     // FAST-PATH: Set loading false after max 3 seconds no matter what
     const timeoutId = setTimeout(() => {
       setLoading(false)
     }, 3000)
-    
+
     try {
       // PRIORITY 1: Check user's own expense transactions (fastest - direct query)
       let hasSubscription = false
       let latestPaymentDate: string | null = null
-      
+
       if (role === 'tenant') {
         const { data: tenant } = await supabase
           .from('tenants')
           .select('id, accounting_status')
           .eq('profile_id', user.id)
           .single()
-        
+
         if (tenant?.accounting_status === 'active') {
           hasSubscription = true
           setAccountStatus('active')
         }
-        
+
         if (tenant) {
           const { data: payments } = await supabase
             .from('tenant_transactions')
@@ -62,7 +62,7 @@ export function SubscriptionNotification() {
             .eq('status', 'approved')
             .order('date', { ascending: false })
             .limit(1)
-          
+
           if (payments && payments.length > 0) {
             hasSubscription = true
             latestPaymentDate = payments[0].date
@@ -75,12 +75,12 @@ export function SubscriptionNotification() {
           .select('id, accounting_status')
           .eq('profile_id', user.id)
           .single()
-        
+
         if (organizer?.accounting_status === 'active') {
           hasSubscription = true
           setAccountStatus('active')
         }
-        
+
         if (organizer) {
           const { data: payments } = await supabase
             .from('organizer_transactions')
@@ -91,7 +91,7 @@ export function SubscriptionNotification() {
             .eq('status', 'approved')
             .order('date', { ascending: false })
             .limit(1)
-          
+
           if (payments && payments.length > 0) {
             hasSubscription = true
             latestPaymentDate = payments[0].date
@@ -99,16 +99,16 @@ export function SubscriptionNotification() {
           }
         }
       }
-      
+
       if (hasSubscription && latestPaymentDate) {
         // Calculate next payment date (30 days after last payment)
         const lastDate = new Date(latestPaymentDate)
         const nextDate = new Date(lastDate)
         nextDate.setDate(nextDate.getDate() + 30)
-        
+
         setNextPaymentDate(nextDate)
         setHasActiveSubscription(true)
-        
+
         const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         setDaysUntilPayment(daysLeft)
       } else if (!hasSubscription) {
@@ -118,17 +118,17 @@ export function SubscriptionNotification() {
           .select('created_at')
           .eq('id', user.id)
           .single()
-        
+
         if (profile) {
           const createdDate = new Date(profile.created_at)
           const nextDate = new Date(createdDate)
           nextDate.setDate(nextDate.getDate() + 14) // 14 days trial
-          
+
           setNextPaymentDate(nextDate)
-          
+
           const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           setDaysUntilPayment(daysLeft)
-          
+
           if (daysLeft <= 0) {
             setAccountStatus('expired')
           } else {
@@ -144,7 +144,8 @@ export function SubscriptionNotification() {
     }
   }
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | null) => {
+    if (!date) return 'Unknown Date'
     return date.toLocaleDateString('ms-MY', {
       day: 'numeric',
       month: 'long',
@@ -178,10 +179,10 @@ export function SubscriptionNotification() {
   // 2. User has active subscription (don't show trial expired warning)
   // 3. Hidden by user
   if (loading) return null
-  
+
   // If subscription is active and more than 7 days until next payment, don't show
   if (accountStatus === 'active' && daysUntilPayment > 7) return null
-  
+
   if (!isVisible) return null
 
   const isUrgent = daysUntilPayment <= 7 && accountStatus !== 'active'
@@ -203,11 +204,11 @@ export function SubscriptionNotification() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h4 className={`font-semibold ${getUrgencyText()}`}>
-                  {accountStatus === 'active' 
+                  {accountStatus === 'active'
                     ? 'Langganan Aktif'
                     : accountStatus === 'expired'
-                    ? 'Tempoh Percubaan Tamat'
-                    : 'Bayaran Langganan Seterusnya'
+                      ? 'Tempoh Percubaan Tamat'
+                      : 'Bayaran Langganan Seterusnya'
                   }
                 </h4>
                 {accountStatus === 'active' ? (
@@ -221,18 +222,18 @@ export function SubscriptionNotification() {
                 )}
               </div>
               <p className="text-sm text-muted-foreground">
-                {accountStatus === 'active' 
+                {accountStatus === 'active'
                   ? `Langganan anda aktif. Pembayaran seterusnya dalam ${daysUntilPayment} hari (${formatDate(nextPaymentDate!)})`
                   : accountStatus === 'expired'
-                  ? 'Tempoh percubaan anda telah tamat. Sila langgan untuk terus menggunakan ciri Akaun.'
-                  : `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
+                    ? 'Tempoh percubaan anda telah tamat. Sila langgan untuk terus menggunakan ciri Akaun.'
+                    : `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
                 }
               </p>
               <div className="flex items-center gap-2 pt-1">
                 {accountStatus !== 'active' && (
                   <Link href="/dashboard/settings?tab=subscription">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       className={`rounded-lg ${isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-primary'}`}
                     >
                       {accountStatus === 'expired' ? 'Langgan Sekarang' : 'Bayar Langganan'}
@@ -248,9 +249,9 @@ export function SubscriptionNotification() {
               </div>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
             onClick={() => setIsVisible(false)}
           >
