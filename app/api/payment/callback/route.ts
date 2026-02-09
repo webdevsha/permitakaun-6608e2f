@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
             await supabase
                 .from('organizer_transactions')
                 .update({
-                    status: 'completed',
+                    status: 'approved',
                     payment_reference: billplzId,
                     receipt_url: receipt_url?.toString(),
                     updated_at: new Date().toISOString()
