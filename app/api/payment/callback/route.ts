@@ -4,11 +4,11 @@ import { sendPaymentReceiptAction } from "@/actions/email"
 
 export async function POST(req: NextRequest) {
     console.log("[Payment Callback] ========== START ==========")
-    
+
     try {
         const supabase = createAdminClient()
         const formData = await req.formData()
-        
+
         const id = formData.get('id')
         const paid = formData.get('paid')
         const state = formData.get('state')
@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
         const name = formData.get('name')
         const receipt_url = formData.get('url')
 
-        console.log("[Payment Callback] Received data:", { 
-            id, paid, state, amount: paid_amount, email 
+        console.log("[Payment Callback] Received data:", {
+            id, paid, state, amount: paid_amount, email
         })
 
         if (paid !== 'true' || state !== 'paid') {
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
         if (payment) {
             console.log("[Payment Callback] Found and updated tenant_payments record:", payment.id)
-            
+
             // Send receipt email
             if (payment.tenants?.email) {
                 const tenantName = payment.tenants.full_name
@@ -67,17 +67,17 @@ export async function POST(req: NextRequest) {
                 )
                 console.log("[Payment Callback] Email sent successfully")
             }
-            
+
             return NextResponse.json({ success: true, type: 'tenant_payment' })
         }
 
         // For public payments - try organizer_transactions
         console.log("[Payment Callback] Checking organizer_transactions...")
-        
+
         // Try to find by payment_reference
         let { data: orgTx } = await supabase
             .from('organizer_transactions')
-            .select('*')
+            .select('*, organizers(name)')
             .eq('payment_reference', billplzId)
             .maybeSingle()
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
             console.log("[Payment Callback] Not found by payment_reference, looking for recent pending...")
             const { data: pendingTxs } = await supabase
                 .from('organizer_transactions')
-                .select('*')
+                .select('*, organizers(name)')
                 .eq('status', 'pending')
                 .gte('created_at', new Date(Date.now() - 600000).toISOString()) // Last 10 minutes
                 .order('created_at', { ascending: false })
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
         if (orgTx) {
             console.log("[Payment Callback] Updating organizer_transaction:", orgTx.id)
-            
+
             // Update the transaction
             await supabase
                 .from('organizer_transactions')
@@ -116,32 +116,35 @@ export async function POST(req: NextRequest) {
             const metadata = orgTx.metadata || {}
             const payerEmail = metadata.payer_email || email
             const payerName = metadata.payer_name || name || 'Pengguna'
-            
+
             if (payerEmail) {
                 const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
                 const date = new Date().toLocaleString('ms-MY')
-                
+                const organizerName = orgTx.organizers?.name
+                const locationName = metadata.location_name
+
                 console.log("[Payment Callback] Sending receipt email to payer:", payerEmail)
                 await sendPaymentReceiptAction(
                     payerEmail.toString(),
                     payerName.toString(),
                     formattedAmount,
                     date,
-                    "Pembayaran Sewa/Permit"
+                    "Pembayaran Sewa/Permit",
+                    { organizerName, locationName }
                 )
                 console.log("[Payment Callback] Email sent successfully")
             } else {
                 console.log("[Payment Callback] No payer email found in metadata")
             }
-            
+
             return NextResponse.json({ success: true, type: 'organizer_transaction' })
         }
 
         console.warn("[Payment Callback] Payment record not found for billplz_id:", billplzId)
-        return NextResponse.json({ 
-            success: false, 
+        return NextResponse.json({
+            success: false,
             error: "Payment record not found",
-            billplzId 
+            billplzId
         }, { status: 404 })
 
     } catch (e: any) {
@@ -161,16 +164,16 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
             .select('role')
             .eq('id', userId)
             .single()
-        
+
         if (!profile) {
             console.log("[Subscription Update] Profile not found for user:", userId)
             return
         }
-        
+
         const now = new Date()
         const endDate = new Date()
         endDate.setDate(now.getDate() + 30) // Monthly subscription
-        
+
         if (profile.role === 'tenant') {
             // Get tenant record
             const { data: tenant } = await supabase
@@ -178,7 +181,7 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                 .select('id')
                 .eq('profile_id', userId)
                 .single()
-            
+
             if (tenant) {
                 // Insert or update subscription
                 await supabase.from('subscriptions').insert({
@@ -190,13 +193,13 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                     amount: parseFloat(amount),
                     payment_ref: paymentRef
                 })
-                
+
                 // Update tenant accounting status
                 await supabase
                     .from('tenants')
                     .update({ accounting_status: 'active' })
                     .eq('id', tenant.id)
-                
+
                 console.log("[Subscription Update] Tenant subscription activated:", tenant.id, "Plan:", planType)
             }
         } else if (profile.role === 'organizer') {
@@ -206,17 +209,17 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                 .select('id')
                 .eq('profile_id', userId)
                 .single()
-            
+
             if (organizer) {
                 // Update organizer accounting status and store subscription info
                 await supabase
                     .from('organizers')
-                    .update({ 
+                    .update({
                         accounting_status: 'active',
                         updated_at: now.toISOString()
                     })
                     .eq('id', organizer.id)
-                
+
                 console.log("[Subscription Update] Organizer subscription activated:", organizer.id, "Plan:", planType)
             }
         }

@@ -43,7 +43,13 @@ export const welcomeEmail = (name: string) => getBaseTemplate(`
   <center><a href="https://permitakaun.kumim.my/login" class="button">Log Masuk Sekarang</a></center>
 `)
 
-export const paymentReceiptEmail = (name: string, amount: string, date: string, description: string) => getBaseTemplate(`
+export const paymentReceiptEmail = (
+  name: string,
+  amount: string,
+  date: string,
+  description: string,
+  extra?: { organizerName?: string, locationName?: string }
+) => getBaseTemplate(`
   <h2>Resit Pembayaran Rasmi</h2>
   <p>Hai ${name},</p>
   <p>Terima kasih. Kami telah menerima pembayaran anda.</p>
@@ -51,6 +57,8 @@ export const paymentReceiptEmail = (name: string, amount: string, date: string, 
     <p style="margin: 5px 0;"><strong>Jumlah:</strong> RM ${amount}</p>
     <p style="margin: 5px 0;"><strong>Tarikh:</strong> ${date}</p>
     <p style="margin: 5px 0;"><strong>Keterangan:</strong> ${description}</p>
+    ${extra?.organizerName ? `<p style="margin: 5px 0;"><strong>Penganjur:</strong> ${extra.organizerName}</p>` : ''}
+    ${extra?.locationName ? `<p style="margin: 5px 0;"><strong>Lokasi:</strong> ${extra.locationName}</p>` : ''}
     <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: green; font-weight: bold;">BERJAYA</span></p>
   </div>
   <p>Simpan rekod ini untuk rujukan anda.</p>
@@ -66,12 +74,12 @@ export const accountActivatedEmail = (name: string) => getBaseTemplate(`
 
 // Admin notification email for new payments
 export const adminPaymentNotificationEmail = (
-    payerName: string,
-    payerEmail: string,
-    amount: string,
-    date: string,
-    description: string,
-    paymentType: string
+  payerName: string,
+  payerEmail: string,
+  amount: string,
+  date: string,
+  description: string,
+  paymentType: string
 ) => getBaseTemplate(`
   <h2>Pemberitahuan Pembayaran Baharu</h2>
   <p>Hai Hazman,</p>
