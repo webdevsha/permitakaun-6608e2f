@@ -27,7 +27,7 @@ export const getBaseTemplate = (content: string) => `
       ${content}
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} Dyad Apps. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} Permit Akaun. All rights reserved.</p>
       <p>This is an automated message from Permit Akaun System.</p>
     </div>
   </div>
