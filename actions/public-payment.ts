@@ -24,7 +24,7 @@ export async function createPublicPaymentTransaction(data: {
 }) {
     try {
         const supabase = createAdminClient()
-        
+
         const { data: transaction, error } = await supabase
             .from('organizer_transactions')
             .insert({
@@ -61,7 +61,7 @@ export async function updatePaymentTransactionWithRef(
 ) {
     try {
         const supabase = createAdminClient()
-        
+
         const { error } = await supabase
             .from('organizer_transactions')
             .update({
@@ -79,6 +79,36 @@ export async function updatePaymentTransactionWithRef(
         return { success: true }
     } catch (error: any) {
         console.error('[Public Payment] Exception:', error)
+        return { success: false, error: error.message }
+    }
+}
+
+export async function getPublicTransaction(transactionId: string) {
+    try {
+        const supabase = createAdminClient()
+
+        // Fetch transaction with organizer details
+        // We use admin client to bypass RLS for this specific public page
+        const { data, error } = await supabase
+            .from('organizer_transactions')
+            .select(`
+                *,
+                organizers:organizer_id (
+                    name,
+                    organizer_code
+                )
+            `)
+            .eq('id', transactionId)
+            .single()
+
+        if (error) {
+            console.error('[Public Payment] Error fetching transaction:', error)
+            return { success: false, error: error.message }
+        }
+
+        return { success: true, transaction: data }
+    } catch (error: any) {
+        console.error('[Public Payment] Exception fetching transaction:', error)
         return { success: false, error: error.message }
     }
 }

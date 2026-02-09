@@ -54,69 +54,45 @@ function PaymentStatusContent() {
 
     useEffect(() => {
         // If payment is successful, redirect to success page immediately
-        if (isPaymentSuccessful) {
-            console.log('[Bayar Status] Payment successful, redirecting to success page')
-            const amount = billplzAmount ? (parseInt(billplzAmount) / 100).toFixed(2) : ''
-            router.replace(`/bayar/success?ref=${billplzId || txId}&amount=${amount}`)
-            return
+        if (isPaymentSuccessful && (billplzId || txId)) {
+            console.log('[Bayar Status] Payment successful params detected')
+            // Option: Redirect to success page if you want that flow
+            // const amount = billplzAmount ? (parseInt(billplzAmount) / 100).toFixed(2) : ''
+            // router.replace(`/bayar/success?ref=${billplzId || txId}&amount=${amount}`)
+            // return
         }
 
         const fetchTransaction = async () => {
-            if (!txId) {
+            if (!txId && !billplzId) {
                 setError("ID transaksi tidak dijumpai")
                 setLoading(false)
                 return
             }
 
             try {
-                let data: any = null
-                
-                // Try lookup strategies
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    console.log(`[Bayar Status] Lookup attempt ${attempt + 1} for txId:`, txId)
-                    
-                    // Strategy 1: Lookup by Supabase ID
-                    let result = await supabase
-                        .from('organizer_transactions')
-                        .select(`*, organizers:organizer_id (name, organizer_code)`)
-                        .eq('id', txId)
-                        .maybeSingle()
-                    
-                    if (result.data) {
-                        data = result.data
-                        console.log('[Bayar Status] Found by ID:', data.id)
-                        break
-                    }
-                    
-                    // Strategy 2: Lookup by Billplz ID
-                    if (billplzId) {
-                        result = await supabase
-                            .from('organizer_transactions')
-                            .select(`*, organizers:organizer_id (name, organizer_code)`)
-                            .eq('payment_reference', billplzId)
-                            .maybeSingle()
-                        
-                        if (result.data) {
-                            data = result.data
-                            console.log('[Bayar Status] Found by Billplz ID:', data.id)
-                            break
-                        }
-                    }
-                    
-                    // Wait before retry
-                    if (attempt < 2) {
-                        await new Promise(r => setTimeout(r, 1000))
-                    }
+                // Use Server Action to bypass RLS
+                let targetId = txId
+
+                // If we don't have txId but have billplzId, usually txId is passed in the URL.
+                if (!targetId) {
+                    // Fallback check based on user URL observation
+                    throw new Error("ID Transaksi tiada")
                 }
 
-                if (!data) {
-                    console.error('[Bayar Status] Transaction not found')
+                // Dynamically import to ensure server action usage
+                const { getPublicTransaction } = await import("@/actions/public-payment")
+
+                console.log(`[Bayar Status] Fetching tx ${targetId} via Server Action...`)
+                const result = await getPublicTransaction(targetId)
+
+                if (!result.success || !result.transaction) {
+                    console.error('[Bayar Status] Transaction not found via Server Action')
                     setError("Transaksi tidak dijumpai. Sila semak dengan penganjur.")
                     setLoading(false)
                     return
                 }
 
-                setTransaction(data)
+                setTransaction(result.transaction)
             } catch (err: any) {
                 console.error('[Bayar Status] Error:', err)
                 setError(err.message || "Ralat tidak diketahui")
