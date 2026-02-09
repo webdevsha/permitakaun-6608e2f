@@ -674,6 +674,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                 <TableHeader className="bg-secondary/30">
                   <TableRow>
                     <TableHead className="pl-6">Tarikh</TableHead>
+                    <TableHead>Lokasi</TableHead>
                     <TableHead>Keterangan</TableHead>
                     <TableHead className="text-right">Jumlah</TableHead>
                     <TableHead className="text-center">Status</TableHead>
@@ -692,14 +693,18 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                           return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
                         })()}
                       </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
-                        {pay.location_name && (
-                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                            <Store className="w-3 h-3" />
+                      <TableCell className="font-medium text-sm">
+                        {pay.location_name ? (
+                          <div className="flex items-center gap-1">
+                            <Store className="w-3 h-3 text-muted-foreground" />
                             {pay.location_name}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
                       </TableCell>
                       {(() => {
                         const display = getTransactionDisplay(pay)

@@ -24,7 +24,7 @@ interface SubscriptionRecord {
 export function SubscriptionTab() {
   const { user, role } = useAuth()
   const supabase = createClient()
-  
+
   const [loading, setLoading] = useState(true)
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([])
   const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
@@ -36,25 +36,37 @@ export function SubscriptionTab() {
     if (user?.email) {
       setUserEmail(user.email)
       fetchSubscriptionData()
+    } else {
+      // If no user initially, make sure we don't stick on loading forever if it never comes
+      const timer = setTimeout(() => setLoading(false), 2000)
+      return () => clearTimeout(timer)
     }
   }, [user, role])
 
   const fetchSubscriptionData = async () => {
-    if (!user || !role) return
-    
+    // Safety timeout to prevent infinite loading
+    const safetyTimer = setTimeout(() => {
+      if (loading) setLoading(false)
+    }, 5000)
+
+    if (!user || !role) {
+      clearTimeout(safetyTimer)
+      return
+    }
+
     setLoading(true)
     try {
       // Fetch user's own subscription PAYMENTS (Cash Out - expense) from their transactions
       // This shows what THEY paid for their subscription
       let userPayments: any[] = []
-      
+
       if (role === 'tenant') {
         const { data: tenant } = await supabase
           .from('tenants')
           .select('id')
           .eq('profile_id', user.id)
           .single()
-        
+
         if (tenant) {
           const { data: tenantTxns } = await supabase
             .from('tenant_transactions')
@@ -63,7 +75,7 @@ export function SubscriptionTab() {
             .eq('category', 'Langganan')
             .eq('type', 'expense')
             .order('date', { ascending: false })
-          
+
           if (tenantTxns) {
             userPayments = tenantTxns
           }
@@ -74,7 +86,7 @@ export function SubscriptionTab() {
           .select('id')
           .eq('profile_id', user.id)
           .single()
-        
+
         if (organizer) {
           const { data: orgTxns } = await supabase
             .from('organizer_transactions')
@@ -83,13 +95,13 @@ export function SubscriptionTab() {
             .eq('category', 'Langganan')
             .eq('type', 'expense')
             .order('date', { ascending: false })
-          
+
           if (orgTxns) {
             userPayments = orgTxns
           }
         }
       }
-      
+
       // Map user payments to subscription records
       if (userPayments.length > 0) {
         setSubscriptions(userPayments.map((t: any) => ({
@@ -102,13 +114,13 @@ export function SubscriptionTab() {
           payment_reference: t.payment_reference,
           created_at: t.created_at
         })))
-        
+
         // Calculate next payment based on the most recent payment
         const latestPayment = userPayments[0]
         calculateNextPayment(latestPayment.date)
-        
+
         // Check if subscription is active (has at least one approved payment)
-        const hasCompletedPayment = userPayments.some((p: any) => 
+        const hasCompletedPayment = userPayments.some((p: any) =>
           p.status === 'approved'
         )
         setHasActiveSubscription(hasCompletedPayment || latestPayment.status === 'pending')
@@ -120,7 +132,7 @@ export function SubscriptionTab() {
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .single()
-          
+
           if (tenantData?.accounting_status === 'active') {
             setHasActiveSubscription(true)
           }
@@ -130,24 +142,24 @@ export function SubscriptionTab() {
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .single()
-          
+
           if (organizerData?.accounting_status === 'active') {
             setHasActiveSubscription(true)
           }
         }
-        
+
         // If no subscription records, calculate from profile creation date
         const { data: profile } = await supabase
           .from('profiles')
           .select('created_at')
           .eq('id', user.id)
           .single()
-        
+
         if (profile) {
           const createdDate = new Date(profile.created_at)
           const nextDate = new Date(createdDate)
           nextDate.setDate(nextDate.getDate() + 14) // Trial period
-          
+
           setNextPaymentDate(nextDate)
           const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           setDaysUntilPayment(daysLeft)
@@ -156,6 +168,7 @@ export function SubscriptionTab() {
     } catch (error) {
       console.error('Error fetching subscription data:', error)
     } finally {
+      clearTimeout(safetyTimer)
       setLoading(false)
     }
   }
@@ -164,7 +177,7 @@ export function SubscriptionTab() {
     const lastDate = new Date(lastPaymentDate)
     const nextDate = new Date(lastDate)
     nextDate.setDate(nextDate.getDate() + 30) // 30 days subscription
-    
+
     setNextPaymentDate(nextDate)
     const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     setDaysUntilPayment(daysLeft)
@@ -199,7 +212,7 @@ export function SubscriptionTab() {
                 Bayaran Langganan Seterusnya
               </CardTitle>
               <CardDescription className="mt-2">
-                {hasActiveSubscription 
+                {hasActiveSubscription
                   ? `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
                   : 'Anda sedang dalam tempoh percubaan 14 hari'
                 }
@@ -285,9 +298,9 @@ export function SubscriptionTab() {
                     </TableCell>
                     <TableCell className="text-right">
                       {sub.receipt_url ? (
-                        <a 
-                          href={sub.receipt_url} 
-                          target="_blank" 
+                        <a
+                          href={sub.receipt_url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:underline text-sm"
                         >

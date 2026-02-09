@@ -17,6 +17,29 @@ async function checkAccessServer(user: any, role: string) {
 
     const supabase = await createClient()
 
+    // Check for active subscription (Tenant)
+    if (role === 'tenant') {
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+
+        if (tenant?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'active', daysRemaining: 30 }
+        }
+    } else if (role === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+
+        if (organizer?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'active', daysRemaining: 30 }
+        }
+    }
+
     // Calculate trial days
     const { data: settings } = await supabase
         .from('system_settings')
@@ -30,7 +53,7 @@ async function checkAccessServer(user: any, role: string) {
         .select('created_at')
         .eq('id', user.id)
         .single()
-    
+
     const createdAt = new Date(profile?.created_at || user.created_at).getTime()
     const now = Date.now()
     const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
@@ -60,7 +83,7 @@ async function withTimeout<T>(
 ): Promise<T> {
     return Promise.race([
         Promise.resolve(queryFn()),
-        new Promise<T>((_, reject) => 
+        new Promise<T>((_, reject) =>
             setTimeout(() => reject(new Error(`Timeout: ${context} exceeded ${ms}ms`)), ms)
         )
     ])
@@ -69,7 +92,7 @@ async function withTimeout<T>(
 export default async function TenantDashboardPage() {
     // Verify user and role server-side
     const supabase = await createClient()
-    
+
     // Get user with timeout
     let user: any;
     try {
@@ -83,11 +106,11 @@ export default async function TenantDashboardPage() {
         console.error('[TenantDashboard] Timeout getting user:', e)
         redirect('/login')
     }
-    
+
     if (!user) {
         redirect('/login')
     }
-    
+
     // Get profile with timeout
     let profile;
     try {
@@ -105,9 +128,9 @@ export default async function TenantDashboardPage() {
         console.error('[TenantDashboard] Timeout getting profile:', e)
         profile = null
     }
-    
+
     const role = determineUserRole(profile, user.email)
-    
+
     // Only tenants should access this page
     // Organizers/admins/superadmins can also use this as a simplified view
     // But if someone tries to access with wrong expectations, they can still see
@@ -125,7 +148,7 @@ export default async function TenantDashboardPage() {
         // Use empty data as fallback
         data = { myLocations: [], userProfile: profile, transactions: [], tenants: [], overdueTenants: [], organizers: [], availableLocations: [], role: role || 'tenant' }
     }
-    
+
     const { myLocations, userProfile } = data
     const displayRole = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Peniaga"
 
