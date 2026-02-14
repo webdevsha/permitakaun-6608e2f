@@ -1,5 +1,8 @@
 import Link from "next/link"
-import { ArrowRight, CheckCircle2, LayoutDashboard, Calendar, PieChart, ShieldCheck } from "lucide-react"
+import { ArrowRight, CheckCircle2, LayoutDashboard, Calendar, PieChart, ShieldCheck, Facebook, Youtube, Video, Mail, Check, Star } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 export default function LandingPage() {
   return (
@@ -7,12 +10,10 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="border-b border-border/40 fixed w-full bg-background/80 backdrop-blur-md z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-brand-blue flex items-center justify-center">
-              <span className="text-white font-serif font-bold text-lg">P</span>
-            </div>
+          <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="Permit Akaun Logo" className="w-8 h-8 object-contain" />
             <span className="font-serif font-bold text-xl tracking-tight text-foreground">Permit Akaun</span>
-          </div>
+          </a>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Log Masuk
@@ -202,6 +203,138 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Subscription Section */}
+      <section className="py-24 bg-secondary/20">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-serif font-bold mb-4">Pakej Langganan</h2>
+            <p className="text-muted-foreground text-lg">Pilih pelan yang sesuai untuk perniagaan anda.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Enterprise */}
+            <Card className="relative rounded-[2rem] border-2 border-border shadow-sm hover:shadow-md transition-shadow bg-white flex flex-col">
+              <CardHeader className="text-center pb-2">
+                <CardTitle className="font-serif text-2xl">Enterprise</CardTitle>
+                <CardDescription>Untuk peniaga kecil yang baru bermula</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-6">
+                <div className="text-center">
+                  <p className="text-xs font-bold mb-2 text-emerald-600">(Percuma Dua Minggu)</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-5xl font-bold tracking-tight">RM39</span>
+                    <span className="text-xl line-through text-muted-foreground">RM49</span>
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">/bulan</span>
+                </div>
+                <ul className="space-y-3 text-sm">
+                  {["Rekod Jualan & Pembelian", "Simpan resit", "Cashflow", "Balance sheet", "Download laporan kewangan", "Sokongan 1 pengguna"].map((feature, i) => (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="rounded-full p-1 bg-primary/10"><Check className="w-3 h-3 text-primary" /></div>
+                      <span className="text-foreground">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="pt-4 border-t border-border/50">
+                  <p className="text-xs font-bold mb-3 uppercase tracking-wider text-muted-foreground">Pecahan Tabung Akaun</p>
+                  <ul className="space-y-3 text-sm">
+                    {["Auto kiraan Cukai", "Auto kiraan zakat", "Auto kiraan kos operating"].map((f, i) => (
+                      <li key={i} className="flex items-center gap-3">
+                        <div className="rounded-full p-1 bg-emerald-500/10"><Check className="w-3 h-3 text-emerald-600" /></div>
+                        <span className="text-foreground">{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Link href="/signup" className="w-full text-center">
+                  <Button variant="outline" className="w-full h-12 rounded-xl font-bold text-md shadow-sm">Daftar Sekarang</Button>
+                </Link>
+              </CardFooter>
+            </Card>
+
+            {/* Sdn Bhd */}
+            <Card className="relative rounded-[2rem] border-2 border-primary shadow-xl scale-105 z-10 bg-primary text-primary-foreground flex flex-col">
+              <div className="absolute -top-4 left-0 right-0 flex justify-center">
+                <Badge className="bg-amber-400 text-black hover:bg-amber-500 border-none px-4 py-1 text-xs uppercase font-bold tracking-widest shadow-sm">
+                  <Star className="w-3 h-3 mr-1 fill-black" /> Paling Popular
+                </Badge>
+              </div>
+              <CardHeader className="text-center pb-2">
+                <CardTitle className="font-serif text-2xl">Sdn Bhd</CardTitle>
+                <CardDescription className="text-primary-foreground/80">Pilihan terbaik untuk perniagaan berkembang</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-6">
+                <div className="text-center">
+                  <p className="text-xs font-bold mb-2 text-primary-foreground/80">(Percuma Dua Minggu)</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-5xl font-bold tracking-tight">RM49</span>
+                    <span className="text-xl line-through text-primary-foreground/60">RM59</span>
+                  </div>
+                  <span className="text-sm font-medium text-primary-foreground/60">/bulan</span>
+                </div>
+                <ul className="space-y-3 text-sm">
+                  {["Rekod Jualan & Pembelian", "Simpan resit", "Cashflow", "Balance sheet", "Download laporan kewangan", "Sokongan 1 pengguna", "Analisis untung rugi"].map((feature, i) => (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="rounded-full p-1 bg-white/20"><Check className="w-3 h-3 text-white" /></div>
+                      <span className="text-primary-foreground/90">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="pt-4 border-t border-border/50">
+                  <p className="text-xs font-bold mb-3 uppercase tracking-wider text-primary-foreground/80">Pecahan Tabung Akaun</p>
+                  <ul className="space-y-3 text-sm">
+                    {["Auto kiraan Cukai", "Auto kiraan zakat", "Kos Operating", "Auto kiraan Aset"].map((f, i) => (
+                      <li key={i} className="flex items-center gap-3">
+                        <div className="rounded-full p-1 bg-white/20"><Check className="w-3 h-3 text-white" /></div>
+                        <span className="text-primary-foreground/90">{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Link href="/signup" className="w-full text-center">
+                  <Button variant="secondary" className="w-full h-12 rounded-xl font-bold text-md shadow-sm">Daftar Sekarang</Button>
+                </Link>
+              </CardFooter>
+            </Card>
+
+            {/* SdnBhd / Berhad */}
+            <Card className="relative rounded-[2rem] border-2 border-border shadow-sm hover:shadow-md transition-shadow bg-white flex flex-col">
+              <CardHeader className="text-center pb-2">
+                <CardTitle className="font-serif text-2xl">SdnBhd/ Berhad</CardTitle>
+                <CardDescription>Untuk syarikat atau francais</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-6">
+                <div className="text-center">
+                  <div className="h-6 mb-2"></div> {/* Spacer for alignment */}
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-5xl font-bold tracking-tight">RM99</span>
+                    <span className="text-xl line-through text-muted-foreground">RM120</span>
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">/bulan</span>
+                </div>
+                <ul className="space-y-3 text-sm">
+                  {["Semua pakej Sdn bhd", "Dashboard CEO", "Sokongan 2 pengguna akaun", "Sokongan 4 pengguna staff", "Boleh Add On anak syarikat", "Boleh Add inventori", "Analisis Stok/ Produk", "Download laporan kewangan", "7 PECAHAN TABUNG AKAUN"].map((feature, i) => (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="rounded-full p-1 bg-primary/10"><Check className="w-3 h-3 text-primary" /></div>
+                      <span className="text-foreground">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <CardFooter>
+                <a href="mailto:admin@kumim.my" className="w-full text-center">
+                  <Button variant="default" className="w-full h-12 rounded-xl font-bold text-md shadow-sm">Hubungi Kami</Button>
+                </a>
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-32">
         <div className="container mx-auto px-4">
@@ -230,11 +363,24 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-12 border-t border-border">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-brand-blue flex items-center justify-center">
-              <span className="text-white font-serif font-bold text-xs">P</span>
-            </div>
+          <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="Permit Akaun Logo" className="w-6 h-6 object-contain" />
             <span className="font-serif font-bold text-lg text-foreground">Permit Akaun</span>
+          </a>
+
+          <div className="flex items-center gap-6">
+            <a href="https://www.facebook.com/permitakaun" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-blue-600 transition-colors">
+              <Facebook className="w-5 h-5" />
+            </a>
+            <a href="https://www.youtube.com/@permitakaun" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-red-600 transition-colors">
+              <Youtube className="w-5 h-5" />
+            </a>
+            <a href="https://tiktok.com/@permitakaun" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-black transition-colors">
+              <Video className="w-5 h-5" />
+            </a>
+            <a href="mailto:admin@kumim.my" className="text-muted-foreground hover:text-foreground transition-colors">
+              <Mail className="w-5 h-5" />
+            </a>
           </div>
           <p className="text-muted-foreground text-sm">
             © {new Date().getFullYear()} Permit Akaun. Hak Cipta Terpelihara.

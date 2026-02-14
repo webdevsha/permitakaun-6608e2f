@@ -86,6 +86,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [displayLimit, setDisplayLimit] = useState<number>(5)
 
+  // Bulk Delete State
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const [newTransaction, setNewTransaction] = useState({
     description: "",
     category: "",
@@ -120,6 +124,39 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Superadmin Settings State
   const [systemSettings, setSystemSettings] = useState({ is_active: true, trial_duration_days: 14 })
   const [isSuperadminConfigOpen, setIsSuperadminConfigOpen] = useState(false)
+
+  // Fetch Accounting Config on Mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      if (!user) return
+      try {
+        const { data, error } = await supabase
+          .from('accounting_config')
+          .select('percentages, bank_names')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+
+        if (error) throw error
+
+        if (data) {
+          if (data.percentages) {
+            console.log('[Accounting] Loaded percentages:', data.percentages)
+            setPercentages(data.percentages)
+          }
+          if (data.bank_names) {
+            console.log('[Accounting] Loaded bank names:', data.bank_names)
+            setBankNames(data.bank_names)
+          }
+        }
+      } catch (e) {
+        console.error('[Accounting] Error loading config:', e)
+      }
+    }
+
+    if (user) {
+      fetchConfig()
+    }
+  }, [user])
 
 
   // Simplified init with timeout protection
@@ -475,6 +512,56 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const displayedTransactions = filteredTransactions.slice(0, displayLimit)
   const hasMore = filteredTransactions.length > displayLimit
+
+  // Bulk Selection Handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // Select all visible transactions (applying filters)
+      const allIds = filteredTransactions.map((t: any) => t.id)
+      setSelectedIds(allIds)
+    } else {
+      setSelectedIds([])
+    }
+  }
+
+  const handleSelect = (id: number, checked: boolean) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id])
+    } else {
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+
+    if (!window.confirm(`Adakah anda pasti mahu memadam ${selectedIds.length} transaksi? Tindakan ini tidak boleh dikembalikan.`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      // Determine which table to delete from based on role
+      const tableName = (userRole === 'tenant' || role === 'tenant')
+        ? 'tenant_transactions'
+        : 'organizer_transactions'
+
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .in('id', selectedIds)
+
+      if (error) throw error
+
+      toast.success(`${selectedIds.length} transaksi telah dipadam`)
+      setSelectedIds([])
+      mutate()
+    } catch (error: any) {
+      toast.error("Gagal memadam: " + error.message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const handleSaveTransaction = async () => {
     if (!newTransaction.description || !newTransaction.amount) {
@@ -1108,23 +1195,23 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         </div>
                         <div>
                           <div className="flex items-center gap-1 mb-1">
-                            <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border uppercase", acc.color.replace('bg-', 'bg-white/50 '))}>
+                            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase", acc.color.replace('bg-', 'bg-white/50 '))}>
                               {acc.percent}
                             </span>
                           </div>
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                             {acc.name}
                           </p>
-                          <p className="text-lg font-bold text-foreground mt-0.5">
+                          <p className="text-xl font-bold text-foreground mt-0.5">
                             RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                           {/* Show bank name if set */}
                           {bankName && (
-                            <p className="text-[9px] text-primary font-medium truncate" title={bankName}>
+                            <p className="text-xs text-primary font-medium mt-0.5 break-words max-w-[120px]" title={bankName}>
                               {bankName}
                             </p>
                           )}
-                          <p className="text-[9px] text-muted-foreground/60 italic">
+                          <p className="text-[10px] text-muted-foreground/60 italic mt-0.5">
                             {acc.tag}
                           </p>
                         </div>
@@ -1148,6 +1235,20 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
                 {/* Filters */}
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Bulk Delete Button */}
+                  {selectedIds.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBulkDelete}
+                      disabled={isDeleting}
+                      className="h-9 rounded-xl animate-in fade-in zoom-in duration-300"
+                    >
+                      {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      Padam ({selectedIds.length})
+                    </Button>
+                  )}
+
                   <div className="flex items-center gap-2 bg-secondary/30 p-1.5 rounded-xl border border-border/30">
                     <Filter className="w-4 h-4 text-muted-foreground ml-2 hidden sm:block" />
 
@@ -1196,7 +1297,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Table>
                     <TableHeader className="bg-secondary/20">
                       <TableRow className="border-border/20 h-16 hover:bg-transparent">
-                        <TableHead className="px-8 font-bold text-xs uppercase tracking-widest">Tarikh</TableHead>
+                        <TableHead className="w-[50px] pl-6">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                            checked={selectedIds.length > 0 && selectedIds.length === filteredTransactions.length}
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                          />
+                        </TableHead>
+                        <TableHead className="font-bold text-xs uppercase tracking-widest">Tarikh</TableHead>
                         <TableHead className="font-bold text-xs uppercase tracking-widest">Keterangan</TableHead>
                         <TableHead className="font-bold text-xs uppercase tracking-widest text-right">Jumlah</TableHead>
                         <TableHead className="font-bold text-xs uppercase tracking-widest text-center">Resit</TableHead>
@@ -1222,7 +1331,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                             key={transaction.id}
                             className="border-border/10 h-20 hover:bg-secondary/10 transition-colors"
                           >
-                            <TableCell className="px-8 font-mono text-xs text-muted-foreground">
+                            <TableCell className="pl-6">
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                checked={selectedIds.includes(transaction.id)}
+                                onChange={(e) => handleSelect(transaction.id, e.target.checked)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-3 h-3 text-muted-foreground/70" />
                                 {new Date(transaction.date).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })}
