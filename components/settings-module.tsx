@@ -63,7 +63,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [tenantId, setTenantId] = useState<number | null>(null)
+  const [entityId, setEntityId] = useState<number | string | null>(null)
 
   // Calculate Trial Status
   const getTrialStatus = (createdAtDate: string) => {
@@ -92,18 +92,18 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   // Fetch subscription status for tenant/organizer
   useEffect(() => {
     if (!user?.id || !role || (role !== 'tenant' && role !== 'organizer')) return
-    
+
     const checkSubscription = async () => {
       try {
         let hasActive = false
-        
+
         if (role === 'tenant') {
           const { data: tenant } = await supabase
             .from('tenants')
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .single()
-          
+
           if (tenant?.accounting_status === 'active') {
             hasActive = true
           } else {
@@ -116,7 +116,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               .eq('status', 'approved')
               .order('date', { ascending: false })
               .limit(1)
-            
+
             if (payments && payments.length > 0) {
               hasActive = true
               // Calculate end date
@@ -132,7 +132,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .single()
-          
+
           if (organizer?.accounting_status === 'active') {
             hasActive = true
           } else {
@@ -144,7 +144,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               .eq('status', 'approved')
               .order('date', { ascending: false })
               .limit(1)
-            
+
             if (payments && payments.length > 0) {
               hasActive = true
               const lastPayment = new Date(payments[0].date)
@@ -154,7 +154,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
             }
           }
         }
-        
+
         if (hasActive) {
           setAccountStatus('active')
         } else if (myTrialStatus?.isExpired) {
@@ -166,7 +166,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         console.error('Error checking subscription:', error)
       }
     }
-    
+
     checkSubscription()
   }, [user?.id, role, myTrialStatus?.isExpired])
 
@@ -210,7 +210,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   useEffect(() => {
     if (initialProfile) {
-      setTenantId(initialProfile.id)
+      setEntityId(initialProfile.id)
     }
   }, [initialProfile])
 
@@ -341,13 +341,13 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   // --- USER MANAGEMENT (SUPERADMIN ONLY) ---
   const [usersList, setUsersList] = useState<any[]>([])
   const [loadingUsers, setLoadingUsers] = useState(false)
-  
+
   // --- LOGS STATE ---
   const [logs, setLogs] = useState<any[]>([])
 
   const fetchUsers = async () => {
     setLoadingUsers(true)
-    
+
     // For staff, only show users from their organization
     if (role === 'staff') {
       // Get organizer_code from staff table (not profiles)
@@ -369,7 +369,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       setLoadingUsers(false)
       return
     }
-    
+
     let query = supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
 
     // SPECIAL RULE for Hazman (admin@kumim.my):
@@ -419,7 +419,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         .from('profiles')
         .update({ created_at: new Date(newDate).toISOString() })
         .eq('id', userId)
-      
+
       if (error) throw error
       toast.success(`Tarikh mula percubaan dikemaskini`)
       fetchUsers() // Refresh the list
@@ -436,7 +436,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       fetchUsers()
     }
   }, [role])
-  
+
   // Fetch logs for admin/superadmin
   useEffect(() => {
     if (role === 'admin' || role === 'superadmin') {
@@ -470,7 +470,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
       // Fetch current staff count from staff table (not profiles)
       let staffQuery = supabase.from('staff').select('id', { count: 'exact' })
-      
+
       if (role === 'organizer') {
         // Get organizer code
         const { data: org } = await supabase.from('organizers').select('organizer_code').eq('profile_id', user.id).maybeSingle()
@@ -486,10 +486,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           setUserOrgCode(adminData.organizer_code)
         }
       }
-      
+
       const { count } = await staffQuery
       setStaffCount(count || 0)
-      
+
       // Check if reached limit
       const hasReachedLimit = (count || 0) >= MAX_STAFF
 
@@ -670,73 +670,71 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     try {
       let newUrls = { ...urls }
 
-      // Upload files if new ones selected
-      if (files.profile) newUrls.profile = await handleFileUpload(files.profile, 'profile')
-      if (files.ssm) newUrls.ssm = await handleFileUpload(files.ssm, 'ssm')
-      if (files.food) newUrls.food = await handleFileUpload(files.food, 'food')
-      if (files.other) newUrls.other = await handleFileUpload(files.other, 'other')
-
-      // Update Profiles Table (Primary source for Full Name)
+      // 1. Common Update: Profiles Table (Primary source for Full Name)
       if (formData.fullName) {
-        await supabase
+        const { error: profileError } = await supabase
           .from('profiles')
           .update({ full_name: formData.fullName })
           .eq('id', user.id)
+
+        if (profileError) throw profileError
       }
 
-      // Prepare Payload for Tenants Table
-      const payload = {
-        full_name: formData.fullName,
-        business_name: formData.businessName || null,
-        phone_number: formData.phone || null,
-        ssm_number: formData.ssmNumber || null,
-        ic_number: formData.icNumber || null,
-        address: formData.address || null,
-        profile_image_url: newUrls.profile || null,
-        ssm_file_url: newUrls.ssm || null,
-        food_handling_cert_url: newUrls.food || null,
-        other_docs_url: newUrls.other || null
-      }
+      // 2. Role-Specific Updates
+      if (role === 'tenant') {
+        // Upload files (Tenants Only)
+        if (files.profile) newUrls.profile = await handleFileUpload(files.profile, 'profile')
+        if (files.ssm) newUrls.ssm = await handleFileUpload(files.ssm, 'ssm')
+        if (files.food) newUrls.food = await handleFileUpload(files.food, 'food')
+        if (files.other) newUrls.other = await handleFileUpload(files.other, 'other')
 
-      let error;
-
-      if (tenantId) {
-        // Update existing record
-        const { error: updateError } = await supabase
-          .from('tenants')
-          .update(payload)
-          .eq('id', tenantId)
-        error = updateError
-      } else {
-        // Create new record
-        const { data: newTenant, error: insertError } = await supabase
-          .from('tenants')
-          .insert({
-            ...payload,
-            profile_id: user.id,
-            email: user.email
-          })
-          .select('id')
-          .single()
-
-        if (newTenant) {
-          setTenantId(newTenant.id)
+        const payload = {
+          full_name: formData.fullName,
+          business_name: formData.businessName || null,
+          phone_number: formData.phone || null,
+          ssm_number: formData.ssmNumber || null,
+          ic_number: formData.icNumber || null,
+          address: formData.address || null,
+          profile_image_url: newUrls.profile || null,
+          ssm_file_url: newUrls.ssm || null,
+          food_handling_cert_url: newUrls.food || null,
+          other_docs_url: newUrls.other || null
         }
-        error = insertError
-      }
 
-      if (error) {
-        console.error("Tenant update error:", error)
-        if (error.code === '42501') {
-          throw new Error("Anda tiada kebenaran untuk mencipta profil perniagaan. Sila hubungi Admin.")
+        if (entityId) {
+          const { error } = await supabase.from('tenants').update(payload).eq('id', entityId)
+          if (error) throw error
         }
-        throw error
+      }
+      else if (role === 'organizer') {
+        const payload = {
+          name: formData.businessName || formData.fullName, // Organizer name usually business name
+          phone: formData.phone || null,
+          email: formData.email
+        }
+        if (entityId) {
+          const { error } = await supabase.from('organizers').update(payload).eq('id', entityId)
+          if (error) throw error
+        }
+      }
+      else if (role === 'admin') {
+        // Admins might only need full_name updated in admins table if it exists there
+        if (entityId) {
+          const { error } = await supabase.from('admins').update({ full_name: formData.fullName }).eq('id', entityId)
+          if (error) throw error
+        }
+      }
+      else if (role === 'staff') {
+        if (entityId) {
+          const { error } = await supabase.from('staff').update({ full_name: formData.fullName }).eq('id', entityId)
+          if (error) throw error
+        }
       }
 
       setUrls(newUrls)
       setFiles({}) // Reset file inputs
       setIsEditing(false) // Switch back to read-only
-      toast.success(tenantId ? "Profil berjaya dikemaskini" : "Profil berjaya dicipta")
+      toast.success("Profil berjaya dikemaskini")
 
     } catch (err: any) {
       console.error(err)
@@ -894,22 +892,30 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <DataField label="Nama Penuh (Seperti IC)" value={formData.fullName} field="fullName" isEditing={isEditing} onChange={handleInputChange} />
-                  <DataField label="No. Kad Pengenalan" value={formData.icNumber} field="icNumber" placeholder="Contoh: 880101-14-1234" isEditing={isEditing} onChange={handleInputChange} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <DataField label="Nama Perniagaan / Syarikat" value={formData.businessName} field="businessName" isEditing={isEditing} onChange={handleInputChange} />
                   <DataField label="Emel" value={formData.email} field="email" placeholder="email@example.com" isEditing={isEditing} onChange={handleInputChange} />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
-                  <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
+                  {(role === 'tenant' || role === 'organizer') && (
+                    <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
+                  )}
+                  {(role === 'tenant' || role === 'organizer') && (
+                    <DataField label="Nama Perniagaan / Syarikat" value={formData.businessName} field="businessName" isEditing={isEditing} onChange={handleInputChange} />
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
-                </div>
+                {role === 'tenant' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <DataField label="No. Kad Pengenalan" value={formData.icNumber} field="icNumber" placeholder="Contoh: 880101-14-1234" isEditing={isEditing} onChange={handleInputChange} />
+                      <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -960,121 +966,126 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
             </Card>
 
             {/* Documents & Photo */}
-            <div className="space-y-6">
-              {/* Profile Photo */}
-              <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-primary font-serif text-lg">Gambar Profil</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col items-center gap-4">
-                    <div className={`relative w-32 h-32 rounded-full overflow-hidden border-2 border-dashed border-border bg-secondary/30 flex items-center justify-center group ${isEditing ? 'cursor-pointer hover:bg-secondary/50' : ''}`}>
-                      {files.profile ? (
-                        <Image src={URL.createObjectURL(files.profile)} alt="Preview" fill className="object-cover" />
-                      ) : urls.profile ? (
-                        <Image src={urls.profile} alt="Current" fill className="object-cover" />
-                      ) : (
-                        <Upload className="text-muted-foreground" />
-                      )}
-                      {isEditing && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Pencil className="text-white w-6 h-6" />
-                        </div>
-                      )}
-                      {isEditing && (
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          onChange={(e) => e.target.files && setFiles({ ...files, profile: e.target.files[0] })}
-                        />
-                      )}
-                    </div>
-                    {isEditing && <p className="text-xs text-muted-foreground text-center">Klik untuk tukar gambar</p>}
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Documents */}
-              <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-primary font-serif text-lg">Dokumen Sokongan</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* SSM */}
-                  <div className="space-y-2">
-                    <Label className="text-xs">Sijil SSM (PDF/Gambar)</Label>
-                    <div className="flex gap-2 items-center">
-                      {isEditing ? (
-                        <Input
-                          type="file"
-                          accept=".pdf,image/*"
-                          onChange={(e) => e.target.files && setFiles({ ...files, ssm: e.target.files[0] })}
-                          className="text-xs h-9 bg-white"
-                        />
-                      ) : (
-                        <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
-                          {urls.ssm ? "Fail dimuat naik" : "Tiada fail"}
-                        </div>
-                      )}
-                      {urls.ssm && (
-                        <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.ssm, '_blank')}>
-                          <FileText size={14} />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Food Handling */}
-                  <div className="space-y-2">
-                    <Label className="text-xs flex items-center gap-1"><Utensils size={12} /> Sijil Pengendalian Makanan</Label>
-                    <div className="flex gap-2 items-center">
-                      {isEditing ? (
-                        <Input
-                          type="file"
-                          accept=".pdf,image/*"
-                          onChange={(e) => e.target.files && setFiles({ ...files, food: e.target.files[0] })}
-                          className="text-xs h-9 bg-white"
-                        />
-                      ) : (
-                        <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
-                          {urls.food ? "Fail dimuat naik" : "Tiada fail"}
-                        </div>
-                      )}
-                      {urls.food && (
-                        <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.food, '_blank')}>
-                          <FileText size={14} />
-                        </Button>
-                      )}
+            {/* Documents & Photo (Tenant Only) */}
+            {role === 'tenant' && (
+              <div className="space-y-6">
+                {/* Profile Photo */}
+                <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-primary font-serif text-lg">Gambar Profil</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col items-center gap-4">
+                      <div className={`relative w-32 h-32 rounded-full overflow-hidden border-2 border-dashed border-border bg-secondary/30 flex items-center justify-center group ${isEditing ? 'cursor-pointer hover:bg-secondary/50' : ''}`}>
+                        {files.profile ? (
+                          <Image src={URL.createObjectURL(files.profile)} alt="Preview" fill className="object-cover" />
+                        ) : urls.profile ? (
+                          <Image src={urls.profile} alt="Current" fill className="object-cover" />
+                        ) : (
+                          <Upload className="text-muted-foreground" />
+                        )}
+                        {isEditing && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Pencil className="text-white w-6 h-6" />
+                          </div>
+                        )}
+                        {isEditing && (
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => e.target.files && setFiles({ ...files, profile: e.target.files[0] })}
+                          />
+                        )}
+                      </div>
+                      {isEditing && <p className="text-xs text-muted-foreground text-center">Klik untuk tukar gambar</p>}
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  {/* Other Docs */}
-                  <div className="space-y-2">
-                    <Label className="text-xs flex items-center gap-1"><FolderOpen size={12} /> Dokumen Sokongan Lain</Label>
-                    <div className="flex gap-2 items-center">
-                      {isEditing ? (
-                        <Input
-                          type="file"
-                          accept=".pdf,image/*"
-                          onChange={(e) => e.target.files && setFiles({ ...files, other: e.target.files[0] })}
-                          className="text-xs h-9 bg-white"
-                        />
-                      ) : (
-                        <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
-                          {urls.other ? "Fail dimuat naik" : "Tiada fail"}
-                        </div>
-                      )}
-                      {urls.other && (
-                        <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.other, '_blank')}>
-                          <FileText size={14} />
-                        </Button>
-                      )}
+                {/* Documents */}
+                <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-primary font-serif text-lg">Dokumen Sokongan</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* SSM */}
+                    <div className="space-y-2">
+                      <Label className="text-xs">Sijil SSM (PDF/Gambar)</Label>
+                      <div className="flex gap-2 items-center">
+                        {isEditing ? (
+                          <Input
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={(e) => e.target.files && setFiles({ ...files, ssm: e.target.files[0] })}
+                            className="text-xs h-9 bg-white"
+                          />
+                        ) : (
+                          <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
+                            {urls.ssm ? "Fail dimuat naik" : "Tiada fail"}
+                          </div>
+                        )}
+                        {urls.ssm && (
+                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.ssm, '_blank')}>
+                            <FileText size={14} />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+
+                    {/* Food Handling */}
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1"><Utensils size={12} /> Sijil Pengendalian Makanan</Label>
+                      <div className="flex gap-2 items-center">
+                        {isEditing ? (
+                          <Input
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={(e) => e.target.files && setFiles({ ...files, food: e.target.files[0] })}
+                            className="text-xs h-9 bg-white"
+                          />
+                        ) : (
+                          <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
+                            {urls.food ? "Fail dimuat naik" : "Tiada fail"}
+                          </div>
+                        )}
+                        {urls.food && (
+                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.food, '_blank')}>
+                            <FileText size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Other Docs */}
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1"><FolderOpen size={12} /> Dokumen Sokongan Lain</Label>
+                      <div className="flex gap-2 items-center">
+                        {isEditing ? (
+                          <Input
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={(e) => e.target.files && setFiles({ ...files, other: e.target.files[0] })}
+                            className="text-xs h-9 bg-white"
+                          />
+                        ) : (
+                          <div className="flex-1 p-2 bg-secondary/10 rounded-lg text-xs italic text-muted-foreground border">
+                            {urls.other ? "Fail dimuat naik" : "Tiada fail"}
+                          </div>
+                        )}
+                        {urls.other && (
+                          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => window.open(urls.other, '_blank')}>
+                            <FileText size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -1353,15 +1364,15 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                                   onChange={(e) => setNewTrialDate(e.target.value)}
                                   className="h-7 text-xs w-32"
                                 />
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   className="h-7 px-2 text-xs"
                                   onClick={() => handleUpdateTrialDate(usr.id, newTrialDate)}
                                 >
                                   <Check className="w-3 h-3" />
                                 </Button>
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   variant="ghost"
                                   className="h-7 px-2 text-xs"
                                   onClick={() => {
@@ -1532,10 +1543,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             {(role === 'admin' || role === 'superadmin') && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-6 w-6 text-muted-foreground hover:text-red-500" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-red-500"
                                 onClick={() => handleDeleteLog(log.id)}
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -1567,6 +1578,6 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         )}
 
       </Tabs>
-    </div>
+    </div >
   )
 }

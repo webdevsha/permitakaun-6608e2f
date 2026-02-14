@@ -21,11 +21,7 @@ export default function SignupPage() {
     email: "",
     password: "",
     fullName: "",
-    businessName: "",
-    phone: "",
-    ssmNumber: "",
-    icNumber: "",
-    address: ""
+    phone: ""
   })
 
   // Files and organizer code removed - can be added later in Tetapan
@@ -51,11 +47,7 @@ export default function SignupPage() {
         options: {
           data: {
             full_name: formData.fullName,
-            business_name: formData.businessName,
             phone_number: formData.phone,
-            ssm_number: formData.ssmNumber,
-            ic_number: formData.icNumber,
-            address: formData.address,
             role: role // Pass the selected role
           }
         }
@@ -95,7 +87,7 @@ export default function SignupPage() {
             />
           </div>
           <h2 className="text-xl font-serif font-bold text-foreground">
-            Pendaftaran {role === 'tenant' ? 'Peniaga' : 'Penganjur'} Baru
+            Pendaftaran {role === 'tenant' ? 'Pengguna' : 'Penganjur'} Baru
           </h2>
         </CardHeader>
         <CardContent className="space-y-6 p-8">
@@ -108,7 +100,7 @@ export default function SignupPage() {
                 : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
-              Peniaga (Tenant)
+              Pengguna (Tenant)
             </button>
             <button
               onClick={() => setRole('organizer')}
@@ -122,89 +114,39 @@ export default function SignupPage() {
           </div>
 
           <div className="grid gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Nama Penuh (Seperti IC) *</Label>
-                <Input
-                  id="fullName"
-                  className="border-input rounded-xl h-11"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="icNumber">No. Kad Pengenalan</Label>
-                <Input
-                  id="icNumber"
-                  className="border-input rounded-xl h-11"
-                  value={formData.icNumber}
-                  onChange={(e) => setFormData({ ...formData, icNumber: e.target.value })}
-                  placeholder="Contoh: 880101-14-1234"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">No. Telefon</Label>
-                <Input
-                  id="phone"
-                  className="border-input rounded-xl h-11"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="012-3456789"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ssmNumber">No. SSM (Jika ada)</Label>
-                <Input
-                  id="ssmNumber"
-                  className="border-input rounded-xl h-11"
-                  value={formData.ssmNumber}
-                  onChange={(e) => setFormData({ ...formData, ssmNumber: e.target.value })}
-                />
-              </div>
-            </div>
-
             <div className="space-y-2">
-              <Label htmlFor="businessName">Nama Perniagaan (Syarikat/Gerai)</Label>
+              <Label htmlFor="fullName">Nama Penuh (Seperti IC) *</Label>
               <Input
-                id="businessName"
+                id="fullName"
                 className="border-input rounded-xl h-11"
-                value={formData.businessName}
-                onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
               />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="address">Alamat Surat Menyurat</Label>
+              <Label htmlFor="phone">No. Telefon</Label>
               <Input
-                id="address"
+                id="phone"
                 className="border-input rounded-xl h-11"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Contoh: No 123, Jalan ABC, 50000 KL"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="012-3456789"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+
 
             {/* Note: Kod Penganjur removed - can be added later in Tetapan */}
 
 
             {/* Documents Note - Hidden on signup, can be added later */}
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
-              <h3 className="font-bold text-sm text-amber-800 flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4" /> Dokumen Diperlukan
-              </h3>
-              <p className="text-xs text-amber-700 mb-2">
-                Sila sediakan dokumen berikut untuk disemak oleh admin:
-              </p>
-              <ul className="text-xs text-amber-700 list-disc list-inside space-y-1">
-                <li>Salinan SSM (jika berdaftar)</li>
-                <li>Salinan Kad Pengenalan</li>
-                {role === 'tenant' && <li>Kod Penganjur (jika ada)</li>}
-              </ul>
-              <p className="text-xs text-amber-700 mt-2 font-medium">
-                Anda boleh muat naik dokumen ini nanti di Tetakan &gt; Profil Saya.
+            {/* Documents Note - Hidden on signup, can be added later */}
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+              <p className="text-xs text-blue-800 font-medium">
+                Nota: Anda boleh mengemaskini maklumat perniagaan dan memuat naik dokumen di <b>Tetapan &gt; Profil Saya</b> selepas mendaftar.
               </p>
             </div>
 

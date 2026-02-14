@@ -12,20 +12,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 export function SubscriptionPlans() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
-  const [selectedPlan, setSelectedPlan] = useState<{name: string, price: string} | null>(null)
+  const [selectedPlan, setSelectedPlan] = useState<{ name: string, price: string } | null>(null)
   const [showManualPayment, setShowManualPayment] = useState(false)
 
   const plans = [
     {
       id: "enterprise",
       name: "Enterprise",
-      price: "19",
+      price: "39",
+      originalPrice: "49",
+      remark: "(Percuma Dua Minggu)",
       description: "Untuk peniaga kecil yang baru bermula",
       features: [
-        "Rekod Jualan & Sewa Harian",
-        "Resit Digital Tanpa Had",
-        "Peringatan Sewa Automatik",
-        "Simpanan Data Asas"
+        "Rekod Jualan & Pembelian",
+        "Simpan resit",
+        "Cashflow",
+        "Balance sheet",
+        "Download laporan kewangan",
+        "Sokongan 1 pengguna"
+      ],
+      tabungFeatures: [
+        "Auto kiraan Cukai",
+        "Auto kiraan zakat",
+        "Auto kiraan kos operating"
       ],
       popular: false,
       color: "bg-white",
@@ -36,14 +45,24 @@ export function SubscriptionPlans() {
     {
       id: "sdn-bhd",
       name: "Sdn Bhd",
-      price: "39",
+      price: "49",
+      originalPrice: "59",
+      remark: "(Percuma Dua Minggu)",
       description: "Pilihan terbaik untuk perniagaan berkembang",
       features: [
-        "Semua Ciri Asas",
-        "Laporan Kewangan Bulanan (PDF)",
-        "Sokongan 2 Pengguna",
-        "Analisis Untung Rugi",
-        "Akses Modul Akaun Penuh"
+        "Rekod Jualan & Pembelian",
+        "Simpan resit",
+        "Cashflow",
+        "Balance sheet",
+        "Download laporan kewangan",
+        "Sokongan 1 pengguna",
+        "Analisis untung rugi"
+      ],
+      tabungFeatures: [
+        "Auto kiraan Cukai",
+        "Auto kiraan zakat",
+        "Kos Operating",
+        "Auto kiraan Aset"
       ],
       popular: true,
       color: "bg-primary text-primary-foreground",
@@ -55,18 +74,23 @@ export function SubscriptionPlans() {
       id: "sdn-bhd-berhad",
       name: "SdnBhd/ Berhad",
       price: "99",
+      originalPrice: "120",
       description: "Untuk syarikat atau francais",
       features: [
-        "Semua Ciri Standard",
-        "Pengguna Tanpa Had",
-        "Integrasi Bank Automatik",
-        "Sokongan Keutamaan 24/7",
-        "Khidmat Nasihat Akaun"
+        "Semua pakej Sdn bhd",
+        "Dashboard CEO",
+        "Sokongan 2 pengguna akaun",
+        "Sokongan 4 pengguna staff",
+        "Boleh Add On anak syarikat",
+        "Boleh Add inventori",
+        "Analisis Stok/ Produk",
+        "Download laporan kewangan",
+        "7 PECAHAN TABUNG AKAUN"
       ],
       popular: false,
       color: "bg-white",
       buttonVariant: "default" as const,
-      buttonText: "Hubungi Kami",
+      buttonText: "Akan Datang",
       isContact: true
     }
   ]
@@ -116,8 +140,8 @@ export function SubscriptionPlans() {
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => setSelectedPlan(null)}
             className="rounded-full"
@@ -133,7 +157,7 @@ export function SubscriptionPlans() {
         {!showManualPayment ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {/* Manual Payment Option */}
-            <Card 
+            <Card
               className="cursor-pointer border-2 hover:border-primary transition-all rounded-[2rem]"
               onClick={() => setShowManualPayment(true)}
             >
@@ -171,7 +195,7 @@ export function SubscriptionPlans() {
 
             {/* FPX Option - Hidden for now but kept in code */}
             {false && selectedPlan && (
-              <Card 
+              <Card
                 className="cursor-pointer border-2 hover:border-primary transition-all rounded-[2rem]"
                 onClick={() => handleSubscribe(selectedPlan!.name, selectedPlan!.price)}
               >
@@ -201,7 +225,7 @@ export function SubscriptionPlans() {
                   </ul>
                 </CardContent>
                 <CardFooter>
-                  <Button 
+                  <Button
                     className="w-full rounded-xl"
                     disabled={!!loadingPlan}
                   >
@@ -301,7 +325,23 @@ export function SubscriptionPlans() {
 
             <CardContent className="flex-1 space-y-6">
               <div className="text-center">
-                <span className="text-5xl font-bold tracking-tight">RM{plan.price}</span>
+                {/* @ts-ignore */}
+                {plan.remark && (
+                  <p className={`text-xs font-bold mb-2 ${plan.popular ? "text-primary-foreground/80" : "text-emerald-600"}`}>
+                    {/* @ts-ignore */}
+                    {plan.remark}
+                  </p>
+                )}
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-5xl font-bold tracking-tight">RM{plan.price}</span>
+                  {/* @ts-ignore */}
+                  {plan.originalPrice && (
+                    <span className={`text-xl line-through ${plan.popular ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                      {/* @ts-ignore */}
+                      RM{plan.originalPrice}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-sm font-medium ${plan.popular ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                   /bulan
                 </span>
@@ -319,6 +359,28 @@ export function SubscriptionPlans() {
                   </li>
                 ))}
               </ul>
+
+              {/* @ts-ignore */}
+              {plan.tabungFeatures && (
+                <div className="pt-4 border-t border-border/50">
+                  <p className={`text-xs font-bold mb-3 uppercase tracking-wider ${plan.popular ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                    Pecahan Tabung Akaun
+                  </p>
+                  <ul className="space-y-3 text-sm">
+                    {/* @ts-ignore */}
+                    {plan.tabungFeatures.map((feature, i) => (
+                      <li key={i} className="flex items-center gap-3">
+                        <div className={`rounded-full p-1 ${plan.popular ? "bg-white/20" : "bg-emerald-500/10"}`}>
+                          <Check className={`w-3 h-3 ${plan.popular ? "text-white" : "text-emerald-600"}`} />
+                        </div>
+                        <span className={plan.popular ? "text-primary-foreground/90" : "text-foreground"}>
+                          {feature}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </CardContent>
 
             <CardFooter>
