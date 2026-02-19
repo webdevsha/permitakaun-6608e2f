@@ -129,11 +129,7 @@ export function SubscriptionPlans() {
     await handleSubscribe(plan.name, plan.price)
   }
 
-  const handleManualPaymentSuccess = () => {
-    setSelectedPlan(null)
-    setShowManualPayment(false)
-    window.location.reload()
-  }
+
 
   return (
     <div className="space-y-8 py-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

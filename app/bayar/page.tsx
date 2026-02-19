@@ -437,10 +437,10 @@ export default function PublicPaymentPage() {
                                     <CardHeader className="pb-3">
                                         <div className="flex items-start justify-between">
                                             <div>
-                                                <CardTitle className="text-lg">{loc.name}</CardTitle>
                                                 {loc.program_name && (
-                                                    <CardDescription>{loc.program_name}</CardDescription>
+                                                    <p className="text-sm font-medium text-primary mb-1 uppercase tracking-wider">{loc.program_name}</p>
                                                 )}
+                                                <CardTitle className="text-lg">{loc.name}</CardTitle>
                                             </div>
                                             <Badge variant={loc.type === 'daily' ? 'secondary' : 'default'}>
                                                 {loc.type === 'daily' ? 'Mingguan' : 'Bulanan'}
