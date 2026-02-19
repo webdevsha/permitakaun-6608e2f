@@ -28,7 +28,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { initiatePayment } from "@/actions/payment"
 
-export function RentalModule({ initialTenant, initialLocations, initialHistory, initialAvailable }: any) {
+export function RentalModule({ initialTenant, initialLocations, initialHistory, initialAvailable, initialLinkedOrganizers }: any) {
   const { user } = useAuth()
   const supabase = createClient()
   const searchParams = useSearchParams()
@@ -39,6 +39,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   const [tenant, setTenant] = useState<Tenant | null>(initialTenant || null)
   const [myLocations, setMyLocations] = useState<any[]>(initialLocations || [])
   const [availableLocations, setAvailableLocations] = useState<any[]>(initialAvailable || [])
+  const [linkedOrganizers, setLinkedOrganizers] = useState<any[]>(initialLinkedOrganizers || [])
   const [history, setHistory] = useState<any[]>(initialHistory || [])
 
   // Tab State Management
@@ -52,6 +53,13 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<"manual" | "billplz">("billplz")
+
+  // Sync state with props when data is re-fetched
+  useEffect(() => {
+    if (initialTenant) {
+      setTenant(initialTenant)
+    }
+  }, [initialTenant])
 
   useEffect(() => {
     setIsMounted(true)
@@ -323,23 +331,48 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     setIsVerifyingCode(true)
 
     try {
-      const { error: updateError } = await supabase
-        .from('tenants')
-        .update({ organizer_code: pendingOrganizer.code })
-        .eq('id', tenant.id)
+      // Use RPC to link (Insert or Update)
+      const { data, error: rpcError } = await supabase.rpc('link_tenant_to_organizer', {
+        p_tenant_id: tenant.id,
+        p_organizer_code: pendingOrganizer.code
+      })
 
-      if (updateError) throw updateError
+      if (rpcError) throw rpcError
 
-      toast.success(`Berjaya dipautkan ke ${pendingOrganizer.name}`)
-      window.location.reload()
+      toast.success(`Berjaya dipautkan ke ${pendingOrganizer.name}. Menunggu kelulusan.`)
+
+      // Update local state
+      const newLink = {
+        link_id: Date.now(), // Temporary ID until refresh
+        status: 'pending',
+        id: pendingOrganizer.id,
+        name: pendingOrganizer.name,
+        email: pendingOrganizer.email,
+        organizer_code: pendingOrganizer.code
+      }
+
+      setLinkedOrganizers(prev => [...prev.filter(o => o.id !== pendingOrganizer.id), newLink])
+      setPendingOrganizer(null)
+      setOrganizerCodeInput("")
+
+      // Use router.refresh() for a server-side data re-fetch without full reload
+      router.refresh()
 
     } catch (e: any) {
-      toast.error(e.message)
+      console.error("Error linking organizer:", e)
+      toast.error(e.message || "Gagal memautkan penganjur")
+    } finally {
       setIsVerifyingCode(false)
     }
   }
 
   const handleApplyRental = async () => {
+    // Check if tenant is pending
+    if (tenant?.status === 'pending') {
+      toast.error("Akaun anda masih dalam semakan Penganjur.")
+      return
+    }
+
     if (!tenant || !applyLocationId) return
 
     setIsApplying(true)
@@ -380,9 +413,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       const { data: loc, error } = await supabase
         .from('locations')
         .select('*, organizers(name, organizer_code)')
-        .eq('id', searchLocationId) // Assuming ID is numeric or UUID? Inputs are often text. Let's assume ID match. 
-        // If ID is int, user input string need parsing. If ID is uuid, string ok.
-        // Let's assume 'id' column.
+        .eq('id', searchLocationId)
         .maybeSingle()
 
       if (error) throw error
@@ -401,35 +432,17 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   }
 
   const handleApplySearchedLocation = () => {
+    // Logic for searched location application
     if (searchedLocation) {
-      // If searching a location that belongs to a different organizer, we might need to warn?
-      // Or just let them apply.
-      // Assuming current logic requires 'organizer_code' to match?
-      // The implementation: 'tenant_locations' -> 'location_id'. 
-      // It doesn't strictly enforce 'tenant.organizer_code == location.organizer_id->code' in DB constraints usually,
-      // but the UI typically filters. 
-      // If we allow applying to *any* location:
-
-      // Auto-fill the apply form or direct apply?
-      // Use the existing apply dialog logic?
-      // Let's set the applyLocationId and open dialog?
-      // But the dialog filters availableLocations by current organizer.
-      // We might need to allow applying to THIS specific location even if not in the list.
-
-      // Let's just create a direct apply here for simplcity + user wants "View".
-      // "Tenant boleh melihat semua lokasi ... dengan memasukkan ID sahaja"
-
+      setApplyLocationId(searchedLocation.id.toString())
+      setIsApplyDialogOpen(true)
     }
   }
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("[Client] Handle Payment Clicked")
-    console.log("[Client] Tenant:", tenant?.id)
-    console.log("[Client] Selected Location ID:", selectedLocationId)
 
     if (!tenant || !selectedLocationId) {
-      console.warn("[Client] Missing tenant or location ID. Aborting.")
       toast.error("Sila pilih lokasi dahulu.")
       return
     }
@@ -442,7 +455,6 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       let receiptUrl = null
       let billRef = ""
 
-      // Fee Calculation
       const baseAmount = parseFloat(paymentAmount)
       const fee = paymentMethod === 'billplz' ? 2.00 : 0
       const finalAmount = baseAmount + fee
@@ -458,7 +470,6 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         }
         billRef = `Bayaran Manual - ${selectedLoc?.location_name || 'Sewa'}`
 
-        // Manual Flow: Direct Insert as 'pending'
         const { error: rpcError } = await supabase.rpc('process_rental_payment', {
           p_tenant_id: tenant.id,
           p_amount: finalAmount,
@@ -476,7 +487,6 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         await fetchHistory(tenant.id)
 
       } else if (paymentMethod === 'billplz') {
-        // Gateway Flow: Use initiatePayment action
         const result = await initiatePayment({
           amount: finalAmount,
           description: `Bayaran Sewa: ${selectedLoc?.location_name || 'Uptown'}`,
@@ -485,10 +495,6 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
         if (result.error) throw new Error(result.error)
         if (result.url) {
-          // We can optionally record a pending transaction here if needed, 
-          // but let's rely on the gateway call first.
-          // Ideally: Insert 'pending' tx into DB, then redirect.
-          // For now, redirecting.
           toast.success("Mengarahkan ke gerbang pembayaran...")
           window.location.href = result.url
         }
@@ -500,7 +506,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     }
   }
 
-  if (!isMounted) return null // Prevent hydration mismatch
+  if (!isMounted) return null
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>
 
   if (!tenant) return (
@@ -527,6 +533,24 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         </TabsList>
 
         <TabsContent value="status" className="mt-6 space-y-6">
+          {/* Main Pending Alert for Tenant Status (Multi-Org aware) */}
+          {linkedOrganizers.some(o => o.status === 'pending') && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 items-start animate-in fade-in slide-in-from-top-2">
+              <Loader2 className="w-5 h-5 text-amber-600 animate-spin shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-amber-800 text-sm">Menunggu Kelulusan Penganjur</h4>
+                <div className="text-xs text-amber-700 mt-1">
+                  Anda mempunyai pautan penganjur yang masih dalam semakan.
+                  <ul className="list-disc list-inside mt-1 ml-1">
+                    {linkedOrganizers.filter(o => o.status === 'pending').map(o => (
+                      <li key={o.id}><strong>{o.name}</strong> ({o.organizer_code})</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end">
             <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
               <DialogTrigger asChild>
@@ -542,53 +566,101 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
-                  {/* Organizer Code Section */}
-                  <div className="p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/20 space-y-3">
-                    <Label className="text-xs font-bold text-brand-blue uppercase flex items-center gap-2">
-                      <Building className="w-3 h-3" /> Kod Penganjur
-                    </Label>
-                    {pendingOrganizer ? (
-                      <div className="bg-white p-3 rounded-lg border border-brand-blue/30 space-y-2 animate-in fade-in zoom-in-95">
-                        <div className="text-sm">
-                          <p className="font-bold text-foreground">{pendingOrganizer.name}</p>
-                          <p className="text-xs text-muted-foreground">{pendingOrganizer.email}</p>
-                          <p className="text-xs font-mono bg-slate-100 inline-block px-1 rounded mt-1">{pendingOrganizer.code}</p>
-                        </div>
-                        <div className="flex gap-2 pt-2">
-                          <Button size="sm" onClick={handleConfirmOrganizer} disabled={isVerifyingCode} className="w-full bg-green-600 hover:bg-green-700 text-white h-8">
-                            {isVerifyingCode ? <Loader2 className="animate-spin w-3 h-3" /> : "Sahkan"}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setPendingOrganizer(null)} disabled={isVerifyingCode} className="h-8">
-                            Batal
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Input
-                          value={organizerCodeInput}
-                          onChange={(e) => setOrganizerCodeInput(e.target.value.toUpperCase())}
-                          placeholder={tenant.organizer_code || "Masukkan Kod (Cth: ORG001)"}
-                          className="bg-white uppercase font-mono"
-                        />
-                        <Button size="sm" onClick={handleVerifyOrganizer} disabled={isVerifyingCode} className="shrink-0 bg-brand-blue hover:bg-brand-blue/90 text-white">
-                          {isVerifyingCode ? <Loader2 className="animate-spin" /> : (tenant.organizer_code ? "Tukar" : "Semak")}
+                  {/* Multi-Organizer Management Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-brand-blue uppercase flex items-center gap-2">
+                        <Building className="w-3 h-3" /> Penganjur Saya
+                      </Label>
+                      {!pendingOrganizer && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px]"
+                          onClick={() => setOrganizerCodeInput(prev => prev ? "" : " ")}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Tambah
                         </Button>
+                      )}
+                    </div>
+
+                    {/* List Linked Organizers */}
+                    {linkedOrganizers.length > 0 && (
+                      <div className="space-y-2">
+                        {linkedOrganizers.map((org: any) => (
+                          <div key={org.id} className="bg-white border rounded-lg p-3 flex justify-between items-center text-sm shadow-sm">
+                            <div>
+                              <p className="font-bold text-foreground">{org.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">{org.organizer_code}</p>
+                            </div>
+                            <Badge variant={org.status === 'active' || org.status === 'approved' ? 'default' : 'secondary'}
+                              className={cn(
+                                "text-[10px] uppercase",
+                                (org.status === 'active' || org.status === 'approved') ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                              )}
+                            >
+                              {org.status === 'approved' ? 'Active' : org.status}
+                            </Badge>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    {tenant.organizer_code ? (
-                      <p className="text-[10px] text-green-600 flex items-center gap-1 font-medium">
-                        <CheckCircle2 className="w-3 h-3" /> Penganjur aktif: {tenant.organizer_code}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">
-                        Masukkan kod penganjur anda untuk melihat lokasi yang tersedia.
-                      </p>
+
+                    {/* Add New Organizer Input */}
+                    {(linkedOrganizers.length === 0 || pendingOrganizer || organizerCodeInput !== "") && (
+                      <div className="p-4 bg-brand-blue/5 rounded-xl border border-brand-blue/20 space-y-3 animate-in fade-in slide-in-from-top-2">
+                        {pendingOrganizer ? (
+                          <div className="bg-white p-3 rounded-lg border border-brand-blue/30 space-y-2 animate-in fade-in zoom-in-95">
+                            <div className="text-sm">
+                              <p className="font-bold text-foreground">{pendingOrganizer.name}</p>
+                              <p className="text-xs text-muted-foreground">{pendingOrganizer.email}</p>
+                              <p className="text-xs font-mono bg-slate-100 inline-block px-1 rounded mt-1">{pendingOrganizer.code}</p>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <Button size="sm" onClick={handleConfirmOrganizer} disabled={isVerifyingCode} className="w-full bg-green-600 hover:bg-green-700 text-white h-8">
+                                {isVerifyingCode ? <Loader2 className="animate-spin w-3 h-3" /> : "Sahkan & Pautkan"}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => { setPendingOrganizer(null); setOrganizerCodeInput("") }} disabled={isVerifyingCode} className="h-8">
+                                Batal
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-muted-foreground">Masukkan Kod Penganjur Baru</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={organizerCodeInput === " " ? "" : organizerCodeInput}
+                                onChange={(e) => setOrganizerCodeInput(e.target.value.toUpperCase())}
+                                placeholder="Cth: ORG001"
+                                className="bg-white uppercase font-mono"
+                              />
+                              <Button size="sm" onClick={handleVerifyOrganizer} disabled={isVerifyingCode} className="shrink-0 bg-brand-blue hover:bg-brand-blue/90 text-white">
+                                {isVerifyingCode ? <Loader2 className="animate-spin" /> : "Semak"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
                   {availableLocations.length > 0 ? (
                     <>
+                      {/* PENDING CHECK - Show if user has pending organizers but NO active ones, or just show informative banner */}
+                      {linkedOrganizers.some(o => o.status === 'pending') && (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 space-y-2">
+                          <div className="flex items-center gap-2 font-bold">
+                            <Loader2 className="animate-spin w-4 h-4" />
+                            Menunggu Kelulusan
+                          </div>
+                          <p className="text-sm">
+                            Permohonan untuk sesetengah penganjur masih dalam semakan.
+                            Anda hanya boleh melihat lokasi dari penganjur yang telah <strong>Aktif</strong>.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="space-y-2">
                         <Label>Lokasi Pasar</Label>
                         <Select value={applyLocationId} onValueChange={setApplyLocationId}>
@@ -596,7 +668,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                             <SelectValue placeholder="Pilih lokasi..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableLocations.map(loc => (
+                            {availableLocations.map((loc: any) => (
                               <SelectItem key={loc.id} value={loc.id.toString()}>
                                 {loc.name} ({loc.operating_days})
                               </SelectItem>
@@ -667,15 +739,15 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                       </div>
                     )}
                   </div>
-                </div>
+                </div >
                 <DialogFooter>
                   <Button onClick={handleApplyRental} disabled={isApplying || !applyLocationId || availableLocations.length === 0} className="w-full rounded-xl">
                     {isApplying ? <Loader2 className="animate-spin" /> : "Hantar Permohonan"}
                   </Button>
                 </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+              </DialogContent >
+            </Dialog >
+          </div >
 
           <div className="grid gap-6 md:grid-cols-2">
             {myLocations.map((rental) => (
@@ -760,7 +832,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
               </div>
             )}
           </div>
-        </TabsContent>
+        </TabsContent >
 
         <TabsContent value="payment" className="mt-6">
           <Card className="max-w-xl mx-auto bg-white border-border/50 shadow-sm rounded-[2rem]">
@@ -920,7 +992,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+      </Tabs >
     </div >
   )
 }

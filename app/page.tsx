@@ -11,7 +11,7 @@ export default function LandingPage() {
       <nav className="border-b border-border/40 fixed w-full bg-background/80 backdrop-blur-md z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Permit Akaun Logo" className="w-8 h-8 object-contain" />
+            <img src="/logo.png" alt="Permit Akaun Logo" className="w-12 h-12 object-contain" />
             <span className="font-serif font-bold text-xl tracking-tight text-foreground">Permit Akaun</span>
           </a>
           <div className="flex items-center gap-4">
@@ -389,7 +389,7 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-border">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
           <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Permit Akaun Logo" className="w-6 h-6 object-contain" />
+            <img src="/logo.png" alt="Permit Akaun Logo" className="w-10 h-10 object-contain" />
             <span className="font-serif font-bold text-lg text-foreground">Permit Akaun</span>
           </a>
 

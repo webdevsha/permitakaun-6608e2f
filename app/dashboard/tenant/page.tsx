@@ -1,5 +1,6 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
 import { ArrowRight, TrendingUp, AlertCircle, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -229,13 +230,19 @@ export default async function TenantDashboardPage() {
                 <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-muted-foreground font-medium text-xs uppercase tracking-wider">Status Akaun</CardDescription>
-                        <CardTitle className="text-2xl font-sans font-bold text-foreground">
-                            Aktif
+                        <CardTitle className={cn("text-2xl font-sans font-bold capitalize", userProfile?.status === 'pending' ? "text-amber-600" : "text-brand-green")}>
+                            {userProfile?.status || 'Aktif'}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-sm text-muted-foreground">
-                            Tiada tunggakan tertunggak.
+                            {userProfile?.status === 'pending' ? (
+                                <span className="flex items-center gap-2 text-amber-700 font-medium">
+                                    <Loader2 className="w-4 h-4 animate-spin" /> Menunggu kelulusan penganjur
+                                </span>
+                            ) : (
+                                "Tiada tunggakan tertunggak."
+                            )}
                         </div>
                     </CardContent>
                 </Card>

@@ -31,6 +31,7 @@ async function fetchDashboardDataInternal(
     email: string,
     profileOrganizerCode: string | null
 ) {
+    console.log('[Dashboard] Fetching data for:', { userId, role, email, profileOrganizerCode })
     const supabase = await createClient()
 
     // Get organizer_code from appropriate table based on role
@@ -108,14 +109,17 @@ async function fetchDashboardDataInternal(
 
                 tenants = (t || []).map(tenant => ({
                     ...tenant,
-                    locations: tenant.tenant_locations?.map((l: any) => l.locations?.name) || [],
+                    locations: tenant.tenant_locations?.map((l: any) => ({
+                        name: l.locations?.name,
+                        status: l.status // Include status for TenantList
+                    })) || [],
                     organizerName: organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code || '-',
                     lastPaymentDate: "Tiada Rekod",
                     lastPaymentAmount: 0,
                     paymentStatus: 'active'
                 }))
-            } catch (e) {
-                console.error('[Dashboard] Error fetching tenants:', e)
+            } catch (e: any) {
+                console.error('[Dashboard] Error fetching tenants:', e.message || e)
                 tenants = []
             }
 
@@ -147,8 +151,8 @@ async function fetchDashboardDataInternal(
                     ...t,
                     table_source: 'organizer_transactions'
                 }))
-            } catch (e) {
-                console.error('[Dashboard] Error fetching transactions:', e)
+            } catch (e: any) {
+                console.error('[Dashboard] Error fetching transactions:', e.message || e)
                 transactions = []
             }
 
@@ -200,6 +204,7 @@ async function fetchDashboardDataInternal(
         // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
         else if (role === 'organizer' || role === 'staff') {
             let orgId = null
+            let orgCode = null // Store code for tenant filtering
 
             if (role === 'organizer') {
                 const { data: org } = await withTimeout(
@@ -208,6 +213,7 @@ async function fetchDashboardDataInternal(
                     'organizer lookup'
                 )
                 orgId = org?.id
+                orgCode = org?.organizer_code
                 if (org) organizers = [org]
             } else if (role === 'staff') {
                 if (!organizerCode) {
@@ -219,6 +225,7 @@ async function fetchDashboardDataInternal(
                     'staff organizer lookup'
                 )
                 orgId = org?.id
+                orgCode = org?.organizer_code
                 if (org) organizers = [org]
             }
 
@@ -237,6 +244,46 @@ async function fetchDashboardDataInternal(
                     }))
                 } catch (e) {
                     console.error('[Dashboard] Error fetching locations:', e)
+                }
+
+                // Fetch Tenants via Junction Table (Many-to-Many)
+                if (orgId) {
+                    try {
+                        const { data: links } = await withTimeout(
+                            () => supabase
+                                .from('tenant_organizers')
+                                .select('*, tenants(*, tenant_locations(*, locations(*)))')
+                                .eq('organizer_id', orgId)
+                                .order('created_at', { ascending: false }),
+                            5000,
+                            'organizer tenants query'
+                        )
+
+                        tenants = (links || []).map((link: any) => {
+                            const t = link.tenants
+                            if (!t) return null
+
+                            return {
+                                ...t,
+                                // Add link context
+                                link_id: link.id,
+                                link_status: link.status,
+                                // Legacy compatibility (optional)
+                                organizer_code: orgCode,
+
+                                locations: t.tenant_locations?.map((l: any) => ({
+                                    name: l.locations?.name,
+                                    status: l.status
+                                })) || [],
+                                organizerName: '-',
+                                lastPaymentDate: "Tiada Rekod",
+                                lastPaymentAmount: 0,
+                                paymentStatus: 'active'
+                            }
+                        }).filter(Boolean)
+                    } catch (e) {
+                        console.error('[Dashboard] Error fetching organizer tenants:', e)
+                    }
                 }
 
                 // Fetch tenants and transactions
@@ -321,39 +368,61 @@ async function fetchDashboardDataInternal(
                     transactions = []
                 }
 
-                // Fetch Available Locations for this Tenant (based on Organizer Code)
+                // Fetch Linked Organizers (Many-to-Many)
+                let linkedOrganizers: any[] = []
+                try {
+                    const { data: links } = await withTimeout(
+                        () => supabase
+                            .from('tenant_organizers')
+                            .select('*, organizers(id, name, organizer_code, email)')
+                            .eq('tenant_id', tenantData.id),
+                        3000,
+                        'linked organizers query'
+                    )
+
+                    linkedOrganizers = (links || []).map((link: any) => ({
+                        link_id: link.id,
+                        status: link.status,
+                        ...link.organizers
+                    }))
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching linked organizers:', e)
+                }
+
+                // Fetch Available Locations for this Tenant (based on Linked Organizers)
+                // Filter for ACTIVE linked organizers only
+                const activeOrgIds = linkedOrganizers
+                    .filter(o => o.status === 'active' || o.status === 'approved') // Check status
+                    .map(o => o.id)
+
+                // Also include the legacy single organizer_code if it exists and not in linked list
                 if (tenantData.organizer_code) {
+                    const { data: legacyOrg } = await supabase
+                        .from('organizers')
+                        .select('id')
+                        .eq('organizer_code', tenantData.organizer_code)
+                        .maybeSingle()
+
+                    if (legacyOrg && !activeOrgIds.includes(legacyOrg.id)) {
+                        activeOrgIds.push(legacyOrg.id)
+                    }
+                }
+
+                if (activeOrgIds.length > 0) {
                     try {
-                        // Find organizer first
-                        const { data: org } = await supabase
-                            .from('organizers')
-                            .select('id')
-                            .eq('organizer_code', tenantData.organizer_code)
-                            .maybeSingle()
+                        const { data: availLocs } = await supabase
+                            .from('locations')
+                            .select('*, organizers(name, organizer_code)') // Fetch organizer details too
+                            .in('organizer_id', activeOrgIds)
+                            .eq('status', 'active')
+                            .order('name')
 
-                        console.log(`[Dashboard] Tenant Organizer Code: ${tenantData.organizer_code}, Found Org ID: ${org?.id}`)
-
-                        if (org) {
-                            const { data: availLocs } = await withTimeout(
-                                () => supabase
-                                    .from('locations')
-                                    .select('*')
-                                    .eq('organizer_id', org.id)
-                                    .eq('status', 'active') // Only show active locations
-                                    .order('name'),
-                                3000,
-                                'available active locations'
-                            )
-
-                            if (!availLocs) console.log('[Dashboard] availLocs is null/undefined')
-                            else console.log(`[Dashboard] Fetched ${availLocs.length} available locations for org ${org.id}`)
-
-                            availableLocations = (availLocs || []).map((l: any) => ({
-                                ...l,
-                                display_price: l.rate_monthly || l.rate_khemah || 0,
-                                operating_days: l.operating_days || 'Setiap Hari'
-                            }))
-                        }
+                        availableLocations = (availLocs || []).map((l: any) => ({
+                            ...l,
+                            display_price: l.rate_monthly || l.rate_khemah || 0,
+                            operating_days: l.operating_days || 'Setiap Hari',
+                            organizer_name: l.organizers?.name
+                        }))
                     } catch (e) {
                         console.error('[Dashboard] Error fetching available locations:', e)
                     }
@@ -371,11 +440,14 @@ async function fetchDashboardDataInternal(
         transactions,
         tenants,
         overdueTenants,
-        organizers,
+        organizers, // Linked organizers for tenants can be passed here or separate field
+        linkedOrganizers: role === 'tenant' ? organizers : [], // Actually let's return it as specific field
         myLocations,
         availableLocations,
         userProfile,
-        role
+        role,
+        // Pass linked organizers specifically for RentalModule
+        initialLinkedOrganizers: role === 'tenant' ? (userProfile as any)?.linkedOrganizers || [] : []
     }
 }
 

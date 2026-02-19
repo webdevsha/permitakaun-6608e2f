@@ -669,21 +669,35 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   const handleSaveProfile = async () => {
     if (!user) return
 
+    // Strict Validation: Alphabets, space, and slash only
+    const nameRegex = /^[A-Za-z\s\/]+$/
+    if (formData.fullName && !nameRegex.test(formData.fullName)) {
+      toast.error("Nama Penuh hanya boleh mengandungi Huruf, Ruang (Space), dan Slash (/) sahaja.")
+      return
+    }
+
     setSaving(true)
+    console.log('[SettingsModule] handleSaveProfile starting...', { role, entityId, userId: user.id })
     try {
       let newUrls = { ...urls }
 
       // 1. Common Update: Profiles Table (Primary source for Full Name)
       if (formData.fullName) {
+        console.log('[SettingsModule] Updating profiles table...')
         const { error: profileError } = await supabase
           .from('profiles')
           .update({ full_name: formData.fullName })
           .eq('id', user.id)
 
-        if (profileError) throw profileError
+        if (profileError) {
+          console.error('[SettingsModule] Profile update error:', profileError)
+          throw profileError
+        }
       }
 
       // 2. Role-Specific Updates
+      console.log('[SettingsModule] Processing role-specific updates for:', role)
+
       if (role === 'tenant') {
         // Upload files (Tenants Only)
         if (files.profile) newUrls.profile = await handleFileUpload(files.profile, 'profile')
@@ -705,8 +719,14 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         }
 
         if (entityId) {
+          console.log('[SettingsModule] Updating tenants table with entityId:', entityId)
           const { error } = await supabase.from('tenants').update(payload).eq('id', entityId)
-          if (error) throw error
+          if (error) {
+            console.error('[SettingsModule] Tenant update error:', error)
+            throw error
+          }
+        } else {
+          console.warn('[SettingsModule] No entityId for tenant - update skipped')
         }
       }
       else if (role === 'organizer') {
@@ -716,8 +736,12 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           email: formData.email
         }
         if (entityId) {
+          console.log('[SettingsModule] Updating organizers table with entityId:', entityId)
           const { error } = await supabase.from('organizers').update(payload).eq('id', entityId)
-          if (error) throw error
+          if (error) {
+            console.error('[SettingsModule] Organizer update error:', error)
+            throw error
+          }
         }
       }
       else if (role === 'admin') {
@@ -732,14 +756,22 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           bank_account_holder: formData.bankAccountHolder || null
         }
         if (entityId) {
+          console.log('[SettingsModule] Updating admins table with entityId:', entityId)
           const { error } = await supabase.from('admins').update(payload).eq('id', entityId)
-          if (error) throw error
+          if (error) {
+            console.error('[SettingsModule] Admin update error:', error)
+            throw error
+          }
         }
       }
       else if (role === 'staff') {
         if (entityId) {
+          console.log('[SettingsModule] Updating staff table with entityId:', entityId)
           const { error } = await supabase.from('staff').update({ full_name: formData.fullName }).eq('id', entityId)
-          if (error) throw error
+          if (error) {
+            console.error('[SettingsModule] Staff update error:', error)
+            throw error
+          }
         }
       }
 
@@ -749,8 +781,8 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       toast.success("Profil berjaya dikemaskini")
 
     } catch (err: any) {
-      console.error(err)
-      toast.error("Ralat: " + err.message)
+      console.error('[SettingsModule] handleSaveProfile Error:', err)
+      toast.error("Ralat Menyimpan Profil: " + err.message)
     } finally {
       setSaving(false)
     }
