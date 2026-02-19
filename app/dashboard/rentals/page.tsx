@@ -1,6 +1,9 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
 import { RentalModule } from "@/components/rental-module"
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function RentalsPage() {
     const data = await fetchDashboardData()
 
