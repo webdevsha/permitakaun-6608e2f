@@ -1062,7 +1062,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   </Label>
                   <Input
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept="image/png,image/jpeg,image/jpg,application/pdf"
                     onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
                     className="h-10 pt-1.5 rounded-xl bg-secondary/20 cursor-pointer text-xs"
                   />

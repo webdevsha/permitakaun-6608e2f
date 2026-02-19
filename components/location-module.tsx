@@ -106,9 +106,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     total_lots: "50",
     rate_khemah: "0",
     rate_cbs: "0",
+    rate_foodtruck: "0", // New Foodtruck rate
     rate_monthly: "0",
     rate_monthly_khemah: "0",
     rate_monthly_cbs: "0",
+    rate_monthly_foodtruck: "0",
+    estimate_monthly_khemah: "0", // New Editable Estimate
+    estimate_monthly_cbs: "0", // New Editable Estimate
+    estimate_monthly_foodtruck: "0", // New Editable Estimate
     organizer_id: "" // Added organizer_id
   })
 
@@ -138,9 +143,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       total_lots: "50",
       rate_khemah: "0",
       rate_cbs: "0",
+      rate_foodtruck: "0",
       rate_monthly: "0",
       rate_monthly_khemah: "0",
       rate_monthly_cbs: "0",
+      rate_monthly_foodtruck: "0",
+      estimate_monthly_khemah: "0",
+      estimate_monthly_cbs: "0",
+      estimate_monthly_foodtruck: "0",
       organizer_id: ""
     })
     setIsEditMode(false)
@@ -163,9 +173,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       total_lots: loc.total_lots?.toString() || "0",
       rate_khemah: loc.rate_khemah?.toString() || "0",
       rate_cbs: loc.rate_cbs?.toString() || "0",
+      rate_foodtruck: loc.rate_foodtruck?.toString() || "0",
       rate_monthly: loc.rate_monthly?.toString() || "0",
       rate_monthly_khemah: loc.rate_monthly_khemah?.toString() || "0",
       rate_monthly_cbs: loc.rate_monthly_cbs?.toString() || "0",
+      rate_monthly_foodtruck: loc.rate_monthly_foodtruck?.toString() || "0",
+      estimate_monthly_khemah: loc.estimate_monthly_khemah?.toString() || "0",
+      estimate_monthly_cbs: loc.estimate_monthly_cbs?.toString() || "0",
+      estimate_monthly_foodtruck: loc.estimate_monthly_foodtruck?.toString() || "0",
       organizer_id: loc.organizer_id?.toString() || ""
     })
     setIsEditMode(true)
@@ -189,9 +204,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         total_lots: parseInt(formData.total_lots) || 0,
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
+        rate_foodtruck: parseFloat(formData.rate_foodtruck) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
         rate_monthly_khemah: parseFloat(formData.rate_monthly_khemah) || 0,
         rate_monthly_cbs: parseFloat(formData.rate_monthly_cbs) || 0,
+        rate_monthly_foodtruck: parseFloat(formData.rate_monthly_foodtruck) || 0,
+        estimate_monthly_khemah: parseFloat(formData.estimate_monthly_khemah) || 0,
+        estimate_monthly_cbs: parseFloat(formData.estimate_monthly_cbs) || 0,
+        estimate_monthly_foodtruck: parseFloat(formData.estimate_monthly_foodtruck) || 0,
         organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null,
       }
 
@@ -323,7 +343,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
   // --- RENTAL LOGIC FOR TENANT ---
   const [rentLocation, setRentLocation] = useState<any>(null)
-  const [rentType, setRentType] = useState<"khemah" | "cbs" | "monthly">("monthly")
+  const [rentType, setRentType] = useState<"khemah" | "cbs" | "foodtruck" | "monthly" | "monthly_khemah" | "monthly_cbs" | "monthly_foodtruck">("monthly")
   const [isRenting, setIsRenting] = useState(false)
 
   const handleOpenRent = (loc: any) => {
@@ -357,8 +377,12 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       // 1. Calculate Amount
       let amount = 0
       if (rentType === 'monthly') amount = rentLocation.rate_monthly || 0
+      else if (rentType === 'monthly_khemah') amount = rentLocation.rate_monthly_khemah || rentLocation.rate_monthly || 0
+      else if (rentType === 'monthly_cbs') amount = rentLocation.rate_monthly_cbs || rentLocation.rate_monthly || 0
+      else if (rentType === 'monthly_foodtruck') amount = rentLocation.rate_monthly_foodtruck || rentLocation.rate_monthly || 0
       else if (rentType === 'khemah') amount = (rentLocation.rate_khemah || 0) * 4
       else if (rentType === 'cbs') amount = (rentLocation.rate_cbs || 0) * 4
+      else if (rentType === 'foodtruck') amount = (rentLocation.rate_foodtruck || 0) * 4
 
       console.log("[Client] Calculated Amount:", amount)
 
@@ -538,7 +562,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   <Label className="font-bold text-primary">Tetapan Kadar Sewa (RM)</Label>
                   {formData.type === 'daily' ? (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
                           <Input
@@ -549,7 +573,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Kadar Seminggu (CBS/Lori)</Label>
+                          <Label className="text-xs">Kadar Seminggu (CBS)</Label>
                           <Input
                             type="number"
                             value={formData.rate_cbs}
@@ -557,13 +581,53 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                             className="h-9 bg-white"
                           />
                         </div>
-                      </div>
-                      <div className="p-3 bg-white/50 rounded-lg text-xs text-muted-foreground border border-dashed">
-                        <p className="font-bold mb-1">Anggaran Bulanan (4 Minggu):</p>
-                        <div className="flex justify-between">
-                          <span>Khemah: RM {(parseFloat(formData.rate_khemah || '0') * 4).toFixed(2)}</span>
-                          <span>CBS: RM {(parseFloat(formData.rate_cbs || '0') * 4).toFixed(2)}</span>
+                        <div>
+                          <Label className="text-xs">Kadar Seminggu (Foodtruck)</Label>
+                          <Input
+                            type="number"
+                            value={formData.rate_foodtruck}
+                            onChange={(e) => setFormData({ ...formData, rate_foodtruck: e.target.value })}
+                            className="h-9 bg-white"
+                          />
                         </div>
+                      </div>
+
+                      {/* Editable Monthly Estimates */}
+                      <div className="bg-secondary/10 p-3 rounded-lg border border-dashed border-secondary/30">
+                        <Label className="text-xs font-bold text-muted-foreground mb-2 block">Anggaran Bulanan (Editable)</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Anggaran Khemah (4 Minggu)</Label>
+                            <Input
+                              type="number"
+                              value={formData.estimate_monthly_khemah}
+                              onChange={(e) => setFormData({ ...formData, estimate_monthly_khemah: e.target.value })}
+                              placeholder={(parseFloat(formData.rate_khemah || '0') * 4).toString()}
+                              className="h-8 bg-white text-xs"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Anggaran CBS (4 Minggu)</Label>
+                            <Input
+                              type="number"
+                              value={formData.estimate_monthly_cbs}
+                              onChange={(e) => setFormData({ ...formData, estimate_monthly_cbs: e.target.value })}
+                              placeholder={(parseFloat(formData.rate_cbs || '0') * 4).toString()}
+                              className="h-8 bg-white text-xs"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Anggaran Foodtruck (4 Minggu)</Label>
+                            <Input
+                              type="number"
+                              value={formData.estimate_monthly_foodtruck}
+                              onChange={(e) => setFormData({ ...formData, estimate_monthly_foodtruck: e.target.value })}
+                              placeholder={(parseFloat(formData.rate_foodtruck || '0') * 4).toString()}
+                              className="h-8 bg-white text-xs"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2 italic">* Masukkan nilai manual jika ingin override pengiraan automatik (Kadar x 4).</p>
                       </div>
                     </div>
                   ) : (
@@ -630,7 +694,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="khemah">Khemah (RM {rentLocation.rate_khemah})</SelectItem>
-                    <SelectItem value="cbs">CBS / Lori (RM {rentLocation.rate_cbs})</SelectItem>
+                    <SelectItem value="cbs">CBS (RM {rentLocation.rate_cbs})</SelectItem>
+                    <SelectItem value="foodtruck">Foodtruck (RM {rentLocation.rate_foodtruck})</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -735,10 +800,22 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                       </div>
                       <div className="h-px bg-border/50" />
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground text-xs">CBS (Lori)</span>
+                        <span className="text-muted-foreground text-xs">CBS</span>
                         <div className="text-right">
                           <span className="font-bold block">RM {loc.rate_cbs} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                          <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_cbs * 4).toFixed(0)} /bulan</span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            ~RM {loc.estimate_monthly_cbs > 0 ? loc.estimate_monthly_cbs.toFixed(0) : (loc.rate_cbs * 4).toFixed(0)} /bulan
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-px bg-border/50" />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground text-xs">Foodtruck</span>
+                        <div className="text-right">
+                          <span className="font-bold block">RM {loc.rate_foodtruck} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            ~RM {loc.estimate_monthly_foodtruck > 0 ? loc.estimate_monthly_foodtruck.toFixed(0) : (loc.rate_foodtruck * 4).toFixed(0)} /bulan
+                          </span>
                         </div>
                       </div>
                     </div>
