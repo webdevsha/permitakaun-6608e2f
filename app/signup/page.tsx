@@ -21,7 +21,8 @@ export default function SignupPage() {
     email: "",
     password: "",
     fullName: "",
-    phone: ""
+    phone: "",
+    organizerCode: ""
   })
 
   // Files and organizer code removed - can be added later in Tetapan
@@ -33,6 +34,13 @@ export default function SignupPage() {
   const handleSignup = async () => {
     if (!formData.email || !formData.password || !formData.fullName) {
       toast.error("Sila isi maklumat wajib (Emel, Kata Laluan, Nama Penuh)")
+      return
+    }
+
+    // Strict Validation: Alphabets, space, and slash only
+    const nameRegex = /^[A-Za-z\s\/]+$/
+    if (!nameRegex.test(formData.fullName)) {
+      toast.error("Nama Penuh hanya boleh mengandungi Huruf, Ruang (Space), dan Slash (/) sahaja.")
       return
     }
 
@@ -48,6 +56,7 @@ export default function SignupPage() {
           data: {
             full_name: formData.fullName,
             phone_number: formData.phone,
+            organizer_code: formData.organizerCode,
             role: role // Pass the selected role
           }
         }
@@ -115,7 +124,9 @@ export default function SignupPage() {
 
           <div className="grid gap-6">
             <div className="space-y-2">
-              <Label htmlFor="fullName">Nama Penuh (Seperti IC) *</Label>
+              <Label htmlFor="fullName">
+                {role === 'tenant' ? 'Nama Penuh (Seperti IC) *' : 'Nama Penuh / Nama Organisasi *'}
+              </Label>
               <Input
                 id="fullName"
                 className="border-input rounded-xl h-11"
@@ -133,6 +144,18 @@ export default function SignupPage() {
                 placeholder="012-3456789"
               />
             </div>
+            {role === 'tenant' && (
+              <div className="space-y-2">
+                <Label htmlFor="organizerCode">Kod Penganjur (Jika Ada)</Label>
+                <Input
+                  id="organizerCode"
+                  className="border-input rounded-xl h-11"
+                  value={formData.organizerCode}
+                  onChange={(e) => setFormData({ ...formData, organizerCode: e.target.value })}
+                  placeholder="Contoh: ORG123"
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

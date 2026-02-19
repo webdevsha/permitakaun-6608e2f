@@ -34,10 +34,14 @@ DROP POLICY IF EXISTS "Profiles: Users read own" ON profiles;
 DROP POLICY IF EXISTS "Profiles: Users update own" ON profiles;
 
 -- Drop transaction policies
-DROP POLICY IF EXISTS "Transactions: Admin/Staff read access" ON transactions;
-DROP POLICY IF EXISTS "Transactions: Admin/Staff create access" ON transactions;
-DROP POLICY IF EXISTS "Transactions: Admin/Staff update access" ON transactions;
-DROP POLICY IF EXISTS "Transactions: Admin full access" ON transactions;
+DROP POLICY IF EXISTS "Transactions: Admin/Staff read access" ON organizer_transactions;
+DROP POLICY IF EXISTS "Transactions: Admin/Staff create access" ON organizer_transactions;
+DROP POLICY IF EXISTS "Transactions: Admin/Staff update access" ON organizer_transactions;
+DROP POLICY IF EXISTS "Transactions: Admin full access" ON organizer_transactions;
+DROP POLICY IF EXISTS "Admin view admin transactions" ON admin_transactions;
+DROP POLICY IF EXISTS "Admins view admin transactions" ON admin_transactions;
+DROP POLICY IF EXISTS "Admins insert admin transactions" ON admin_transactions;
+DROP POLICY IF EXISTS "Admins update admin transactions" ON admin_transactions;
 
 -- Drop tenant_payments policies
 DROP POLICY IF EXISTS "Tenant Payments: Admin/Staff read access" ON tenant_payments;
@@ -128,6 +132,11 @@ WITH CHECK (
 -- STEP 4: TENANTS - Admin/Staff Full Access
 -- ============================================================================
 
+-- Drop existing
+DROP POLICY IF EXISTS "Tenants: Admin Full Access" ON public.tenants;
+DROP POLICY IF EXISTS "Tenants: Staff Full Access" ON public.tenants;
+DROP POLICY IF EXISTS "Tenants: Self Access" ON public.tenants;
+
 -- Admin/Superadmin: Full access
 CREATE POLICY "Tenants: Admin Full Access"
 ON public.tenants
@@ -153,6 +162,11 @@ WITH CHECK (profile_id = auth.uid());
 -- STEP 5: ORGANIZERS - Admin/Staff Full Access
 -- ============================================================================
 
+-- Drop existing
+DROP POLICY IF EXISTS "Organizers: Admin Full Access" ON public.organizers;
+DROP POLICY IF EXISTS "Organizers: Staff Full Access" ON public.organizers;
+DROP POLICY IF EXISTS "Organizers: Self Access" ON public.organizers;
+
 -- Admin/Superadmin: Full access
 CREATE POLICY "Organizers: Admin Full Access"
 ON public.organizers
@@ -177,6 +191,13 @@ WITH CHECK (profile_id = auth.uid());
 -- ============================================================================
 -- STEP 6: PROFILES - Admin/Staff Full Access
 -- ============================================================================
+
+-- Drop existing
+DROP POLICY IF EXISTS "Profiles: Admin Full Access" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles: Staff Read All" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles: Staff Update" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles: Self Read" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles: Self Update" ON public.profiles;
 
 -- Admin/Superadmin: Full access to ALL profiles
 CREATE POLICY "Profiles: Admin Full Access"
@@ -212,31 +233,31 @@ USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
 -- ============================================================================
--- STEP 7: TRANSACTIONS - Admin/Staff Full Access
+-- STEP 7: ORGANIZER TRANSACTIONS - Admin/Staff Full Access
 -- ============================================================================
 
 -- Admin/Superadmin: Full access
 CREATE POLICY "Transactions: Admin Full Access"
-ON public.transactions
+ON public.organizer_transactions
 FOR ALL
 USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
 -- Staff: Full access (mirrors admin)
 CREATE POLICY "Transactions: Staff Full Access"
-ON public.transactions
+ON public.organizer_transactions
 FOR ALL
 USING (public.is_staff())
 WITH CHECK (public.is_staff());
 
 -- Tenant: Access to own transactions
 CREATE POLICY "Transactions: Tenant Own"
-ON public.transactions
+ON public.organizer_transactions
 FOR ALL
 USING (
     EXISTS (
         SELECT 1 FROM public.tenants
-        WHERE tenants.id = transactions.tenant_id
+        WHERE tenants.id = organizer_transactions.tenant_id
         AND tenants.profile_id = auth.uid()
     )
 );
@@ -244,6 +265,11 @@ USING (
 -- ============================================================================
 -- STEP 8: TENANT PAYMENTS - Admin/Staff Full Access
 -- ============================================================================
+
+-- Drop existing
+DROP POLICY IF EXISTS "Tenant Payments: Admin Full Access" ON public.tenant_payments;
+DROP POLICY IF EXISTS "Tenant Payments: Staff Full Access" ON public.tenant_payments;
+DROP POLICY IF EXISTS "Tenant Payments: Tenant Own" ON public.tenant_payments;
 
 -- Admin/Superadmin: Full access
 CREATE POLICY "Tenant Payments: Admin Full Access"
@@ -274,6 +300,11 @@ USING (
 -- ============================================================================
 -- STEP 9: ACTION LOGS - Admin/Staff Full Access
 -- ============================================================================
+
+-- Drop existing
+DROP POLICY IF EXISTS "Action Logs: Admin Full Access" ON public.action_logs;
+DROP POLICY IF EXISTS "Action Logs: Staff Full Access" ON public.action_logs;
+DROP POLICY IF EXISTS "Action Logs: Self Read" ON public.action_logs;
 
 -- Admin/Superadmin: Full access
 CREATE POLICY "Action Logs: Admin Full Access"

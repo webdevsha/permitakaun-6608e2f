@@ -31,6 +31,7 @@ async function fetchDashboardDataInternal(
     email: string,
     profileOrganizerCode: string | null
 ) {
+    console.log('[Dashboard] Fetching data for:', { userId, role, email, profileOrganizerCode })
     const supabase = await createClient()
 
     // Get organizer_code from appropriate table based on role
@@ -117,8 +118,8 @@ async function fetchDashboardDataInternal(
                     lastPaymentAmount: 0,
                     paymentStatus: 'active'
                 }))
-            } catch (e) {
-                console.error('[Dashboard] Error fetching tenants:', e)
+            } catch (e: any) {
+                console.error('[Dashboard] Error fetching tenants:', e.message || e)
                 tenants = []
             }
 
@@ -150,8 +151,8 @@ async function fetchDashboardDataInternal(
                     ...t,
                     table_source: 'organizer_transactions'
                 }))
-            } catch (e) {
-                console.error('[Dashboard] Error fetching transactions:', e)
+            } catch (e: any) {
+                console.error('[Dashboard] Error fetching transactions:', e.message || e)
                 transactions = []
             }
 
