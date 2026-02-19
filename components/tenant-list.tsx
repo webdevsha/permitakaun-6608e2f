@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
@@ -23,96 +24,38 @@ import { createClient } from "@/utils/supabase/client"
 import Image from "next/image"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-
-// Enhanced Fetcher for Role-based Access
-const fetchTenants = async () => {
-   const supabase = createClient()
-   const { data: { user } } = await supabase.auth.getUser()
-   if (!user) return []
-
-   const { data: profile } = await supabase.from('profiles').select('role, organizer_code').eq('id', user.id).single()
-   const role = profile?.role
-   const orgCode = profile?.organizer_code
-
-   // DEBUG: Log staff filtering
-   console.log('[TenantList] User:', user.email, 'Role:', role, 'OrgCode:', orgCode)
-
-   let query = supabase.from('tenants').select('*').order('created_at', { ascending: false })
-
-   // --- ORGANIZER/STAFF FILTER ---
-   // Both organizers and staff should only see tenants from their organization
-   if (role === 'organizer' || role === 'staff') {
-      if (orgCode) {
-         query = query.eq('organizer_code', orgCode)
-         console.log('[TenantList] Filtering by organizer_code:', orgCode)
-      } else {
-         console.warn('[TenantList] No organizer_code for staff/organizer - returning empty')
-         return [] // No Tenants for unlinked users
-      }
-   }
-
-   const { data: tenants, error } = await query
-   console.log('[TenantList] Fetched tenants:', tenants?.length || 0)
-   if (error) throw error
-   if (!tenants) return []
-
-   const enrichedTenants = await Promise.all(tenants.map(async (tenant: any) => {
-      const { data: locs } = await supabase.from('tenant_locations').select('*, locations(*)').eq('tenant_id', tenant.id)
-      const { data: payments } = await supabase.from('tenant_payments').select('*').eq('tenant_id', tenant.id).eq('status', 'approved').order('payment_date', { ascending: false }).limit(1)
-
-      // Fetch organizer name
-      let organizerName = '-'
-      if (tenant.organizer_code) {
-         const { data: org } = await supabase.from('organizers').select('name').eq('organizer_code', tenant.organizer_code).single()
-         if (org) organizerName = org.name
-      }
-
-      const lastPayment = payments?.[0]
-      let paymentStatus = 'active'
-      let overdueLabel = ''
-      const dateDisplay = lastPayment?.payment_date
-         ? new Date(lastPayment.payment_date).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' })
-         : "Tiada Rekod"
-
-      if (!lastPayment) paymentStatus = 'new'
-      else paymentStatus = 'paid'
-
-      return {
-         ...tenant,
-         locations: locs?.map((l: any) => l.locations?.name) || [],
-         lastPaymentDate: dateDisplay,
-         lastPaymentAmount: lastPayment?.amount || 0,
-         paymentStatus,
-         overdueLabel,
-         organizerName
-      }
-   }))
-   return enrichedTenants
-}
-
-// ... imports
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
 import { toggleAccountingStatusAction } from "@/actions/tenant"
 
-// ... (fetchTenants remains same, or updated if needed, but sticking to client interactions)
+// Enhanced Fetcher for Role-based Access is defined in page.tsx and passed as props, 
+// OR it was part of this file but outside the component.
+// Looking at previous file content (step 392), `fetchTenants` was defined here but incorrect place for client component.
+// However, `TenantList` is a client component receiving `initialTenants`.
+// The previous file had `fetchTenants` defined but it wasn't exported or used in `TenantList` directly (except maybe for SWR if used).
+// But `TenantList` component definition starts at line 96 in original file.
+// I will just restore the imports for now.
 
 export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
    const { role } = useAuth() // Get Role
+   const router = useRouter()
    const [filterStatus, setFilterStatus] = useState("all")
    const [searchQuery, setSearchQuery] = useState("")
 
    const tenants = useMemo(() => {
       return (initialTenants || [])
          .filter((t: any) => {
-            if (filterStatus === "active" && t.status !== "active") return false
-            if (filterStatus === "inactive" && t.status === "active") return false
+            const status = t.link_status || t.status
+            if (filterStatus === "active" && status !== "active") return false
+            if (filterStatus === "inactive" && status === "active") return false
             if (searchQuery && !t.full_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false
             return true
          })
          .sort((a: any, b: any) => {
-            if (a.status === 'active' && b.status !== 'active') return -1
-            if (a.status !== 'active' && b.status === 'active') return 1
+            const statusA = a.link_status || a.status
+            const statusB = b.link_status || b.status
+            if (statusA === 'active' && statusB !== 'active') return -1
+            if (statusA !== 'active' && statusB === 'active') return 1
             const nameA = a.full_name?.toLowerCase() || ""
             const nameB = b.full_name?.toLowerCase() || ""
             if (nameA < nameB) return -1
@@ -121,7 +64,9 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
          })
    }, [initialTenants, filterStatus, searchQuery])
 
-   const mutate = () => window.location.reload()
+   const mutate = () => {
+      router.refresh()
+   }
 
    const [selectedTenant, setSelectedTenant] = useState<any>(null)
    const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -144,9 +89,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       email: ''
    })
    const [addingTenant, setAddingTenant] = useState(false)
-   // ...
 
-   // ... (inside handleAddTenant)
    const handleAddTenant = async () => {
       if (!newTenant.name || !newTenant.business) {
          toast.error("Nama dan Nama Perniagaan wajib diisi")
@@ -191,7 +134,6 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
-   // ... (handleDeleteTenant)
    const handleDeleteTenant = async (tenantId: number, tenantName: string) => {
       if (role === 'staff') return
       if (!confirm(`Adakah anda pasti mahu memadam peniaga "${tenantName}"? Tindakan ini tidak boleh dibatalkan.`)) {
@@ -214,11 +156,18 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
-   const handleTenantStatusChange = async (tenantId: number, newStatus: string) => {
+   const handleTenantStatusChange = async (tenant: any, newStatus: string) => {
       setIsUpdating(true)
       try {
-         const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenantId)
-         if (error) throw error
+         if (tenant.link_id) {
+            // Organizer Context: Update Link Status
+            const { error } = await supabase.from('tenant_organizers').update({ status: newStatus }).eq('id', tenant.link_id)
+            if (error) throw error
+         } else {
+            // Admin Context: Update Global Status
+            const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenant.id)
+            if (error) throw error
+         }
          toast.success(`Status peniaga dikemaskini ke ${newStatus}`)
          mutate()
       } catch (err: any) {
@@ -252,43 +201,25 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setLoadingDetails(false)
    }
 
-   const handleApproveTenant = async (tenantId: number) => {
+   const handleApproveTenant = async (tenant: any) => {
       try {
-         const { error } = await supabase.from('tenants').update({ status: 'active' }).eq('id', tenantId)
-         if (error) throw error
-         await logAction('APPROVE', 'tenant', tenantId, { status: 'active' })
+         if (tenant.link_id) {
+            // Organizer: Approve Link
+            const { error } = await supabase.from('tenant_organizers').update({ status: 'active' }).eq('id', tenant.link_id)
+            if (error) throw error
+            await logAction('APPROVE', 'tenant_link', tenant.link_id, { status: 'active' })
+         } else {
+            // Admin: Approve Tenant Account
+            const { error } = await supabase.from('tenants').update({ status: 'active' }).eq('id', tenant.id)
+            if (error) throw error
+            await logAction('APPROVE', 'tenant', tenant.id, { status: 'active' })
+         }
          toast.success("Peniaga diluluskan")
          mutate()
       } catch (e: any) {
          toast.error("Gagal lulus: " + e.message)
       }
    }
-
-   // ... (inside Table Loop)
-   // <div className={cn("font-medium transition-colors", tenant.status === 'active' ? "text-brand-green font-bold" : "text-foreground")}>
-   //    {tenant.full_name}
-   //    {tenant.status === 'active' && <CheckCircle className="inline-block w-3 h-3 ml-1" />}
-   //    {tenant.status === 'pending' && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-4">Pending</Badge>}
-   // </div>
-
-   // ... (Tenant Status Switch)
-   // <div className="flex justify-center items-center gap-2">
-   //    {tenant.status === 'pending' && (role === 'admin' || role === 'superadmin') ? (
-   //        <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveTenant(tenant.id)}>
-   //            <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
-   //        </Button>
-   //    ) : (
-   //      <>
-   //        <Switch ... disabled={isUpdating || (role === 'staff' && tenant.status === 'pending')} />
-   //      </>
-   //    )}
-   // </div>
-
-   // ... (Delete Button)
-   // {role !== 'staff' && (
-   //    <Button ... onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}> <Trash2 size={16} /> </Button>
-   // )}
-
 
    const handleAccountingStatusChange = async (tenantId: number, currentStatus: string) => {
       // Toggle logic
@@ -496,10 +427,12 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                     </div>
                                  )}
                                  <div>
-                                    <div className={cn("font-medium transition-colors", tenant.status === 'active' ? "text-brand-green font-bold" : "text-foreground")}>
+                                    <div className={cn("font-medium transition-colors", (tenant.link_status === 'active' || (!tenant.link_status && tenant.status === 'active')) ? "text-brand-green font-bold" : "text-foreground")}>
                                        {tenant.full_name}
-                                       {tenant.status === 'active' && <CheckCircle className="inline-block w-3 h-3 ml-1" />}
-                                       {tenant.status === 'pending' && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-4">Pending</Badge>}
+                                       {(tenant.link_status === 'active' || (!tenant.link_status && tenant.status === 'active')) && <CheckCircle className="inline-block w-3 h-3 ml-1" />}
+                                       {(tenant.link_status === 'pending' || (!tenant.link_status && tenant.status === 'pending')) && <Badge className="ml-2 bg-yellow-500 text-white text-[10px] h-4">Pending</Badge>}
+                                       {/* Show rejected badge if any */}
+                                       {tenant.link_status === 'rejected' && <Badge className="ml-2 bg-destructive text-white text-[10px] h-4">Rejected</Badge>}
                                     </div>
                                     <div className="text-xs text-muted-foreground font-mono">{tenant.business_name}</div>
                                  </div>
@@ -511,26 +444,60 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                               </div>
                            </TableCell>
                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                 {tenant.locations.map((loc: string, i: number) => (
-                                    <span key={i} className="text-xs bg-secondary px-2 py-0.5 rounded-full border border-border/50">{loc}</span>
-                                 ))}
+                              <div className="flex flex-col justify-center min-h-[40px]">
+                                 {tenant.locations.length === 0 ? (
+                                    <span className="text-muted-foreground text-xs text-center">-</span>
+                                 ) : (
+                                    // Summary Logic
+                                    (() => {
+                                       const pendingCount = tenant.locations.filter((l: any) => l.status === 'pending').length;
+                                       return (
+                                          <div className="flex flex-col gap-1">
+                                             <div className="flex items-center gap-1">
+                                                <Badge
+                                                   variant="outline"
+                                                   className={cn(
+                                                      "text-[10px] px-2 h-5 font-normal",
+                                                      pendingCount > 0
+                                                         ? "border-amber-400 bg-amber-50 text-amber-800"
+                                                         : "bg-white text-muted-foreground"
+                                                   )}
+                                                >
+                                                   {pendingCount > 0 && <AlertCircle className="w-3 h-3 mr-1 text-amber-600 animate-pulse" />}
+                                                   {tenant.locations.length} Tapak
+                                                   {pendingCount > 0 && <strong className="ml-1 text-amber-700">({pendingCount} Pending)</strong>}
+                                                </Badge>
+                                             </div>
+                                             {/* Mini preview of names */}
+                                             <span className="text-[9px] text-muted-foreground truncate max-w-[140px] pl-1">
+                                                {tenant.locations.map((l: any) => l.name).slice(0, 2).join(', ')}
+                                                {tenant.locations.length > 2 && '...'}
+                                             </span>
+                                          </div>
+                                       );
+                                    })()
+                                 )}
                               </div>
                            </TableCell>
                            <TableCell className="text-center">
                               <div className="flex justify-center items-center gap-2">
-                                 {tenant.status === 'pending' && (role === 'admin' || role === 'superadmin') ? (
-                                    <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveTenant(tenant.id)}>
+                                 {(tenant.link_status === 'pending' || (!tenant.link_status && tenant.status === 'pending')) && (role === 'admin' || role === 'superadmin' || role === 'organizer') ? (
+                                    <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveTenant(tenant)}>
                                        <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
                                     </Button>
                                  ) : (
                                     <>
                                        <Switch
-                                          checked={tenant.status === 'active'}
-                                          onCheckedChange={() => handleTenantStatusChange(tenant.id, tenant.status === 'active' ? 'inactive' : 'active')}
-                                          disabled={isUpdating || (role === 'staff' && tenant.status === 'pending')}
+                                          checked={tenant.link_status ? tenant.link_status === 'active' : tenant.status === 'active'}
+                                          onCheckedChange={() => {
+                                             const current = tenant.link_status || tenant.status
+                                             handleTenantStatusChange(tenant, current === 'active' ? 'inactive' : 'active')
+                                          }}
+                                          disabled={isUpdating || (role === 'staff' && (tenant.link_status === 'pending' || tenant.status === 'pending'))}
                                        />
-                                       <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">{tenant.status === 'active' ? 'Aktif' : 'Pasif'}</span>
+                                       <span className="text-[10px] uppercase font-bold w-12 text-left text-muted-foreground">
+                                          {tenant.link_status ? (tenant.link_status === 'active' ? 'Aktif' : 'N/A') : (tenant.status === 'active' ? 'Aktif' : 'Pasif')}
+                                       </span>
                                     </>
                                  )}
                               </div>
@@ -681,13 +648,21 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                              </TableCell>
                                              <TableCell className="text-center">
                                                 <div className="flex justify-center items-center gap-2">
-                                                   <Switch
-                                                      checked={rental.status === 'active'}
-                                                      onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status)}
-                                                   />
-                                                   <span className={cn("text-[10px] font-bold w-10 text-left", rental.status === 'active' ? "text-brand-green" : "text-amber-600")}>
-                                                      {rental.status === 'active' ? 'Aktif' : 'Pend.'}
-                                                   </span>
+                                                   {rental.status === 'pending' ? (
+                                                      <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleRentalStatusChange(rental.id, 'active')}>
+                                                         <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
+                                                      </Button>
+                                                   ) : (
+                                                      <>
+                                                         <Switch
+                                                            checked={rental.status === 'active'}
+                                                            onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status === 'active' ? 'inactive' : 'active')}
+                                                         />
+                                                         <span className={cn("text-[10px] font-bold w-10 text-left", rental.status === 'active' ? "text-brand-green" : "text-amber-600")}>
+                                                            {rental.status === 'active' ? 'Aktif' : 'N/A'}
+                                                         </span>
+                                                      </>
+                                                   )}
                                                 </div>
                                              </TableCell>
                                           </TableRow>

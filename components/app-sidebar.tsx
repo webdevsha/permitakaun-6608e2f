@@ -39,7 +39,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
   const pathname = usePathname()
   const [isSigningOut, setIsSigningOut] = React.useState(false)
   const [businessName, setBusinessName] = React.useState<string>("")
-  const [adminInfo, setAdminInfo] = React.useState<{name: string, organizer_code: string} | null>(null)
+  const [adminInfo, setAdminInfo] = React.useState<{ name: string, organizer_code: string } | null>(null)
 
   // CRITICAL: Use server-provided initial data as source of truth to prevent flickering
   // Only fall back to auth context if initial data is not available
@@ -51,18 +51,18 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
   React.useEffect(() => {
     const fetchBusinessName = async () => {
       if (!user?.id) return
-      
+
       const supabase = createClient()
-      
+
       // Fetch based on role
       const { data: userProfile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single()
-      
+
       const userRole = userProfile?.role
-      
+
       if (userRole === 'organizer') {
         // For organizers, use 'name' as business name
         const { data: organizer } = await supabase
@@ -70,7 +70,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           .select('name')
           .eq('profile_id', user.id)
           .maybeSingle()
-        
+
         if (organizer?.name) {
           setBusinessName(organizer.name)
           return
@@ -82,7 +82,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           .select('full_name')
           .eq('profile_id', user.id)
           .maybeSingle()
-        
+
         if (admin?.full_name) {
           setBusinessName(admin.full_name)
           return
@@ -94,7 +94,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           .select('full_name')
           .eq('profile_id', user.id)
           .maybeSingle()
-        
+
         if (staff?.full_name) {
           setBusinessName(staff.full_name)
           return
@@ -106,7 +106,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
           .select('business_name, full_name')
           .eq('profile_id', user.id)
           .maybeSingle()
-        
+
         if (tenant?.business_name) {
           setBusinessName(tenant.business_name)
           return
@@ -116,7 +116,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         }
       }
     }
-    
+
     fetchBusinessName()
   }, [user?.id])
 
@@ -124,30 +124,30 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
   React.useEffect(() => {
     const fetchAdminInfo = async () => {
       if (role !== 'staff' || !user?.id) return
-      
+
       const supabase = createClient()
-      
+
       // Get staff's organizer_code
       const { data: staffProfile } = await supabase
         .from('profiles')
         .select('organizer_code')
         .eq('id', user.id)
         .single()
-      
+
       if (!staffProfile?.organizer_code) return
-      
+
       // Try to get organizer info
       const { data: organizer } = await supabase
         .from('organizers')
         .select('name, organizer_code')
         .eq('organizer_code', staffProfile.organizer_code)
         .single()
-      
+
       if (organizer) {
         setAdminInfo(organizer)
         return
       }
-      
+
       // Fallback: get admin profile info
       const { data: adminProfile } = await supabase
         .from('profiles')
@@ -155,15 +155,15 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
         .eq('organizer_code', staffProfile.organizer_code)
         .eq('role', 'admin')
         .single()
-      
+
       if (adminProfile) {
-        setAdminInfo({ 
-          name: adminProfile.full_name || adminProfile.email, 
-          organizer_code: staffProfile.organizer_code 
+        setAdminInfo({
+          name: adminProfile.full_name || adminProfile.email,
+          organizer_code: staffProfile.organizer_code
         })
       }
     }
-    
+
     fetchAdminInfo()
   }, [role, user?.id])
 
@@ -197,14 +197,14 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (role === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
@@ -214,7 +214,7 @@ export function AppSidebar({ isCollapsed, setIsCollapsed, initialUser, initialRo
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {
@@ -391,14 +391,14 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else if (userRole === 'organizer') {
     navItems = [
       { id: "overview", label: "Utama", icon: LayoutDashboard, href: "/dashboard" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
@@ -408,7 +408,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
       { id: "organizers", label: "Penganjur", icon: Building, href: "/dashboard/organizers" },
       { id: "tenants", label: "Peniaga & Sewa", icon: Users, href: "/dashboard/tenants" },
       { id: "accounting", label: "Akaun", icon: Receipt, href: "/dashboard/accounting" },
-      { id: "locations", label: "Lokasi", icon: MapPin, href: "/dashboard/locations" },
+      { id: "locations", label: "Lokasi & Permit", icon: MapPin, href: "/dashboard/locations" },
       { id: "settings", label: "Tetapan", icon: Settings, href: "/dashboard/settings" },
     ]
   } else {

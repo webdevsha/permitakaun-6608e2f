@@ -100,7 +100,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     id: 0,
     name: "",
     program_name: "",
-    type: "daily" as "daily" | "monthly", // daily = mingguan now in UI
+    type: "daily" as "daily" | "monthly" | "expo" | "bazar_ramadhan" | "bazar_raya", // updated types
     operating_days: "Sabtu & Ahad",
     days_per_week: "2",
     total_lots: "50",
@@ -114,7 +114,12 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     estimate_monthly_khemah: "0", // New Editable Estimate
     estimate_monthly_cbs: "0", // New Editable Estimate
     estimate_monthly_foodtruck: "0", // New Editable Estimate
-    organizer_id: "" // Added organizer_id
+    organizer_id: "", // Added organizer_id
+    map_url: "",
+    image_url: "",
+    description: "",
+    start_date: "",
+    end_date: "",
   })
 
   // Admin: Fetch Organizers List
@@ -151,7 +156,12 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       estimate_monthly_khemah: "0",
       estimate_monthly_cbs: "0",
       estimate_monthly_foodtruck: "0",
-      organizer_id: ""
+      organizer_id: "",
+      map_url: "",
+      image_url: "",
+      description: "",
+      start_date: "",
+      end_date: ""
     })
     setIsEditMode(false)
   }
@@ -181,7 +191,12 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       estimate_monthly_khemah: loc.estimate_monthly_khemah?.toString() || "0",
       estimate_monthly_cbs: loc.estimate_monthly_cbs?.toString() || "0",
       estimate_monthly_foodtruck: loc.estimate_monthly_foodtruck?.toString() || "0",
-      organizer_id: loc.organizer_id?.toString() || ""
+      organizer_id: loc.organizer_id?.toString() || "",
+      map_url: loc.map_url || "",
+      image_url: loc.image_url || "",
+      description: loc.description || "",
+      start_date: loc.start_date || "",
+      end_date: loc.end_date || ""
     })
     setIsEditMode(true)
     setIsDialogOpen(true)
@@ -213,6 +228,11 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         estimate_monthly_cbs: parseFloat(formData.estimate_monthly_cbs) || 0,
         estimate_monthly_foodtruck: parseFloat(formData.estimate_monthly_foodtruck) || 0,
         organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null,
+        map_url: formData.map_url,
+        image_url: formData.image_url,
+        description: formData.description,
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
       }
 
       // Staff: Default to pending, Admin: Active
@@ -432,11 +452,45 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
     )
   }
 
+  // Fetch Tenant Status for access control
+  const { data: tenantProfile } = useSWR('tenant-profile', async () => {
+    if (role === 'tenant') {
+      const { data } = await supabase.from('tenants').select('status, organizer_code').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+      return data
+    }
+    return null
+  })
+
+  // Pending State for Tenant
+  if (role === 'tenant' && tenantProfile?.status === 'pending') {
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div>
+          <h2 className="text-3xl font-serif font-bold text-foreground">Lokasi & Permit</h2>
+          <p className="text-muted-foreground">Senarai lokasi tersedia</p>
+        </div>
+        <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-3xl text-yellow-800 space-y-4 text-center">
+          <Loader2 className="animate-spin w-12 h-12 mx-auto opacity-50" />
+          <div>
+            <h3 className="text-xl font-bold">Akaun Sedang Disemak</h3>
+            <p className="max-w-md mx-auto mt-2 text-sm">
+              Permohonan anda untuk menyertai penganjur <strong>{tenantProfile.organizer_code}</strong> sedang dalam proses kelulusan.
+              Anda akan dapat melihat senarai lokasi setelah diluluskan oleh penganjur.
+            </p>
+          </div>
+          <Button variant="outline" className="bg-white hover:bg-yellow-100 border-yellow-300 text-yellow-900" onClick={() => window.location.reload()}>
+            Semak Semula
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-foreground">Pengurusan Lokasi</h2>
+          <h2 className="text-3xl font-serif font-bold text-foreground">Lokasi & Permit</h2>
           <p className="text-muted-foreground">{role === 'organizer' ? 'Urus tapak pasar anda' : 'Senarai lokasi tersedia'}</p>
         </div>
 
@@ -508,6 +562,65 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </div>
                 </div>
 
+                {/* New Fields: Description & Maps */}
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Maklumat Lanjut (Description)</Label>
+                  <textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Penerangan ringkas mengenai lokasi atau permit ini..."
+                    className="flex min-h-[80px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="map_url">Pautan Google Maps (URL)</Label>
+                    <Input
+                      id="map_url"
+                      value={formData.map_url}
+                      onChange={(e) => setFormData({ ...formData, map_url: e.target.value })}
+                      placeholder="https://maps.google.com/..."
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="image_url">Pautan Gambar (URL)</Label>
+                    <Input
+                      id="image_url"
+                      value={formData.image_url}
+                      onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                      placeholder="https://example.com/image.jpg"
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Date Selection for Events */}
+                {['expo', 'bazar_ramadhan', 'bazar_raya'].includes(formData.type) && (
+                  <div className="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <div className="grid gap-2">
+                      <Label className="text-blue-700">Tarikh Mula</Label>
+                      <Input
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                        className="bg-white"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-blue-700">Tarikh Tamat</Label>
+                      <Input
+                        type="date"
+                        value={formData.end_date}
+                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                        className="bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Jenis Operasi</Label>
@@ -521,6 +634,9 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                       <SelectContent>
                         <SelectItem value="daily">Mingguan (Pasar Malam/Pagi)</SelectItem>
                         <SelectItem value="monthly">Bulanan (Kiosk/Uptown)</SelectItem>
+                        <SelectItem value="expo">Expo / Karnival</SelectItem>
+                        <SelectItem value="bazar_ramadhan">Bazar Ramadhan</SelectItem>
+                        <SelectItem value="bazar_raya">Bazar Raya</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
