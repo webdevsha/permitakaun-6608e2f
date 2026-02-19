@@ -2,18 +2,18 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Check, Lock, Star, Loader2, Building2, CreditCard, ArrowLeft } from "lucide-react"
+import {
+  Check, Lock, Star, Loader2, // Building2, CreditCard, ArrowLeft (removed unused)
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { initiatePayment } from "@/actions/payment"
 import { useState } from "react"
 import { toast } from "sonner"
-import { ManualSubscriptionPayment } from "./manual-subscription-payment"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+// import { ManualSubscriptionPayment } from "./manual-subscription-payment"
+// import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 export function SubscriptionPlans() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
-  const [selectedPlan, setSelectedPlan] = useState<{ name: string, price: string } | null>(null)
-  const [showManualPayment, setShowManualPayment] = useState(false)
 
   const plans = [
     {
@@ -119,170 +119,20 @@ export function SubscriptionPlans() {
     }
   }
 
-  const handlePlanSelect = (plan: typeof plans[0]) => {
+  const handlePlanSelect = async (plan: typeof plans[0]) => {
     if (plan.isContact) {
       window.location.href = 'mailto:support@permitakaun.kumim.my?subject=Permintaan Langganan SdnBhd/Berhad'
       return
     }
-    setSelectedPlan({ name: plan.name, price: plan.price })
-    setShowManualPayment(false)
+
+    // Direct FPX Payment Trigger
+    await handleSubscribe(plan.name, plan.price)
   }
 
   const handleManualPaymentSuccess = () => {
     setSelectedPlan(null)
     setShowManualPayment(false)
-    // Refresh page to show updated status
     window.location.reload()
-  }
-
-  // If a plan is selected, show payment options
-  if (selectedPlan) {
-    return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSelectedPlan(null)}
-            className="rounded-full"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h2 className="text-2xl font-serif font-bold">Pembayaran Langganan</h2>
-            <p className="text-muted-foreground">Pelan {selectedPlan.name} - RM{selectedPlan.price}/bulan</p>
-          </div>
-        </div>
-
-        {!showManualPayment ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* Manual Payment Option */}
-            <Card
-              className="cursor-pointer border-2 hover:border-primary transition-all rounded-[2rem]"
-              onClick={() => setShowManualPayment(true)}
-            >
-              <CardHeader>
-                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2">
-                  <Building2 className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="font-serif">Transfer Bank Manual</CardTitle>
-                <CardDescription>
-                  Transfer ke akaun Maybank Hazman dan upload resit
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Upload resit pembayaran</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Isi ID transaksi</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Pengesahan dalam 24 jam</span>
-                  </li>
-                </ul>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full rounded-xl">
-                  Pilih Transfer Bank
-                </Button>
-              </CardFooter>
-            </Card>
-
-            {/* FPX Option - Hidden for now but kept in code */}
-            {false && selectedPlan && (
-              <Card
-                className="cursor-pointer border-2 hover:border-primary transition-all rounded-[2rem]"
-                onClick={() => handleSubscribe(selectedPlan!.name, selectedPlan!.price)}
-              >
-                <CardHeader>
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2">
-                    <CreditCard className="w-6 h-6 text-primary" />
-                  </div>
-                  <CardTitle className="font-serif">FPX Online Banking</CardTitle>
-                  <CardDescription>
-                    Bayar secara online melalui Billplz
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-green-500" />
-                      <span>Pembayaran segera</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-green-500" />
-                      <span>Support semua bank utama</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-green-500" />
-                      <span>Aktif segera selepas bayar</span>
-                    </li>
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full rounded-xl"
-                    disabled={!!loadingPlan}
-                  >
-                    {loadingPlan === selectedPlan?.name ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      "Bayar dengan FPX"
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            )}
-
-            {/* Coming Soon Card for FPX */}
-            <Card className="border-2 border-dashed border-muted rounded-[2rem] opacity-60">
-              <CardHeader>
-                <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center mb-2">
-                  <CreditCard className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <CardTitle className="font-serif text-muted-foreground">FPX Online Banking</CardTitle>
-                <CardDescription>
-                  Akan datang tidak lama lagi
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4" />
-                    <span>Pembayaran segera</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4" />
-                    <span>Support semua bank utama</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4" />
-                    <span>Aktif segera selepas bayar</span>
-                  </li>
-                </ul>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full rounded-xl" disabled>
-                  Akan Datang
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
-        ) : (
-          <ManualSubscriptionPayment
-            planName={selectedPlan.name}
-            price={selectedPlan.price}
-            onSuccess={handleManualPaymentSuccess}
-            onCancel={() => setShowManualPayment(false)}
-          />
-        )}
-      </div>
-    )
   }
 
   return (
