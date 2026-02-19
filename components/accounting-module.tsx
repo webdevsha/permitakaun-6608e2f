@@ -37,7 +37,8 @@ import {
   Settings,
   CheckCircle,
   Pencil,
-  X
+  X,
+  Search
 } from "lucide-react"
 import {
   Dialog,
@@ -88,6 +89,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // Bulk Delete State
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
 
   const [newTransaction, setNewTransaction] = useState({
@@ -577,12 +579,22 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     { value: "12", label: "Disember" },
   ]
 
+
+
   const filteredTransactions = transactions?.filter((t: any) => {
     const date = new Date(t.date)
     const monthMatch = filterMonth === "all" || (date.getMonth() + 1).toString() === filterMonth
     const typeMatch = filterType === "all" || t.type === filterType
     const statusMatch = filterStatus === "all" || t.status === filterStatus
-    return monthMatch && typeMatch && statusMatch
+
+    // Search logic
+    const searchLower = searchQuery.toLowerCase()
+    const searchMatch = !searchQuery ||
+      (t.description && t.description.toLowerCase().includes(searchLower)) ||
+      (t.category && t.category.toLowerCase().includes(searchLower)) ||
+      (t.amount && t.amount.toString().includes(searchLower))
+
+    return monthMatch && typeMatch && statusMatch && searchMatch
   }) || []
 
   const displayedTransactions = filteredTransactions.slice(0, displayLimit)

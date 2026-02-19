@@ -4,13 +4,13 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Loader2, 
-  CheckCircle, 
-  XCircle, 
-  CreditCard, 
-  Calendar, 
-  User, 
+import {
+  Loader2,
+  CheckCircle,
+  XCircle,
+  CreditCard,
+  Calendar,
+  User,
   Banknote,
   ExternalLink,
   RefreshCw,
@@ -57,7 +57,7 @@ interface SubscriptionPayment {
 
 export function AdminSubscriptionsTab() {
   const supabase = createClient()
-  
+
   const [loading, setLoading] = useState(true)
   const [payments, setPayments] = useState<SubscriptionPayment[]>([])
   const [filteredPayments, setFilteredPayments] = useState<SubscriptionPayment[]>([])
@@ -121,7 +121,7 @@ export function AdminSubscriptionsTab() {
       })
 
       setPayments(formattedPayments)
-      
+
       // Calculate stats
       const pending = formattedPayments.filter(p => p.status === 'pending').length
       const approved = formattedPayments.filter(p => p.status === 'approved').length
@@ -129,7 +129,7 @@ export function AdminSubscriptionsTab() {
       const totalAmount = formattedPayments
         .filter(p => p.status === 'approved')
         .reduce((sum, p) => sum + p.amount, 0)
-      
+
       setStats({
         total: formattedPayments.length,
         pending,
@@ -147,33 +147,33 @@ export function AdminSubscriptionsTab() {
 
   const filterPayments = () => {
     let filtered = [...payments]
-    
+
     if (statusFilter !== 'all') {
       filtered = filtered.filter(p => p.status === statusFilter)
     }
-    
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(p => 
+      filtered = filtered.filter(p =>
         (p.payer_email?.toLowerCase().includes(query)) ||
         (p.payer_name?.toLowerCase().includes(query)) ||
         (p.payment_reference?.toLowerCase().includes(query)) ||
         (p.description?.toLowerCase().includes(query))
       )
     }
-    
+
     setFilteredPayments(filtered)
   }
 
   const handleApprove = async () => {
     if (!selectedPayment) return
-    
+
     setProcessing(true)
     try {
       // 1. Update admin_transactions status
       const { error: txError } = await supabase
         .from('admin_transactions')
-        .update({ 
+        .update({
           status: 'approved',
           updated_at: new Date().toISOString()
         })
@@ -185,12 +185,12 @@ export function AdminSubscriptionsTab() {
       const metadata = selectedPayment.metadata || {}
       const userId = metadata.user_id
       const userRole = metadata.user_role || metadata.role
-      
+
       if (userId) {
         const now = new Date()
         const endDate = new Date()
         endDate.setDate(now.getDate() + 30)
-        
+
         if (userRole === 'tenant') {
           // Get tenant and update
           const { data: tenant } = await supabase
@@ -198,7 +198,7 @@ export function AdminSubscriptionsTab() {
             .select('id')
             .eq('profile_id', userId)
             .single()
-          
+
           if (tenant) {
             await supabase.from('subscriptions').insert({
               tenant_id: tenant.id,
@@ -209,7 +209,7 @@ export function AdminSubscriptionsTab() {
               amount: selectedPayment.amount,
               payment_ref: selectedPayment.payment_reference
             })
-            
+
             await supabase
               .from('tenants')
               .update({ accounting_status: 'active' })
@@ -222,11 +222,11 @@ export function AdminSubscriptionsTab() {
             .select('id')
             .eq('profile_id', userId)
             .single()
-          
+
           if (organizer) {
             await supabase
               .from('organizers')
-              .update({ 
+              .update({
                 accounting_status: 'active',
                 updated_at: now.toISOString()
               })
@@ -234,10 +234,29 @@ export function AdminSubscriptionsTab() {
           }
         }
       }
-      
+
+
       toast.success('Langganan telah diluluskan dan diaktifkan')
       setApproveDialogOpen(false)
       fetchSubscriptionPayments()
+
+      // 3. Sync status to user's transaction record
+      // This ensures the user sees "Approved" in their history
+      if (selectedPayment.payment_reference) {
+        if (userRole === 'tenant') {
+          await supabase
+            .from('tenant_transactions')
+            .update({ status: 'approved' })
+            .eq('payment_reference', selectedPayment.payment_reference)
+            .eq('category', 'Langganan')
+        } else if (userRole === 'organizer') {
+          await supabase
+            .from('organizer_transactions')
+            .update({ status: 'approved' })
+            .eq('payment_reference', selectedPayment.payment_reference)
+            .eq('category', 'Langganan')
+        }
+      }
     } catch (error: any) {
       console.error('Error approving:', error)
       toast.error('Gagal meluluskan: ' + error.message)
@@ -248,19 +267,19 @@ export function AdminSubscriptionsTab() {
 
   const handleReject = async () => {
     if (!selectedPayment) return
-    
+
     setProcessing(true)
     try {
       const { error } = await supabase
         .from('admin_transactions')
-        .update({ 
+        .update({
           status: 'rejected',
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedPayment.id)
 
       if (error) throw error
-      
+
       toast.success('Pembayaran telah ditolak')
       setRejectDialogOpen(false)
       fetchSubscriptionPayments()
@@ -428,9 +447,9 @@ export function AdminSubscriptionsTab() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         {payment.receipt_url && (
-                          <a 
-                            href={payment.receipt_url} 
-                            target="_blank" 
+                          <a
+                            href={payment.receipt_url}
+                            target="_blank"
                             rel="noopener noreferrer"
                           >
                             <Button variant="ghost" size="icon" title="Lihat Resit">
