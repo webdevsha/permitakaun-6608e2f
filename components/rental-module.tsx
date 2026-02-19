@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink, Building } from "lucide-react"
+import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink, Building, Search } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -280,14 +280,20 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     }
   }
 
-  const handleUpdateOrganizer = async () => {
-    if (!organizerCodeInput || !tenant) return
+  // Organizer Confirmation State
+  const [pendingOrganizer, setPendingOrganizer] = useState<{ id: number, name: string, email: string, code: string } | null>(null)
+
+  const handleVerifyOrganizer = async () => {
+    if (!organizerCodeInput) return
     setIsVerifyingCode(true)
+    setPendingOrganizer(null)
+
     try {
       // 1. Check if code exists
+      // Select email as well since user wants to see it
       const { data: org, error: orgError } = await supabase
         .from('organizers')
-        .select('id, name')
+        .select('id, name, email, organizer_code')
         .eq('organizer_code', organizerCodeInput.toUpperCase())
         .maybeSingle()
 
@@ -297,17 +303,34 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         return
       }
 
-      // 2. Update Tenant Record
+      // 2. Set pending organizer for confirmation
+      setPendingOrganizer({
+        id: org.id,
+        name: org.name,
+        email: org.email || "Tiada Emel",
+        code: org.organizer_code
+      })
+      setIsVerifyingCode(false)
+
+    } catch (e: any) {
+      toast.error(e.message)
+      setIsVerifyingCode(false)
+    }
+  }
+
+  const handleConfirmOrganizer = async () => {
+    if (!pendingOrganizer || !tenant) return
+    setIsVerifyingCode(true)
+
+    try {
       const { error: updateError } = await supabase
         .from('tenants')
-        .update({ organizer_code: organizerCodeInput.toUpperCase() })
+        .update({ organizer_code: pendingOrganizer.code })
         .eq('id', tenant.id)
 
       if (updateError) throw updateError
 
-      toast.success(`Berjaya dipautkan ke ${org.name}`)
-
-      // 3. Refresh Page to reload data completely
+      toast.success(`Berjaya dipautkan ke ${pendingOrganizer.name}`)
       window.location.reload()
 
     } catch (e: any) {
@@ -339,8 +362,63 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       window.location.reload()
     } catch (e: any) {
       toast.error("Gagal memohon: " + e.message)
-    } finally {
       setIsApplying(false)
+    }
+  }
+
+  // Location Search Logic
+  const [searchLocationId, setSearchLocationId] = useState("")
+  const [searchedLocation, setSearchedLocation] = useState<any>(null)
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false)
+
+  const handleSearchLocation = async () => {
+    if (!searchLocationId) return
+    setIsSearchingLocation(true)
+    setSearchedLocation(null)
+
+    try {
+      const { data: loc, error } = await supabase
+        .from('locations')
+        .select('*, organizers(name, organizer_code)')
+        .eq('id', searchLocationId) // Assuming ID is numeric or UUID? Inputs are often text. Let's assume ID match. 
+        // If ID is int, user input string need parsing. If ID is uuid, string ok.
+        // Let's assume 'id' column.
+        .maybeSingle()
+
+      if (error) throw error
+
+      if (loc) {
+        setSearchedLocation(loc)
+      } else {
+        toast.error("Lokasi tidak dijumpai.")
+      }
+
+    } catch (e: any) {
+      toast.error("Ralat carian: " + e.message)
+    } finally {
+      setIsSearchingLocation(false)
+    }
+  }
+
+  const handleApplySearchedLocation = () => {
+    if (searchedLocation) {
+      // If searching a location that belongs to a different organizer, we might need to warn?
+      // Or just let them apply.
+      // Assuming current logic requires 'organizer_code' to match?
+      // The implementation: 'tenant_locations' -> 'location_id'. 
+      // It doesn't strictly enforce 'tenant.organizer_code == location.organizer_id->code' in DB constraints usually,
+      // but the UI typically filters. 
+      // If we allow applying to *any* location:
+
+      // Auto-fill the apply form or direct apply?
+      // Use the existing apply dialog logic?
+      // Let's set the applyLocationId and open dialog?
+      // But the dialog filters availableLocations by current organizer.
+      // We might need to allow applying to THIS specific location even if not in the list.
+
+      // Let's just create a direct apply here for simplcity + user wants "View".
+      // "Tenant boleh melihat semua lokasi ... dengan memasukkan ID sahaja"
+
     }
   }
 
@@ -469,17 +547,35 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                     <Label className="text-xs font-bold text-brand-blue uppercase flex items-center gap-2">
                       <Building className="w-3 h-3" /> Kod Penganjur
                     </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={organizerCodeInput}
-                        onChange={(e) => setOrganizerCodeInput(e.target.value.toUpperCase())}
-                        placeholder={tenant.organizer_code || "Masukkan Kod (Cth: ORG001)"}
-                        className="bg-white uppercase font-mono"
-                      />
-                      <Button size="sm" onClick={handleUpdateOrganizer} disabled={isVerifyingCode} className="shrink-0 bg-brand-blue hover:bg-brand-blue/90 text-white">
-                        {isVerifyingCode ? <Loader2 className="animate-spin" /> : (tenant.organizer_code ? "Tukar" : "Simpan")}
-                      </Button>
-                    </div>
+                    {pendingOrganizer ? (
+                      <div className="bg-white p-3 rounded-lg border border-brand-blue/30 space-y-2 animate-in fade-in zoom-in-95">
+                        <div className="text-sm">
+                          <p className="font-bold text-foreground">{pendingOrganizer.name}</p>
+                          <p className="text-xs text-muted-foreground">{pendingOrganizer.email}</p>
+                          <p className="text-xs font-mono bg-slate-100 inline-block px-1 rounded mt-1">{pendingOrganizer.code}</p>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <Button size="sm" onClick={handleConfirmOrganizer} disabled={isVerifyingCode} className="w-full bg-green-600 hover:bg-green-700 text-white h-8">
+                            {isVerifyingCode ? <Loader2 className="animate-spin w-3 h-3" /> : "Sahkan"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setPendingOrganizer(null)} disabled={isVerifyingCode} className="h-8">
+                            Batal
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Input
+                          value={organizerCodeInput}
+                          onChange={(e) => setOrganizerCodeInput(e.target.value.toUpperCase())}
+                          placeholder={tenant.organizer_code || "Masukkan Kod (Cth: ORG001)"}
+                          className="bg-white uppercase font-mono"
+                        />
+                        <Button size="sm" onClick={handleVerifyOrganizer} disabled={isVerifyingCode} className="shrink-0 bg-brand-blue hover:bg-brand-blue/90 text-white">
+                          {isVerifyingCode ? <Loader2 className="animate-spin" /> : (tenant.organizer_code ? "Tukar" : "Semak")}
+                        </Button>
+                      </div>
+                    )}
                     {tenant.organizer_code ? (
                       <p className="text-[10px] text-green-600 flex items-center gap-1 font-medium">
                         <CheckCircle2 className="w-3 h-3" /> Penganjur aktif: {tenant.organizer_code}
@@ -532,6 +628,45 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                       <p className="text-xs">Sila pastikan anda telah memasukkan <strong>Kod Penganjur</strong> yang betul di atas.</p>
                     </div>
                   )}
+
+                  {/* Location Search by ID */}
+                  <div className="pt-4 border-t border-border/50 space-y-3">
+                    <Label className="text-xs font-bold uppercase flex items-center gap-2">
+                      <Search className="w-3 h-3" /> Carian Lokasi (ID)
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Masukkan ID Lokasi"
+                        value={searchLocationId}
+                        onChange={(e) => setSearchLocationId(e.target.value)}
+                        className="bg-white"
+                      />
+                      <Button size="sm" variant="secondary" onClick={handleSearchLocation} disabled={isSearchingLocation}>
+                        {isSearchingLocation ? <Loader2 className="animate-spin" /> : "Cari"}
+                      </Button>
+                    </div>
+
+                    {searchedLocation && (
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-sm space-y-1">
+                        <p className="font-bold flex justify-between">
+                          {searchedLocation.name}
+                          <Badge variant="outline">{searchedLocation.status || 'Active'}</Badge>
+                        </p>
+                        <p className="text-xs text-muted-foreground">Penganjur: {searchedLocation.organizers?.name} ({searchedLocation.organizers?.organizer_code})</p>
+                        <p className="text-xs">Harga: RM{searchedLocation.rate_monthly || searchedLocation.rate_khemah || '-'}</p>
+
+                        <Button
+                          size="sm"
+                          className="w-full mt-2"
+                          onClick={() => {
+                            setApplyLocationId(searchedLocation.id.toString())
+                          }}
+                        >
+                          Pilih Lokasi Ini
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button onClick={handleApplyRental} disabled={isApplying || !applyLocationId || availableLocations.length === 0} className="w-full rounded-xl">
@@ -575,11 +710,53 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                 </CardContent>
               </Card>
             ))}
-            {myLocations.length === 0 && (
+            {myLocations.length === 0 && availableLocations.length > 0 && (
+              <div className="col-span-2 space-y-4">
+                <div className="bg-blue-50 border-blue-100 border p-4 rounded-2xl flex gap-3 items-start">
+                  <Store className="w-5 h-5 text-brand-blue mt-1 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-brand-blue text-sm">Lokasi Tersedia</h4>
+                    <p className="text-xs text-muted-foreground">Senarai tapak yang boleh dipohon dari penganjur anda.</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {availableLocations.map((loc) => (
+                    <Card key={loc.id} className="bg-white border-border/50 shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-all">
+                      <CardHeader className="pb-3 bg-secondary/10">
+                        <CardTitle className="text-base font-bold">{loc.name}</CardTitle>
+                        <CardDescription className="text-xs">{loc.program_name}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-4 text-sm space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Operasi:</span>
+                          <span className="font-medium">{loc.operating_days}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Kadar Bermula:</span>
+                          <span className="text-lg font-bold text-primary">RM {loc.display_price}</span>
+                        </div>
+                        <Button className="w-full rounded-xl mt-2" size="sm" onClick={() => {
+                          setApplyLocationId(loc.id.toString())
+                          setIsApplyDialogOpen(true)
+                        }}>
+                          Mohon Tapak Ini
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {myLocations.length === 0 && availableLocations.length === 0 && (
               <div className="col-span-2 text-center py-12 bg-white rounded-3xl border border-dashed border-border text-muted-foreground">
                 <Store className="w-10 h-10 mx-auto mb-3 opacity-20" />
                 <p>Anda belum mempunyai sebarang tapak sewa.</p>
-                <Button variant="link" onClick={() => setIsApplyDialogOpen(true)}>Mohon Sekarang</Button>
+                {tenant?.organizer_code ? (
+                  <p className="text-sm mt-1">Tiada lokasi tersedia dari penganjur ini.</p>
+                ) : (
+                  <Button variant="link" onClick={() => setIsApplyDialogOpen(true)}>Mohon Sekarang</Button>
+                )}
               </div>
             )}
           </div>

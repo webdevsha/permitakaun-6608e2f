@@ -4,12 +4,12 @@ import { unstable_cache } from 'next/cache'
 
 // Timeout wrapper to prevent infinite hangs
 async function withTimeout<T>(
-    queryFn: () => Promise<T>,
+    queryFn: () => PromiseLike<T>,
     ms: number,
     context: string
 ): Promise<T> {
     return Promise.race([
-        queryFn(),
+        queryFn() as Promise<T>,
         new Promise<T>((_, reject) =>
             setTimeout(() => reject(new Error(`Timeout: ${context} took longer than ${ms}ms`)), ms)
         )
@@ -319,6 +319,44 @@ async function fetchDashboardDataInternal(
                 } catch (e) {
                     console.error('[Dashboard] Error fetching tenant transactions:', e)
                     transactions = []
+                }
+
+                // Fetch Available Locations for this Tenant (based on Organizer Code)
+                if (tenantData.organizer_code) {
+                    try {
+                        // Find organizer first
+                        const { data: org } = await supabase
+                            .from('organizers')
+                            .select('id')
+                            .eq('organizer_code', tenantData.organizer_code)
+                            .maybeSingle()
+
+                        console.log(`[Dashboard] Tenant Organizer Code: ${tenantData.organizer_code}, Found Org ID: ${org?.id}`)
+
+                        if (org) {
+                            const { data: availLocs } = await withTimeout(
+                                () => supabase
+                                    .from('locations')
+                                    .select('*')
+                                    .eq('organizer_id', org.id)
+                                    .eq('status', 'active') // Only show active locations
+                                    .order('name'),
+                                3000,
+                                'available active locations'
+                            )
+
+                            if (!availLocs) console.log('[Dashboard] availLocs is null/undefined')
+                            else console.log(`[Dashboard] Fetched ${availLocs.length} available locations for org ${org.id}`)
+
+                            availableLocations = (availLocs || []).map((l: any) => ({
+                                ...l,
+                                display_price: l.rate_monthly || l.rate_khemah || 0,
+                                operating_days: l.operating_days || 'Setiap Hari'
+                            }))
+                        }
+                    } catch (e) {
+                        console.error('[Dashboard] Error fetching available locations:', e)
+                    }
                 }
             }
         }
