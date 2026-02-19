@@ -329,7 +329,7 @@ export function SubscriptionTab() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Bayaran Kepada:</p>
-              <p className="font-medium">Hazman (admin@kumim.my)</p>
+              <p className="font-medium">admin@kumim.my</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Kekerapan:</p>
@@ -337,7 +337,7 @@ export function SubscriptionTab() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Kaedah Bayaran:</p>
-              <p className="font-medium">Billplz (Online Banking)</p>
+              <p className="font-medium">Online Banking</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Status Semasa:</p>
