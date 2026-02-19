@@ -60,6 +60,8 @@ export function SubscriptionTab() {
       // This shows what THEY paid for their subscription
       let userPayments: any[] = []
 
+      console.log('Fetching subscription data for:', user.id, role)
+
       if (role === 'tenant') {
         const { data: tenant } = await supabase
           .from('tenants')
@@ -101,6 +103,47 @@ export function SubscriptionTab() {
           }
         }
       }
+
+      // 2. Fallback: Fetch from 'subscriptions' table (Guaranteed record for approved subscriptions)
+      // This ensures we show history even if tenant_transactions wasn't synced
+      let subscriptionRecords: any[] = []
+      if (role === 'tenant') {
+        const { data: tenant } = await supabase.from('tenants').select('id').eq('profile_id', user.id).single()
+        if (tenant) {
+          const { data: subs } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('tenant_id', tenant.id)
+            .order('created_at', { ascending: false })
+
+          if (subs) {
+            subscriptionRecords = subs.map((s: any) => ({
+              id: s.id, // Use string/number compatible ID
+              amount: s.amount,
+              date: s.start_date || s.created_at,
+              status: s.status === 'active' ? 'approved' : s.status, // Map status
+              description: `Langganan Pelan ${s.plan_type ? s.plan_type.charAt(0).toUpperCase() + s.plan_type.slice(1) : 'Basic'}`,
+              receipt_url: null, // table doesn't have receipt_url
+              payment_reference: s.payment_ref,
+              created_at: s.created_at,
+              is_subscription_record: true // Flag to identify source
+            }))
+          }
+        }
+      }
+
+      // Merge records: Prefer tenantTxns (has receipt), add missing from subscriptionRecords
+      const txMap = new Map()
+      userPayments.forEach(p => txMap.set(p.payment_reference, p))
+
+      subscriptionRecords.forEach(s => {
+        if (s.payment_reference && !txMap.has(s.payment_reference)) {
+          userPayments.push(s)
+        }
+      })
+
+      // Re-sort by date
+      userPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
       // Map user payments to subscription records
       if (userPayments.length > 0) {
