@@ -388,13 +388,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const statusFilter = isTenantRole ? ['approved', 'pending'] : ['approved']
 
   // 1. Paid Up Capital (Modal)
+  // Updated to include new capital terms
+  const capitalCategories = ['Modal', 'Modal Berbayar', 'Modal Pinjaman']
   const totalCapital = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && t.category === 'Modal')
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && capitalCategories.includes(t.category))
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
   // 2. Operating Revenue (Income excluding Modal, including negative amounts/cash out)
   const operatingRevenue = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && t.category !== 'Modal')
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && !capitalCategories.includes(t.category))
     .reduce((sum: number, t: any) => {
       const amount = Number(t.amount)
       // Include both positive income and negative amounts (cash out/refunds)
@@ -412,17 +414,88 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // 5. Cash Balance (Total Cash In - Total Cash Out)
   const cashBalance = (totalCapital + operatingRevenue) - totalExpenses
 
+  // DETAILED REPORTING CALCULATIONS
+
+  // Cash In By Category
+  const cashInByCategory = perspectiveTransactions
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status))
+    .reduce((acc: any, t: any) => {
+      const cat = t.category || "Lain-lain"
+      acc[cat] = (acc[cat] || 0) + Number(t.amount)
+      return acc
+    }, {}) || {}
+
+  // Cash Out By Category
+  const cashOutByCategory = perspectiveTransactions
+    ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status))
+    .reduce((acc: any, t: any) => {
+      const cat = t.category || "Lain-lain"
+      acc[cat] = (acc[cat] || 0) + Number(t.amount)
+      return acc
+    }, {}) || {}
+
+  // Liabilites (Tax & Zakat Payable from 7-Tabung)
+  // Assuming these are accrued liabilities until paid out
+  const taxPayable = operatingRevenue * (percentages.tax / 100)
+  const zakatPayable = operatingRevenue * (percentages.zakat / 100)
+  const totalLiabilities = taxPayable + zakatPayable
+
+  // Assets Detailed
+  // Current Assets = Cash Balance
+  // Fixed Assets = 0 (for now, unless we add a specific category/tracking for this later)
+  const currentAssets = cashBalance
+  const fixedAssets = 0
+  const totalAssets = currentAssets + fixedAssets
+
+  // Equity Detailed
+  // Owner's Equity (Capital) + Retained Earnings (Net Profit)
+  // Note: Accounting Equation: Assets = Liabilities + Equity
+  // cashBalance = (Capital + Revenue - Expense)
+  // Equity = Assets - Liabilities
+  // Equity = (Capital + Revenue - Expense) - (Tax + Zakat) ?? 
+  // Simplified for Small Business: Equity = Capital + Net Profit
+  // However, if we treat Tax/Zakat as liability, it reduces Equity (Retained Earnings)
+
+  // Let's stick to the basic equation for the report to balance:
+  // Assets (Cash) = Liabilities (Tax/Zakat) + Equity (Capital + Retained Earnings Adjusted)
+  // Start with: Total Assets = Cash Balance
+  // Total Liabilities = Tax + Zakat (Allocated)
+  // Total Equity = Total Assets - Total Liabilities
+
+  const calculatedEquity = totalAssets - totalLiabilities
+
   // 7-TABUNG ALLOCATION (Based on Operating Revenue)
+
+  // Calculate expenses by tabung linkage
+  // Default: Operating
+  const zakaatCategories = ['Zakat']
+  const investmentCategories = ['Kelengkapan Pejabat', 'Aset / Investment', 'Aset / Propaty', 'Bangunan', 'Kenderaan', 'Alatan Mesin', 'Hartanah', 'Saham']
+
+  // Expenses linked to Investment Fund
+  const investmentExpenses = perspectiveTransactions
+    ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && investmentCategories.includes(t.category))
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+
+  // Expenses linked to Zakat Fund
+  const zakatExpenses = perspectiveTransactions
+    ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && zakaatCategories.includes(t.category))
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+
+  // All other expenses go to Operating (Perbelanjaan Syarikat)
+  // Total Expenses - Investment Expenses - Zakat Expenses
+  const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
+
   const accounts = [
     {
-      name: "Operating Account",
+      name: "Perbelanjaan Syarikat",
       percent: `${percentages.operating}%`,
-      amount: operatingRevenue * (percentages.operating / 100),
+      // Logic: (Revenue * %) + Capital - Operating Expenses
+      amount: (operatingRevenue * (percentages.operating / 100)) + totalCapital - operatingExpenses,
       color: "bg-brand-blue/10 text-brand-blue border-brand-blue/20",
       icon: Wallet,
       tag: "Actionable",
       bankKey: "operating",
-      bankLabel: "Operating"
+      bankLabel: "Operating Account"
     },
     {
       name: "Tax",
@@ -437,7 +510,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Zakat",
       percent: `${percentages.zakat}%`,
-      amount: operatingRevenue * (percentages.zakat / 100),
+      // Logic: (Revenue * %) - Zakat Expenses
+      amount: (operatingRevenue * (percentages.zakat / 100)) - zakatExpenses,
       color: "bg-brand-green/10 text-brand-green border-brand-green/20",
       icon: Heart,
       tag: "Do Not Touch",
@@ -447,10 +521,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Investment",
       percent: `${percentages.investment}%`,
-      amount: operatingRevenue * (percentages.investment / 100),
+      // Logic: (Revenue * %) - Investment Expenses
+      amount: (operatingRevenue * (percentages.investment / 100)) - investmentExpenses,
       color: "bg-blue-50 text-blue-600 border-blue-100",
       icon: TrendingUp,
-      tag: "Growth",
+      tag: "(Aset / Property)",
       bankKey: "investment",
       bankLabel: "Pelaburan"
     },
@@ -460,7 +535,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.dividend / 100),
       color: "bg-indigo-50 text-indigo-600 border-indigo-100",
       icon: Landmark,
-      tag: "Growth",
+      tag: "(For Share Holder Company)",
       bankKey: "dividend",
       bankLabel: "Dividen"
     },
@@ -470,7 +545,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: operatingRevenue * (percentages.savings / 100),
       color: "bg-purple-50 text-purple-600 border-purple-100",
       icon: PiggyBank,
-      tag: "Growth",
+      tag: "(Duplicate your Bisnes)",
       bankKey: "savings",
       bankLabel: "Simpanan"
     },
@@ -907,7 +982,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="income">Cash In</SelectItem>
-                        <SelectItem value="expense">Cash Out</SelectItem>
+                        <SelectItem value="expense">Perbelanjaan (-)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -935,18 +1010,34 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     <SelectContent>
                       {newTransaction.type === 'income' ? (
                         <>
-                          <SelectItem value="Modal">Modal (Capital)</SelectItem>
                           <SelectItem value="Jualan">Jualan</SelectItem>
                           <SelectItem value="Servis">Servis</SelectItem>
+                          <SelectItem value="Modal">Modal (Capital)</SelectItem>
+                          <SelectItem value="Modal Berbayar">Modal Berbayar</SelectItem>
+                          <SelectItem value="Modal Pinjaman">Modal Pinjaman</SelectItem>
                           <SelectItem value="Lain-lain">Lain-lain</SelectItem>
                         </>
                       ) : (
                         <>
                           <SelectItem value="Operasi">Operasi</SelectItem>
+                          <SelectItem value="Gaji & Upah">Gaji & Upah</SelectItem>
+                          <SelectItem value="Gaji">Gaji</SelectItem>
                           <SelectItem value="Sewa">Sewa</SelectItem>
                           <SelectItem value="Bil">Bil</SelectItem>
                           <SelectItem value="Marketing">Marketing</SelectItem>
-                          <SelectItem value="Gaji">Gaji</SelectItem>
+                          <SelectItem value="Komisyen">Komisyen</SelectItem>
+                          <SelectItem value="Pengangkutan">Pengangkutan</SelectItem>
+                          <SelectItem value="Pembungkusan">Pembungkusan</SelectItem>
+                          <SelectItem value="Lesen & Permit">Lesen & Permit</SelectItem>
+                          <SelectItem value="Latihan">Latihan</SelectItem>
+                          <SelectItem value="Fotostat">Fotostat</SelectItem>
+                          <SelectItem value="Alat Tulis">Alat Tulis</SelectItem>
+                          <SelectItem value="KWSP">KWSP</SelectItem>
+                          <SelectItem value="EPF">EPF</SelectItem>
+                          <SelectItem value="Tunai di Bank">Tunai di Bank</SelectItem>
+                          <SelectItem value="Zakat">Zakat</SelectItem>
+                          <SelectItem value="Kelengkapan Pejabat">Kelengkapan Pejabat (Asset)</SelectItem>
+                          <SelectItem value="Aset / Investment">Aset / Investment</SelectItem>
                           <SelectItem value="Lain-lain">Lain-lain</SelectItem>
                         </>
                       )}
@@ -1104,7 +1195,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
                         {/* Operating */}
                         <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Operating</Label>
+                          <Label className="col-span-3 text-sm">Perbelanjaan Syarikat</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.operating} onChange={(e) => setBankNames({ ...bankNames, operating: e.target.value })} placeholder="Contoh: Maybank Business" />
                         </div>
@@ -1211,6 +1302,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               {bankName}
                             </p>
                           )}
+                          {/* Special subtitle for Operating Account */}
+                          {acc.bankKey === 'operating' && (
+                            <p className="text-[10px] text-muted-foreground/80 mt-0.5 font-medium">(Operating Account)</p>
+                          )}
                           <p className="text-[10px] text-muted-foreground/60 italic mt-0.5">
                             {acc.tag}
                           </p>
@@ -1269,7 +1364,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <SelectContent>
                         <SelectItem value="all">Semua Jenis</SelectItem>
                         <SelectItem value="income">Masuk (+)</SelectItem>
-                        <SelectItem value="expense">Keluar (-)</SelectItem>
+                        <SelectItem value="expense">Perbelanjaan (-)</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -1520,7 +1615,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
             {/* Cash Flow Statement */}
             <Card className="bg-white border-border/50 shadow-sm rounded-[2rem] overflow-hidden">
-              <CardHeader className="bg-emerald-50/50 border-b border-emerald-100/50 pb-6">
+              <CardHeader className="bg-emerald-50/50 border-b border-emerald-100/50 pb-6 print:hidden">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-serif text-2xl text-emerald-900">Penyata Aliran Tunai</CardTitle>
@@ -1529,12 +1624,27 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       {isTenantRole && <span className="block text-xs mt-1 text-emerald-600/70">* Termasuk transaksi yang belum disahkan</span>}
                     </CardDescription>
                   </div>
-                  <div className="p-3 bg-white rounded-xl shadow-sm">
-                    <ArrowUpRight className="w-6 h-6 text-emerald-600" />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
+                      onClick={() => window.print()}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Cetak / Simpan PDF
+                    </Button>
+                    <div className="p-3 bg-white rounded-xl shadow-sm">
+                      <ArrowUpRight className="w-6 h-6 text-emerald-600" />
+                    </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
+                {/* Print Header */}
+                <div className="hidden print:block p-8 pb-0 text-center">
+                  <h1 className="text-2xl font-serif font-bold mb-2">Penyata Aliran Tunai</h1>
+                  <p className="text-muted-foreground text-sm">{new Date().toLocaleDateString('ms-MY', { year: 'numeric', month: 'long' })}</p>
+                </div>
                 <Table>
                   <TableBody>
                     {/* Cash Inflow */}
@@ -1543,13 +1653,27 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <TableCell></TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Jualan & Operasi</TableCell>
-                      <TableCell className="text-right pr-10 font-mono">
+                      <TableCell className="pl-10 font-medium text-emerald-700">Jumlah Jualan & Operasi</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-emerald-700">
+                        {/* Sum of all income categories except Modal */}
                         RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
-                    <TableRow>
-                      <TableCell className="pl-10">Modal & Pembiayaan</TableCell>
+                    {/* Detailed Income Rows */}
+                    {Object.entries(cashInByCategory).map(([cat, amount]: [string, any]) => {
+                      if (cat === 'Modal') return null; // Skip Modal, shown separately
+                      return (
+                        <TableRow key={cat} className="hover:bg-transparent border-0 h-8">
+                          <TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell>
+                          <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">
+                            {Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+
+                    <TableRow className="border-t border-dashed">
+                      <TableCell className="pl-10 font-medium">Modal & Pembiayaan</TableCell>
                       <TableCell className="text-right pr-10 font-mono">
                         RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
@@ -1567,11 +1691,20 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <TableCell></TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Perbelanjaan Operasi</TableCell>
-                      <TableCell className="text-right pr-10 font-mono text-red-500">
+                      <TableCell className="pl-10 font-medium text-red-600">Jumlah Perbelanjaan</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-red-500">
                         (RM {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})
                       </TableCell>
                     </TableRow>
+                    {/* Detailed Expense Rows */}
+                    {Object.entries(cashOutByCategory).map(([cat, amount]: [string, any]) => (
+                      <TableRow key={cat} className="hover:bg-transparent border-0 h-8">
+                        <TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell>
+                        <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">
+                          ({Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                        </TableCell>
+                      </TableRow>
+                    ))}
 
                     {/* Net Flow */}
                     <TableRow className="bg-emerald-900 text-white hover:bg-emerald-900/90">
@@ -1607,21 +1740,51 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <TableCell></TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Tunai di Tangan / Bank</TableCell>
+                      <TableCell className="pl-10">Aset Semasa (Tunai di Tangan/Bank)</TableCell>
                       <TableCell className="text-right pr-10 font-mono">
-                        RM {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        RM {currentAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
-                    <TableRow className="border-t">
-                      <TableCell className="pl-6 font-bold">Jumlah Aset</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-blue-600">
-                        RM {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <TableRow>
+                      <TableCell className="pl-10">Aset Tetap (Fixed Assets)</TableCell>
+                      <TableCell className="text-right pr-10 font-mono">
+                        RM {fixedAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="border-t bg-blue-50/30">
+                      <TableCell className="pl-6 font-bold text-blue-900">Jumlah Aset</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-blue-900">
+                        RM {totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
 
-                    {/* Equity & Liabilities */}
+                    {/* Liabiliti */}
                     <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Ekuiti & Liabiliti</TableCell>
+                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Liabiliti (Liabilities)</TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-10">Cukai Belum Bayar (Accrued Tax)</TableCell>
+                      <TableCell className="text-right pr-10 font-mono text-orange-600">
+                        RM {taxPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-10">Zakat Belum Bayar (Accrued Zakat)</TableCell>
+                      <TableCell className="text-right pr-10 font-mono text-orange-600">
+                        RM {zakatPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="border-t bg-orange-50/30">
+                      <TableCell className="pl-6 font-bold text-orange-900">Jumlah Liabiliti</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-orange-900">
+                        RM {totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Equity */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Ekuiti Pemilik (Owner's Equity)</TableCell>
                       <TableCell></TableCell>
                     </TableRow>
                     <TableRow>
@@ -1631,15 +1794,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Untung Bersih (Retained Earnings)</TableCell>
-                      <TableCell className={cn("text-right pr-10 font-mono", netProfit < 0 ? "text-red-500" : "text-emerald-600")}>
-                        {netProfit < 0 ? `(RM ${Math.abs(netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      <TableCell className="pl-10">Untung Bersih Terkumpul (Retained Earnings)</TableCell>
+                      <TableCell className={cn("text-right pr-10 font-mono", (calculatedEquity - totalCapital) < 0 ? "text-red-500" : "text-emerald-600")}>
+                        RM {(calculatedEquity - totalCapital).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
-                    <TableRow className="bg-slate-900 text-white hover:bg-slate-900/90">
-                      <TableCell className="pl-6 py-6 font-bold text-lg">Jumlah Ekuiti</TableCell>
+                    <TableRow className="bg-slate-900 text-white hover:bg-slate-900/90 print:bg-black/90">
+                      <TableCell className="pl-6 py-6 font-bold text-lg">Jumlah Ekuiti & Liabiliti</TableCell>
                       <TableCell className="text-right pr-10 font-bold text-xl font-mono">
-                        RM {(totalCapital + netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        RM {(totalLiabilities + calculatedEquity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
                   </TableBody>

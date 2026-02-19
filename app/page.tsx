@@ -113,6 +113,31 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Banner Section */}
+      <section className="py-8 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-border/50 group">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10" />
+            <img
+              src="/landing-banner.jpeg"
+              alt="Permit Akaun Banner"
+              className="w-full h-[300px] md:h-[400px] lg:h-[500px] object-cover transform group-hover:scale-105 transition-transform duration-700"
+            />
+            <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12 z-20 text-white">
+              <div className="max-w-3xl">
+                <Badge className="bg-brand-blue text-white hover:bg-brand-blue/90 mb-4 border-none text-sm px-3 py-1">
+                  Revolusi Digital
+                </Badge>
+                <h3 className="text-2xl md:text-4xl font-serif font-bold mb-4 leading-tight">
+                  Tinggalkan cara lama. <br />
+                  <span className="text-brand-green">Mulakan era digital perniagaan anda.</span>
+                </h3>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="py-24">
         <div className="container mx-auto px-4">
