@@ -20,8 +20,18 @@ async function checkAccessServer(user: any, role: string) {
             .select('accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
-        
+
         if (organizer?.accounting_status === 'active') {
+            return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+        }
+    } else if (role === 'tenant') {
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('accounting_status')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+
+        if (tenant?.accounting_status === 'active') {
             return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
         }
     }
@@ -39,7 +49,7 @@ async function checkAccessServer(user: any, role: string) {
         .select('created_at')
         .eq('id', user.id)
         .single()
-    
+
     const createdAt = new Date(profile?.created_at || user.created_at).getTime()
     const now = Date.now()
     const diffDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24))
@@ -58,7 +68,7 @@ export const revalidate = 0
 export default async function SubscriptionPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
         return (
             <div className="container mx-auto py-10">
@@ -66,18 +76,18 @@ export default async function SubscriptionPage() {
             </div>
         )
     }
-    
+
     const { data: profile } = await supabase
         .from('profiles')
         .select('role, organizer_code, full_name, email')
         .eq('id', user.id)
         .single()
-    
+
     const role = determineUserRole(profile, user.email)
-    
+
     // Check access status (server-side version)
     const access = await checkAccessServer(user, role)
-    
+
     const isExpired = access.reason === 'expired'
 
     return (
@@ -92,7 +102,7 @@ export default async function SubscriptionPage() {
                     </AlertDescription>
                 </Alert>
             )}
-            
+
             <SubscriptionPlans />
         </div>
     )

@@ -275,7 +275,7 @@ export function SubscriptionTab() {
                   <TableHead>Pelan</TableHead>
                   <TableHead>Jumlah</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Resit</TableHead>
+                  <TableHead className="text-right">Tindakan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -298,14 +298,16 @@ export function SubscriptionTab() {
                     </TableCell>
                     <TableCell className="text-right">
                       {sub.receipt_url ? (
-                        <a
-                          href={sub.receipt_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm"
-                        >
-                          Lihat Resit
-                        </a>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a
+                            href={sub.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:text-primary/80"
+                          >
+                            Lihat Resit
+                          </a>
+                        </Button>
                       ) : (
                         <span className="text-muted-foreground text-sm">-</span>
                       )}

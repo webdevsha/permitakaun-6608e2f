@@ -26,8 +26,8 @@ const getCachedDashboardData = unstable_cache(
 )
 
 async function fetchDashboardDataInternal(
-    userId: string, 
-    role: string, 
+    userId: string,
+    role: string,
     email: string,
     profileOrganizerCode: string | null
 ) {
@@ -95,7 +95,7 @@ async function fetchDashboardDataInternal(
                 }
 
                 const { data: t, error } = await withTimeout(() => tQuery, 5000, 'tenants query')
-                
+
                 if (error) throw error
 
                 // Get organizer name map
@@ -142,7 +142,7 @@ async function fetchDashboardDataInternal(
 
                 const { data: tx, error } = await withTimeout(() => txQuery, 5000, 'organizer transactions query')
                 if (error) throw error
-                
+
                 transactions = (tx || []).map(t => ({
                     ...t,
                     table_source: 'organizer_transactions'
@@ -163,9 +163,9 @@ async function fetchDashboardDataInternal(
                     5000,
                     'admin transactions query'
                 )
-                
+
                 if (adminError) throw adminError
-                
+
                 // Add admin transactions (Langganan) to the transactions list
                 const formattedAdminTx = (adminTx || []).map(t => ({
                     ...t,
@@ -173,7 +173,7 @@ async function fetchDashboardDataInternal(
                     // Ensure consistent structure with organizer_transactions
                     tenants: null
                 }))
-                
+
                 // Combine and sort by date (newest first)
                 transactions = [...transactions, ...formattedAdminTx]
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -328,7 +328,7 @@ async function fetchDashboardDataInternal(
 
     // Calculate overdue tenants
     const overdueTenants: any[] = []
-    
+
     return {
         transactions,
         tenants,
@@ -470,7 +470,19 @@ export async function fetchSettingsData() {
                 'admin profile'
             )
             if (admin) {
-                profile = { ...profile, id: admin.id, business_name: admin.full_name, organizer_code: admin.organizer_code }
+                profile = {
+                    ...profile,
+                    id: admin.id,
+                    // Use explicit business_name column if available, fallback to full_name for backward compatibility or if using as label
+                    business_name: admin.business_name || admin.full_name,
+                    organizer_code: admin.organizer_code,
+                    phone_number: admin.phone_number,
+                    address: admin.address,
+                    ssm_number: admin.ssm_number,
+                    bank_name: admin.bank_name,
+                    bank_account_number: admin.bank_account_number,
+                    bank_account_holder: admin.bank_account_holder
+                }
             }
         } else if (role === 'staff') {
             const { data: staff } = await withTimeout(

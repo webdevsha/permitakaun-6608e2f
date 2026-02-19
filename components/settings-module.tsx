@@ -186,7 +186,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     phone: initialProfile?.phone_number || "",
     ssmNumber: initialProfile?.ssm_number || "",
     icNumber: initialProfile?.ic_number || "",
-    address: initialProfile?.address || ""
+    address: initialProfile?.address || "",
+    bankName: initialProfile?.bank_name || "",
+    bankAccountNumber: initialProfile?.bank_account_number || "",
+    bankAccountHolder: initialProfile?.bank_account_holder || ""
   })
 
   const [files, setFiles] = useState<{
@@ -718,9 +721,18 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         }
       }
       else if (role === 'admin') {
-        // Admins might only need full_name updated in admins table if it exists there
+        const payload = {
+          full_name: formData.fullName,
+          business_name: formData.businessName || null,
+          phone_number: formData.phone || null,
+          address: formData.address || null,
+          ssm_number: formData.ssmNumber || null,
+          bank_name: formData.bankName || null,
+          bank_account_number: formData.bankAccountNumber || null,
+          bank_account_holder: formData.bankAccountHolder || null
+        }
         if (entityId) {
-          const { error } = await supabase.from('admins').update({ full_name: formData.fullName }).eq('id', entityId)
+          const { error } = await supabase.from('admins').update(payload).eq('id', entityId)
           if (error) throw error
         }
       }
@@ -896,28 +908,51 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {(role === 'tenant' || role === 'organizer') && (
+                  {(role === 'tenant' || role === 'organizer' || role === 'admin') && (
                     <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
                   )}
-                  {(role === 'tenant' || role === 'organizer') && (
+                  {(role === 'tenant' || role === 'organizer' || role === 'admin') && (
                     <DataField label="Nama Perniagaan / Syarikat" value={formData.businessName} field="businessName" isEditing={isEditing} onChange={handleInputChange} />
                   )}
                 </div>
 
-                {role === 'tenant' && (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DataField label="No. Kad Pengenalan" value={formData.icNumber} field="icNumber" placeholder="Contoh: 880101-14-1234" isEditing={isEditing} onChange={handleInputChange} />
-                      <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {(role === 'tenant' || role === 'admin') && (
+                    <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
+                  )}
+                  {role === 'tenant' && (
+                    <DataField label="No. Kad Pengenalan" value={formData.icNumber} field="icNumber" placeholder="Contoh: 880101-14-1234" isEditing={isEditing} onChange={handleInputChange} />
+                  )}
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
-                    </div>
-                  </>
+                {(role === 'tenant' || role === 'admin') && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
+                  </div>
                 )}
               </CardContent>
             </Card>
+
+            {/* Bank Details Card (Admin Only) */}
+            {role === 'admin' && (
+              <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-primary font-serif flex items-center gap-2">
+                    <CreditCard className="w-5 h-5" /> Maklumat Bank
+                  </CardTitle>
+                  <CardDescription>Butiran akaun bank untuk urusan rasmi</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <DataField label="Nama Bank" value={formData.bankName} field="bankName" placeholder="Contoh: Maybank, CIMB" isEditing={isEditing} onChange={handleInputChange} />
+                    <DataField label="No. Akaun Bank" value={formData.bankAccountNumber} field="bankAccountNumber" placeholder="Contoh: 1234567890" isEditing={isEditing} onChange={handleInputChange} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <DataField label="Nama Pemegang Akaun" value={formData.bankAccountHolder} field="bankAccountHolder" placeholder="Nama pada akaun bank" isEditing={isEditing} onChange={handleInputChange} />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Change Password Card */}
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden lg:col-span-2">
