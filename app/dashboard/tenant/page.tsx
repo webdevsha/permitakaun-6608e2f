@@ -215,7 +215,7 @@ export default async function TenantDashboardPage() {
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary-foreground/80 font-medium text-xs uppercase tracking-wider">Tapak Sewaan Aktif</CardDescription>
                         <CardTitle className="text-4xl font-sans font-bold">
-                            {myLocations?.length || 0}
+                            {myLocations?.filter((l: any) => l.status === 'active').length || 0}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -255,7 +255,7 @@ export default async function TenantDashboardPage() {
                             <CardDescription>Lihat senarai lokasi mengikut penganjur.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Link href="/dashboard/locations">
+                            <Link href="/dashboard/rentals">
                                 <Button variant="outline" className="rounded-xl">
                                     Semak Lokasi
                                 </Button>

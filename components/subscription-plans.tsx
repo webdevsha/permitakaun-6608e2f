@@ -20,16 +20,15 @@ export function SubscriptionPlans() {
       id: "enterprise",
       name: "Enterprise",
       price: "19",
-      originalPrice: "29",
+      originalPrice: "39",
       remark: "(Percuma Dua Minggu)",
       description: "Untuk peniaga kecil yang baru bermula",
       features: [
         "Rekod Jualan & Pembelian",
+        "Pengurusan Bayaran Permit Bulanan", 
         "Simpan resit",
         "Cashflow",
-        "Balance sheet",
-        "Download laporan kewangan",
-        "Sokongan 1 pengguna"
+        "Balance sheet", "Sokongan 1 pengguna"
       ],
       tabungFeatures: [
         "Auto kiraan Cukai",
@@ -49,15 +48,14 @@ export function SubscriptionPlans() {
       originalPrice: "59",
       remark: "(Percuma Dua Minggu)",
       description: "Pilihan terbaik untuk perniagaan berkembang",
-      features: [
-        "Rekod Jualan & Pembelian",
-        "Simpan resit",
-        "Cashflow",
-        "Balance sheet",
-        "Download laporan kewangan",
-        "Sokongan 1 pengguna",
-        "Analisis untung rugi"
-      ],
+      features: ["Rekod Jualan & Pembelian",
+                    "Pengurusan Bayaran Permit Bulanan",
+                    "Simpan resit",
+                    "Cashflow",
+                    "Balance sheet",
+                    "Download laporan kewangan",
+                    "Sokongan 1 pengguna",
+                    "Analisis untung rugi ringkas"],
       tabungFeatures: [
         "Auto kiraan Cukai",
         "Auto kiraan zakat",

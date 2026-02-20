@@ -238,6 +238,17 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       }
    }
 
+   const handleApproveRental = async (rentalId: number) => {
+      try {
+         const { error } = await supabase.from('tenant_locations').update({ status: 'approved' }).eq('id', rentalId)
+         if (error) throw error
+         setTenantRentals(prev => prev.map(r => r.id === rentalId ? { ...r, status: 'approved' } : r))
+         toast.success("Tapak diluluskan. Peniaga kini perlu memilih kategori sewaan.")
+      } catch (e: any) {
+         toast.error("Gagal meluluskan: " + e.message)
+      }
+   }
+
    const handleRentalStatusChange = async (rentalId: number, currentStatus: string) => {
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
       try {
@@ -453,7 +464,7 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                        const pendingCount = tenant.locations.filter((l: any) => l.status === 'pending').length;
                                        return (
                                           <div className="flex flex-col gap-1">
-                                             <div className="flex items-center gap-1">
+                                             <div className="flex flex-col items-start gap-1">
                                                 <Badge
                                                    variant="outline"
                                                    className={cn(
@@ -467,6 +478,11 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                                    {tenant.locations.length} Tapak
                                                    {pendingCount > 0 && <strong className="ml-1 text-amber-700">({pendingCount} Pending)</strong>}
                                                 </Badge>
+                                                {(role === 'admin' || role === 'superadmin' || role === 'organizer') && pendingCount > 0 && (
+                                                   <Button size="sm" variant="default" className="h-6 w-full max-w-[140px] bg-amber-500 hover:bg-amber-600 text-white text-[10px] shadow-sm animate-pulse" onClick={() => handleViewTenant(tenant)}>
+                                                      <Eye className="w-3 h-3 mr-1" /> Semak Permohonan
+                                                   </Button>
+                                                )}
                                              </div>
                                              {/* Mini preview of names */}
                                              <span className="text-[9px] text-muted-foreground truncate max-w-[140px] pl-1">
@@ -649,17 +665,17 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
                                              <TableCell className="text-center">
                                                 <div className="flex justify-center items-center gap-2">
                                                    {rental.status === 'pending' ? (
-                                                      <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleRentalStatusChange(rental.id, 'active')}>
+                                                      <Button size="sm" className="h-6 bg-green-600 hover:bg-green-700 text-white text-[10px]" onClick={() => handleApproveRental(rental.id)}>
                                                          <CheckCircle className="w-3 h-3 mr-1" /> Luluskan
                                                       </Button>
                                                    ) : (
                                                       <>
                                                          <Switch
                                                             checked={rental.status === 'active'}
-                                                            onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status === 'active' ? 'inactive' : 'active')}
+                                                            onCheckedChange={() => handleRentalStatusChange(rental.id, rental.status)}
                                                          />
-                                                         <span className={cn("text-[10px] font-bold w-10 text-left", rental.status === 'active' ? "text-brand-green" : "text-amber-600")}>
-                                                            {rental.status === 'active' ? 'Aktif' : 'N/A'}
+                                                         <span className={cn("text-[10px] font-bold w-12 text-left", rental.status === 'active' ? "text-brand-green" : rental.status === 'approved' ? "text-amber-600" : "text-slate-400")}>
+                                                            {rental.status === 'active' ? 'Aktif' : rental.status === 'approved' ? 'Tunggu Tenant' : 'Pasif'}
                                                          </span>
                                                       </>
                                                    )}

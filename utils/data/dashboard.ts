@@ -105,7 +105,8 @@ async function fetchDashboardDataInternal(
                     3000,
                     'organizers query'
                 )
-                const organizerNameMap = new Map(allOrganizers?.map(o => [o.organizer_code, o.name]) || [])
+                const validOrganizers = allOrganizers?.filter(o => o.organizer_code) || []
+                const organizerNameMap = new Map(validOrganizers.map(o => [o.organizer_code, o.name]))
 
                 tenants = (t || []).map(tenant => ({
                     ...tenant,
@@ -113,7 +114,7 @@ async function fetchDashboardDataInternal(
                         name: l.locations?.name,
                         status: l.status // Include status for TenantList
                     })) || [],
-                    organizerName: organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code || '-',
+                    organizerName: tenant.organizer_code ? (organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code) : '-',
                     lastPaymentDate: "Tiada Rekod",
                     lastPaymentAmount: 0,
                     paymentStatus: 'active'
@@ -190,7 +191,8 @@ async function fetchDashboardDataInternal(
             // Fetch Organizers
             try {
                 let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-                if (!isDeveloperAdmin) {
+                // admin@kumim.my (adminOrgCode exists) and developer admin see all organizers
+                if (!adminOrgCode && !isDeveloperAdmin) {
                     orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
                 }
                 const { data: org, error } = await withTimeout(() => orgQuery.limit(50), 3000, 'organizers query')
