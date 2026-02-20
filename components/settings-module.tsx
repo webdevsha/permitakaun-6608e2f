@@ -184,6 +184,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     businessName: initialProfile?.business_name || "",
     email: initialProfile?.email || user?.email || "",
     phone: initialProfile?.phone_number || "",
+    organizerCode: initialProfile?.organizer_code || "",
     ssmNumber: initialProfile?.ssm_number || "",
     icNumber: initialProfile?.ic_number || "",
     address: initialProfile?.address || "",
@@ -940,9 +941,19 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {role === 'organizer' && formData.organizerCode && (
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Kod Penganjur (Hanya Baca)</label>
+                      <div className="font-medium text-lg text-primary">{formData.organizerCode}</div>
+                      <p className="text-xs text-muted-foreground">Berikan kod ini kepada peniaga/penyewa anda.</p>
+                    </div>
+                  )}
                   {(role === 'tenant' || role === 'organizer' || role === 'admin') && (
                     <DataField label="No. Telefon" value={formData.phone} field="phone" isEditing={isEditing} onChange={handleInputChange} />
                   )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {(role === 'tenant' || role === 'organizer' || role === 'admin') && (
                     <DataField label="Nama Perniagaan / Syarikat" value={formData.businessName} field="businessName" isEditing={isEditing} onChange={handleInputChange} />
                   )}
