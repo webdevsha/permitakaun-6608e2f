@@ -3,9 +3,9 @@
 import { sendEmail } from "@/lib/email"
 import { welcomeEmail, paymentReceiptEmail, accountActivatedEmail, adminPaymentNotificationEmail } from "@/lib/email-templates"
 
-export async function sendWelcomeEmailAction(email: string, name: string) {
+export async function sendWelcomeEmailAction(email: string, name: string, organizerCode?: string) {
     try {
-        const html = welcomeEmail(name)
+        const html = welcomeEmail(name, organizerCode)
         const result = await sendEmail({
             to: email,
             subject: "Selamat Datang ke Permit Akaun!",

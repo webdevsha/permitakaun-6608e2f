@@ -466,9 +466,23 @@ export default function PublicPaymentPage() {
                                                     </span>
                                                 </>
                                             ) : (
-                                                <span className="bg-secondary px-2 py-1 rounded">
-                                                    Bulanan: RM {loc.rate_monthly}
-                                                </span>
+                                                <>
+                                                    {loc.rate_monthly_khemah > 0 && (
+                                                        <span className="bg-secondary px-2 py-1 rounded">
+                                                            Khemah: RM {loc.rate_monthly_khemah}
+                                                        </span>
+                                                    )}
+                                                    {loc.rate_monthly_cbs > 0 && (
+                                                        <span className="bg-secondary px-2 py-1 rounded">
+                                                            CBS/Lori: RM {loc.rate_monthly_cbs}
+                                                        </span>
+                                                    )}
+                                                    {(!loc.rate_monthly_khemah || loc.rate_monthly_khemah <= 0) && (!loc.rate_monthly_cbs || loc.rate_monthly_cbs <= 0) && (
+                                                        <span className="bg-secondary px-2 py-1 rounded">
+                                                            Bulanan (Standard): RM {loc.rate_monthly}
+                                                        </span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </CardContent>

@@ -219,16 +219,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         total_lots: parseInt(formData.total_lots) || 0,
         rate_khemah: parseFloat(formData.rate_khemah) || 0,
         rate_cbs: parseFloat(formData.rate_cbs) || 0,
-        // rate_foodtruck is not in DB yet
-        // rate_foodtruck: parseFloat(formData.rate_foodtruck) || 0,
+        rate_foodtruck: parseFloat(formData.rate_foodtruck) || 0,
         rate_monthly: parseFloat(formData.rate_monthly) || 0,
-        // The following rate_monthly_* and estimate_* columns are not in the DB schema
-        // rate_monthly_khemah: parseFloat(formData.rate_monthly_khemah) || 0,
-        // rate_monthly_cbs: parseFloat(formData.rate_monthly_cbs) || 0,
-        // rate_monthly_foodtruck: parseFloat(formData.rate_monthly_foodtruck) || 0,
-        // estimate_monthly_khemah: parseFloat(formData.estimate_monthly_khemah) || 0,
-        // estimate_monthly_cbs: parseFloat(formData.estimate_monthly_cbs) || 0,
-        // estimate_monthly_foodtruck: parseFloat(formData.estimate_monthly_foodtruck) || 0,
+        rate_monthly_khemah: parseFloat(formData.rate_monthly_khemah) || 0,
+        rate_monthly_cbs: parseFloat(formData.rate_monthly_cbs) || 0,
+        rate_monthly_foodtruck: parseFloat(formData.rate_monthly_foodtruck) || 0,
+        estimate_monthly_khemah: parseFloat(formData.estimate_monthly_khemah) || 0,
+        estimate_monthly_cbs: parseFloat(formData.estimate_monthly_cbs) || 0,
+        estimate_monthly_foodtruck: parseFloat(formData.estimate_monthly_foodtruck) || 0,
         organizer_id: (role === 'admin' || role === 'superadmin' || role === 'staff') && formData.organizer_id ? formData.organizer_id : null,
         map_url: formData.map_url,
         image_url: formData.image_url,
@@ -938,9 +936,28 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                       </div>
                     </div>
                   ) : (
-                    <div className="flex justify-between items-center text-sm pt-1">
-                      <span className="text-muted-foreground">Bulanan</span>
-                      <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
+                    <div className="space-y-2">
+                      {loc.rate_monthly_khemah > 0 && (
+                        <div className="flex justify-between items-center text-sm pt-1">
+                          <span className="text-muted-foreground text-xs">Khemah</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly_khemah}</span>
+                        </div>
+                      )}
+                      {loc.rate_monthly_khemah > 0 && loc.rate_monthly_cbs > 0 && <div className="h-px bg-border/50" />}
+                      {loc.rate_monthly_cbs > 0 && (
+                        <div className="flex justify-between items-center text-sm pt-1">
+                          <span className="text-muted-foreground text-xs">CBS</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly_cbs}</span>
+                        </div>
+                      )}
+
+                      {/* Fallback to Standard rate if none exist */}
+                      {(!loc.rate_monthly_khemah || loc.rate_monthly_khemah <= 0) && (!loc.rate_monthly_cbs || loc.rate_monthly_cbs <= 0) && (
+                        <div className="flex justify-between items-center text-sm pt-1">
+                          <span className="text-muted-foreground">Standard</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

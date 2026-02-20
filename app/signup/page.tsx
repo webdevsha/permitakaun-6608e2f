@@ -65,8 +65,15 @@ export default function SignupPage() {
       if (authError) throw authError
 
       if (authData.user) {
+        let newOrgCode = undefined
+        if (role === 'organizer') {
+          // Fetch the generated organizer code that the trigger just created
+          const { data: orgData } = await supabase.from('organizers').select('organizer_code').eq('email', formData.email).maybeSingle()
+          newOrgCode = orgData?.organizer_code
+        }
+
         // Send Welcome Email
-        await sendWelcomeEmailAction(formData.email, formData.fullName)
+        await sendWelcomeEmailAction(formData.email, formData.fullName, newOrgCode)
 
         toast.success("Pendaftaran berjaya! Akaun anda sedang menunggu pengesahan admin.")
         router.push("/")

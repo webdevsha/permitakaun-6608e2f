@@ -35,9 +35,15 @@ export const getBaseTemplate = (content: string) => `
 </html>
 `
 
-export const welcomeEmail = (name: string) => getBaseTemplate(`
+export const welcomeEmail = (name: string, organizerCode?: string) => getBaseTemplate(`
   <h2>Selamat Datang, ${name}!</h2>
-  <p>Terima kasih kerana mendaftar dengan **Permit Akaun**.</p>
+  <p>Terima kasih kerana mendaftar dengan <strong>Permit Akaun</strong>.</p>
+  ${organizerCode ? `
+  <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0;">
+    <h3 style="margin-top: 0; color: #2563eb; font-size: 1.25rem;">Kod Penganjur Anda: <strong>${organizerCode}</strong></h3>
+    <p style="margin-bottom: 0;">Berikan kod unik ini kepada peniaga/penyewa anda supaya mereka boleh memohon tapak di bawah seliaan anda.</p>
+  </div>
+  ` : ''}
   <p>Akaun anda telah berjaya dicipta. Anda kini boleh mula menguruskan kewangan karnival dan sewaan tapak anda dengan lebih mudah dan sistematik.</p>
   <p>Sila log masuk untuk melengkapkan profil perniagaan anda.</p>
   <center><a href="https://permitakaun.kumim.my/login" class="button">Log Masuk Sekarang</a></center>
