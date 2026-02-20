@@ -60,7 +60,7 @@ import { logAction } from "@/utils/logging"
 
 
 export function AccountingModule({ initialTransactions, tenants }: { initialTransactions?: any[], tenants?: any[] }) {
-  const { role, user, isLoading: authLoading } = useAuth()
+  const { role, user, isLoading: authLoading, activePlan } = useAuth()
   const [userRole, setUserRole] = useState<string>("")
   // Use server-provided transactions (already filtered by role in fetchDashboardData)
   const transactions = initialTransactions || []
@@ -312,8 +312,17 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   }, [role, user?.id, authLoading])
 
   const handleSaveConfig = async () => {
-    // Validate total 100%
-    const total = Object.values(percentages).reduce((a, b) => a + b, 0)
+    // Determine allowed tabungs based on active plan
+    const isEnterprise = activePlan === 'premium'
+    const isSdnBhd = activePlan === 'standard'
+    const allowedTabungs = isEnterprise
+      ? ['operating', 'tax', 'zakat']
+      : isSdnBhd
+        ? ['operating', 'tax', 'zakat', 'investment']
+        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+
+    // Warn if not exactly 100%, but don't force return block
+    const total = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
     if (Math.abs(total - 100) > 0.1) {
       toast.error(`Jumlah peratus mesti 100%. Sekarang: ${total.toFixed(1)}%`)
       return
@@ -358,8 +367,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
 
-  if (isLoading) {
-    return <div className="p-12 text-center text-muted-foreground"><Loader2 className="animate-spin h-8 w-8 mx-auto mb-4" />Menyemak kelayakan...</div>
+  if (isLoading || !user || (user && !role) || (role === 'tenant' && activePlan === undefined)) {
+    return (
+      <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
+        <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-primary" />
+        <p className="font-semibold text-sm">Menyemak kelayakan pelan dan memuatkan modul...</p>
+      </div>
+    )
   }
 
   if (accessDeniedStatus === 'trial_expired') {
@@ -936,6 +950,24 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
   }
 
+  // --- TIERED ACCESS LOGIC ---
+  const isEnterprise = activePlan === 'premium'
+  const isSdnBhd = activePlan === 'standard'
+
+  // Free Trial / Admin = All access. Enterprise = 3. Sdn Bhd = 4.
+  const allowedTabungs = isEnterprise
+    ? ['operating', 'tax', 'zakat']
+    : isSdnBhd
+      ? ['operating', 'tax', 'zakat', 'investment']
+      : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
+
+  const canDownloadReports = !isEnterprise
+
+  // Filter accounts for rendering
+  const activeAccounts = accounts.filter(acc => allowedTabungs.includes(acc.bankKey))
+
+  const currentTotalPercent = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Subscription Notification for Organizers and Tenants */}
@@ -944,7 +976,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>
-          <p className="text-muted-foreground text-lg">Urus 7 Tabung Simpanan & Rekod Kewangan</p>
+          <p className="text-muted-foreground text-lg flex items-center">
+            Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
+            {activePlan && <Badge variant="outline" className="ml-2 uppercase bg-amber-100 text-amber-800 border-amber-200">{activePlan}</Badge>}
+          </p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
           <Dialog
@@ -1105,10 +1140,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6">
           <TabsTrigger value="dashboard" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Wallet className="w-4 h-4 mr-2" /> 7-Tabung Dashboard
+            <Wallet className="w-4 h-4 mr-2" /> {isEnterprise ? '3-Tabung' : isSdnBhd ? '4-Tabung' : '7-Tabung'} Dashboard
           </TabsTrigger>
-          <TabsTrigger value="reports" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <FileText className="w-4 h-4 mr-2" /> Laporan Kewangan
+          <TabsTrigger value="reports" className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white relative overflow-hidden group">
+            <div className="flex items-center">
+              {canDownloadReports ? <FileText className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2 text-white/50" />} Laporan Kewangan
+            </div>
           </TabsTrigger>
         </TabsList>
 
@@ -1135,13 +1172,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Badge className="bg-brand-green/10 text-brand-green border-none px-4 py-1 rounded-full font-bold">
                     100% DIAGIH
                   </Badge>
-                  {/* Show count of configured banks */}
+                  {/* Show count of configured banks based on allowed tabungs */}
                   {(() => {
                     const configuredBanks = Object.values(bankNames).filter(b => b && b.trim() !== '').length;
                     if (configuredBanks > 0) {
                       return (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {configuredBanks}/7 Bank ditetapkan
+                          {configuredBanks}/{allowedTabungs.length} Bank ditetapkan
                         </p>
                       );
                     }
@@ -1194,8 +1231,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Konfigurasi 7-Tabung</DialogTitle>
-                        <DialogDescription>Tetapkan peratusan agihan dan nama bank untuk setiap tabung.</DialogDescription>
+                        <DialogTitle>Konfigurasi Tabung</DialogTitle>
+                        <DialogDescription>Tetapkan peratusan agihan untuk pelan anda.</DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
                         {/* Header row */}
@@ -1227,38 +1264,38 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         </div>
 
                         {/* Investment */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Investment</Label>
-                          <Input className="col-span-3 h-9" type="number" value={percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
+                        <div className={cn("grid grid-cols-12 gap-2 items-center", !allowedTabungs.includes('investment') && "opacity-50 pointer-events-none")}>
+                          <Label className="col-span-3 text-sm">Investment {!allowedTabungs.includes('investment') && <Lock className="inline w-3 h-3 ml-1" />}</Label>
+                          <Input className="col-span-3 h-9" type="number" value={!allowedTabungs.includes('investment') ? 0 : percentages.investment} onChange={(e) => setPercentages({ ...percentages, investment: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.investment} onChange={(e) => setBankNames({ ...bankNames, investment: e.target.value })} placeholder="Contoh: CIMB Investment Account" />
                         </div>
 
                         {/* Dividend */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Dividend</Label>
-                          <Input className="col-span-3 h-9" type="number" value={percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
+                        <div className={cn("grid grid-cols-12 gap-2 items-center", !allowedTabungs.includes('dividend') && "opacity-50 pointer-events-none")}>
+                          <Label className="col-span-3 text-sm">Dividend {!allowedTabungs.includes('dividend') && <Lock className="inline w-3 h-3 ml-1" />}</Label>
+                          <Input className="col-span-3 h-9" type="number" value={!allowedTabungs.includes('dividend') ? 0 : percentages.dividend} onChange={(e) => setPercentages({ ...percentages, dividend: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.dividend} onChange={(e) => setBankNames({ ...bankNames, dividend: e.target.value })} placeholder="Contoh: RHB Dividend Account" />
                         </div>
 
                         {/* Savings */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Savings</Label>
-                          <Input className="col-span-3 h-9" type="number" value={percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
+                        <div className={cn("grid grid-cols-12 gap-2 items-center", !allowedTabungs.includes('savings') && "opacity-50 pointer-events-none")}>
+                          <Label className="col-span-3 text-sm">Savings {!allowedTabungs.includes('savings') && <Lock className="inline w-3 h-3 ml-1" />}</Label>
+                          <Input className="col-span-3 h-9" type="number" value={!allowedTabungs.includes('savings') ? 0 : percentages.savings} onChange={(e) => setPercentages({ ...percentages, savings: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.savings} onChange={(e) => setBankNames({ ...bankNames, savings: e.target.value })} placeholder="Contoh: Tabung Haji / ASB" />
                         </div>
 
                         {/* Emergency */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Emergency</Label>
-                          <Input className="col-span-3 h-9" type="number" value={percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
+                        <div className={cn("grid grid-cols-12 gap-2 items-center", !allowedTabungs.includes('emergency') && "opacity-50 pointer-events-none")}>
+                          <Label className="col-span-3 text-sm">Emergency {!allowedTabungs.includes('emergency') && <Lock className="inline w-3 h-3 ml-1" />}</Label>
+                          <Input className="col-span-3 h-9" type="number" value={!allowedTabungs.includes('emergency') ? 0 : percentages.emergency} onChange={(e) => setPercentages({ ...percentages, emergency: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.emergency} onChange={(e) => setBankNames({ ...bankNames, emergency: e.target.value })} placeholder="Contoh: Maybank Savings" />
                         </div>
 
                         <div className="flex justify-between items-center pt-4 border-t">
                           <p className={cn("text-xs font-bold",
-                            (percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency) === 100 ? "text-green-600" : "text-red-600"
+                            currentTotalPercent === 100 ? "text-green-600" : "text-red-600"
                           )}>
-                            Jumlah: {(percentages.operating + percentages.tax + percentages.zakat + percentages.investment + percentages.dividend + percentages.savings + percentages.emergency).toFixed(1)}%
+                            Jumlah: {currentTotalPercent.toFixed(1)}%
                           </p>
                           <Button onClick={handleSaveConfig} size="sm">Simpan</Button>
                         </div>
@@ -1284,7 +1321,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-                  {accounts.map((acc) => {
+                  {activeAccounts.map((acc) => {
                     const bankName = bankNames[acc.bankKey as keyof typeof bankNames];
                     return (
                       <div key={acc.name} className="space-y-3 group">
@@ -1637,14 +1674,26 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
-                      onClick={() => window.print()}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Cetak / Simpan PDF
-                    </Button>
+                    {canDownloadReports ? (
+                      <Button
+                        variant="outline"
+                        className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
+                        onClick={() => window.print()}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Cetak / Simpan PDF
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        disabled
+                        className="hidden md:flex bg-slate-50 text-slate-400 border-slate-200"
+                        title="Naik taraf ke pelan Sdn Bhd untuk Laporan Penuh"
+                      >
+                        <Lock className="w-4 h-4 mr-2" />
+                        Muat Turun Dikunci
+                      </Button>
+                    )}
                     <div className="p-3 bg-white rounded-xl shadow-sm">
                       <ArrowUpRight className="w-6 h-6 text-emerald-600" />
                     </div>
