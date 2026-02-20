@@ -10,6 +10,7 @@ interface AuthContextType {
   session: any | null
   profile: any | null
   role: string | null
+  activePlan: string | null | undefined
   isLoading: boolean
   isInitialized: boolean
   signOut: () => Promise<void>
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   role: null,
+  activePlan: undefined,
   isLoading: true,
   isInitialized: false,
   signOut: async () => { },
@@ -43,35 +45,36 @@ function determineRoleInline(profileData: any, userEmail?: string): string {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   console.log('[AuthProvider] Render')
-  
+
   const [user, setUser] = useState<any | null>(null)
   const [session, setSession] = useState<any | null>(null)
   const [profile, setProfile] = useState<any | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [activePlan, setActivePlan] = useState<string | null | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Main initialization effect - NO DEPENDENCIES to ensure it runs once
   useEffect(() => {
     console.log('[AuthProvider] useEffect running')
-    
+
     let mounted = true
     let subscription: any = null
 
     const initAuth = async () => {
       console.log('[AuthProvider] initAuth started')
-      
+
       try {
         const supabase = createClient()
         console.log('[AuthProvider] Client created')
-        
+
         // Get session with timeout
         const timeoutMs = 5000
         const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), timeoutMs)
         )
-        
+
         let result: any
         try {
           result = await Promise.race([sessionPromise, timeoutPromise])
@@ -79,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AuthProvider] getSession timeout, continuing without session')
           result = { data: { session: null }, error: null }
         }
-        
+
         const { data: { session: initialSession }, error: sessionError } = result
         console.log('[AuthProvider] Session:', { hasSession: !!initialSession, error: !!sessionError })
 
@@ -92,38 +95,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (initialSession?.user) {
           setUser(initialSession.user)
           setSession(initialSession)
-          
-          // Fetch profile - don't block on this
-          supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', initialSession.user.id)
-            .single()
-            .then(({ data: profileData, error: profileError }: any) => {
-              if (!mounted) return
-              if (profileError) {
-                console.error('[AuthProvider] Profile error:', profileError)
-              } else if (profileData) {
-                setProfile(profileData)
-                setRole(determineRoleInline(profileData, initialSession.user.email))
+
+            // Fetch profile - don't block on this
+            ; (async () => {
+              try {
+                const { data: profileData, error: profileError } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', initialSession.user.id)
+                  .single()
+
+                if (!mounted) return
+                if (profileError) {
+                  console.error('[AuthProvider] Profile error:', profileError)
+                } else if (profileData) {
+                  setProfile(profileData)
+                  const derivedRole = determineRoleInline(profileData, initialSession.user.email)
+                  setRole(derivedRole)
+
+                  // Fetch active plan
+                  if (derivedRole === 'tenant') {
+                    const { data: tenantData } = await supabase.from('tenants').select('id, accounting_status').eq('profile_id', initialSession.user.id).single()
+                    if (tenantData?.accounting_status === 'active') {
+                      const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('tenant_id', tenantData.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
+
+                      // Specific hardcode mock for the owner account to test Enterprise via code
+                      if (initialSession.user.email === 'nshfnoh@proton.me') {
+                        setActivePlan('premium')
+                      } else {
+                        setActivePlan(subData?.plan_type || 'basic')
+                      }
+                    } else {
+                      if (initialSession.user.email === 'nshfnoh@proton.me') {
+                        setActivePlan('premium')
+                      } else {
+                        setActivePlan(null)
+                      }
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error('[AuthProvider] Profile fetch error:', err)
               }
-            })
-            .catch((err: any) => {
-              console.error('[AuthProvider] Profile fetch error:', err)
-            })
+            })()
         }
-        
+
         // Set up auth listener
         try {
           const { data } = supabase.auth.onAuthStateChange((event: any, newSession: any) => {
             console.log('[AuthProvider] Auth change:', event)
             if (!mounted) return
-            
+
             if (event === 'SIGNED_OUT') {
               setUser(null)
               setSession(null)
               setProfile(null)
               setRole(null)
+              setActivePlan(undefined)
             } else if (newSession?.user) {
               setUser(newSession.user)
               setSession(newSession)
@@ -133,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.error('[AuthProvider] Listener error:', e)
         }
-        
+
       } catch (error) {
         console.error('[AuthProvider] Init error:', error)
       } finally {
@@ -160,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setProfile(null)
       setRole(null)
+      setActivePlan(null)
       await signOutAction()
     } catch (error) {
       window.location.href = '/login'
@@ -180,13 +209,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single()
         if (profileData) {
           setProfile(profileData)
-          setRole(determineRoleInline(profileData, currentSession.user.email))
+          const derivedRole = determineRoleInline(profileData, currentSession.user.email)
+          setRole(derivedRole)
+
+          if (derivedRole === 'tenant') {
+            const { data: tenantData } = await supabase.from('tenants').select('id, accounting_status').eq('profile_id', currentSession.user.id).single()
+            if (tenantData?.accounting_status === 'active') {
+              const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('tenant_id', tenantData.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
+              setActivePlan(subData?.plan_type || 'basic')
+            } else {
+              setActivePlan(null)
+            }
+          }
         }
       } else {
         setUser(null)
         setSession(null)
         setProfile(null)
         setRole(null)
+        setActivePlan(null)
       }
     } catch (error) {
       console.error('[AuthProvider] Refresh error:', error)
@@ -194,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, isLoading, isInitialized, signOut, refreshAuth }}>
+    <AuthContext.Provider value={{ user, session, profile, role, activePlan, isLoading, isInitialized, signOut, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   )
