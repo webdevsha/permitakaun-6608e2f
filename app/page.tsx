@@ -253,7 +253,7 @@ export default function LandingPage() {
                   <span className="text-sm font-medium text-muted-foreground">/bulan</span>
                 </div>
                 <ul className="space-y-3 text-sm">
-                  {["Rekod Jualan & Pembelian", "Simpan resit", "Cashflow", "Balance sheet", "Download laporan kewangan", "Sokongan 1 pengguna"].map((feature, i) => (
+                  {["Rekod Jualan & Pembelian", "Pengurusan Bayaran Permit Bulanan", "Simpan resit", "Cashflow", "Balance sheet", "Sokongan 1 pengguna"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3">
                       <div className="rounded-full p-1 bg-primary/10"><Check className="w-3 h-3 text-primary" /></div>
                       <span className="text-foreground">{feature}</span>
@@ -300,12 +300,19 @@ export default function LandingPage() {
                   <span className="text-sm font-medium text-primary-foreground/60">/bulan</span>
                 </div>
                 <ul className="space-y-3 text-sm">
-                  {["Rekod Jualan & Pembelian", "Simpan resit", "Cashflow", "Balance sheet", "Download laporan kewangan", "Sokongan 1 pengguna", "Analisis untung rugi"].map((feature, i) => (
-                    <li key={i} className="flex items-center gap-3">
-                      <div className="rounded-full p-1 bg-white/20"><Check className="w-3 h-3 text-white" /></div>
-                      <span className="text-primary-foreground/90">{feature}</span>
-                    </li>
-                  ))}
+                  {["Rekod Jualan & Pembelian",
+                    "Pengurusan Bayaran Permit Bulanan",
+                    "Simpan resit",
+                    "Cashflow",
+                    "Balance sheet",
+                    "Download laporan kewangan",
+                    "Sokongan 1 pengguna",
+                    "Analisis untung rugi ringkas"].map((feature, i) => (
+                      <li key={i} className="flex items-center gap-3">
+                        <div className="rounded-full p-1 bg-white/20"><Check className="w-3 h-3 text-white" /></div>
+                        <span className="text-primary-foreground/90">{feature}</span>
+                      </li>
+                    ))}
                 </ul>
                 <div className="pt-4 border-t border-border/50">
                   <p className="text-xs font-bold mb-3 uppercase tracking-wider text-primary-foreground/80">Pecahan Tabung Akaun</p>

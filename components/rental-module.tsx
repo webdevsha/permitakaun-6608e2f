@@ -68,8 +68,29 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   // New Rental Application State
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false)
   const [applyLocationId, setApplyLocationId] = useState("")
-  const [applyRateType, setApplyRateType] = useState("monthly")
   const [isApplying, setIsApplying] = useState(false)
+
+  // Category Selection State
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<Record<number, string>>({})
+
+  const handleUpdateCategory = async (rentalId: number) => {
+    const category = selectedCategory[rentalId] || "monthly"
+    setIsUpdatingCategory(true)
+    try {
+      const { error } = await supabase.from('tenant_locations').update({
+        rate_type: category,
+        status: 'active'
+      }).eq('id', rentalId)
+      if (error) throw error
+      toast.success('Kategori berjaya dikemas kini, tapak kini aktif!')
+      window.location.reload()
+    } catch (e: any) {
+      toast.error('Gagal kemas kini: ' + e.message)
+    } finally {
+      setIsUpdatingCategory(false)
+    }
+  }
 
   // Organizer Code Management
   const [organizerCodeInput, setOrganizerCodeInput] = useState("")
@@ -380,7 +401,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       const { error } = await supabase.from('tenant_locations').insert({
         tenant_id: tenant.id,
         location_id: parseInt(applyLocationId),
-        rate_type: applyRateType,
+        rate_type: 'monthly', // Placeholder, tenant will choose this later upon approval
         status: 'pending', // Require Admin Activation
         stall_number: null // Unfillable by tenant
       })
@@ -676,22 +697,9 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Jenis Sewaan</Label>
-                        <Select value={applyRateType} onValueChange={setApplyRateType}>
-                          <SelectTrigger className="rounded-xl h-11">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="monthly">Bulanan</SelectItem>
-                            <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
-                            <SelectItem value="cbs">Mingguan (CBS/Lori)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
                       <div className="p-3 bg-secondary/20 rounded-xl text-xs text-muted-foreground flex gap-2">
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                        <p>Status permohonan akan menjadi "Pending" sehingga diluluskan oleh Admin. No. Petak akan diberikan selepas kelulusan.</p>
+                        <p>Status permohonan akan menjadi "Pending" sehingga diluluskan oleh Admin. Selepas diluluskan, anda boleh memilih kategori sewaan.</p>
                       </div>
                     </>
                   ) : (
@@ -757,28 +765,62 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                     <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
                     <Badge className={cn("capitalize border-none",
                       rental.status === 'active' ? "bg-brand-green/10 text-brand-green" :
-                        rental.status === 'pending' ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
+                        rental.status === 'approved' ? "bg-brand-green hover:bg-brand-green/90 text-white" :
+                          rental.status === 'pending' ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
                     )}>
-                      {rental.status}
+                      {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
                     </Badge>
                   </div>
                   <CardDescription className="font-mono">
                     {rental.status === 'active' ? (
                       <>No. Petak: <strong className="text-foreground">{rental.stall_number || "Belum Ditentukan"}</strong></>
+                    ) : rental.status === 'approved' ? (
+                      <span className="italic text-brand-green">Sila pilih kategori</span>
                     ) : (
                       <span className="italic">Menunggu Kelulusan</span>
                     )}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="flex justify-between items-center text-sm mb-2">
-                    <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
-                    <Badge variant="outline" className="capitalize">{rental.rate_type === 'khemah' || rental.rate_type === 'cbs' ? 'Mingguan (' + rental.rate_type + ')' : 'Bulanan'}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground font-medium">Kadar Semasa:</span>
-                    <span className="text-2xl font-bold text-primary">RM {rental.display_price}</span>
-                  </div>
+                <CardContent className="pt-4">
+                  {rental.status === 'approved' ? (
+                    <div className="space-y-3 bg-brand-green/5 p-4 rounded-xl border border-brand-green/20">
+                      <div className="flex items-center gap-2 text-brand-green">
+                        <CheckCircle2 className="w-5 h-5 shrink-0" />
+                        <p className="font-bold text-sm">Permohonan Diluluskan!</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground pb-1">Sila pilih kategori sewaan untuk meneruskan dan mengaktifkan tapak ini.</p>
+
+                      <div className="flex flex-col gap-2">
+                        <Select
+                          value={selectedCategory[rental.id] || "monthly"}
+                          onValueChange={(val) => setSelectedCategory(prev => ({ ...prev, [rental.id]: val }))}
+                        >
+                          <SelectTrigger className="w-full h-10 bg-white">
+                            <SelectValue placeholder="Pilih Kategori" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly">Bulanan</SelectItem>
+                            <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
+                            <SelectItem value="cbs">Mingguan (CBS/Lori)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white shadow-sm" onClick={() => handleUpdateCategory(rental.id)} disabled={isUpdatingCategory}>
+                          {isUpdatingCategory ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : "Sempurnakan & Aktifkan"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center text-sm mb-2 mt-2">
+                        <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
+                        <Badge variant="outline" className="capitalize">{rental.rate_type === 'khemah' || rental.rate_type === 'cbs' ? 'Mingguan (' + rental.rate_type + ')' : 'Bulanan'}</Badge>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground font-medium">Kadar Semasa:</span>
+                        <span className="text-2xl font-bold text-primary">RM {rental.display_price}</span>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             ))}
