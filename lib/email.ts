@@ -7,10 +7,11 @@ interface SendEmailProps {
 }
 
 // Sender email configuration based on API key type
+// NOTE: Default now uses BREVO_HAZMAN (Hazman's API key) as the main system API key
 const SENDER_CONFIG = {
     default: {
         name: "Permit Akaun",
-        email: "hai@shafiranoh.com"  // BREVO_SHAFIRA uses shafira's email
+        email: "admin@kumim.my"       // BREVO_HAZMAN uses Hazman's email
     },
     shafira: {
         name: "Permit Akaun",
@@ -35,7 +36,8 @@ export async function sendEmail({ to, subject, html, apiKeyType = 'default' }: S
             break
         case 'default':
         default:
-            apiKey = process.env.BREVO_API_KEY
+            // Default now uses BREVO_HAZMAN as the main API key
+            apiKey = process.env.BREVO_HAZMAN || process.env.BREVO_API_KEY
             break
     }
 
@@ -86,9 +88,10 @@ export async function sendEmail({ to, subject, html, apiKeyType = 'default' }: S
 export function getApiKeyInfo() {
     return {
         default: {
-            key: process.env.BREVO_API_KEY ? '***' + process.env.BREVO_API_KEY.slice(-10) : 'Not set',
-            isSet: !!process.env.BREVO_API_KEY,
-            label: 'BREVO_API_KEY (Default)',
+            key: process.env.BREVO_HAZMAN ? '***' + process.env.BREVO_HAZMAN.slice(-10) : 
+                 process.env.BREVO_API_KEY ? '***' + process.env.BREVO_API_KEY.slice(-10) : 'Not set',
+            isSet: !!(process.env.BREVO_HAZMAN || process.env.BREVO_API_KEY),
+            label: 'BREVO_HAZMAN (Default/Main)',
             senderEmail: SENDER_CONFIG.default.email
         },
         shafira: {

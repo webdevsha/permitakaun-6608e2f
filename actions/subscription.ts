@@ -15,45 +15,124 @@ export async function activateSubscription(params: {
 
     if (!user) return { success: false, error: "Unauthorized" }
 
-    // 1. Get Tenant ID
-    const { data: tenant } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('profile_id', user.id)
+    // Get user role
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
         .single()
 
-    if (!tenant) return { success: false, error: "Tenant not found" }
+    const userRole = profile?.role
+    console.log(`[activateSubscription] User role: ${userRole}, User: ${user.email}`)
+
+    // 1. Get Tenant or Organizer ID based on role
+    let tenantId: number | null = null
+    let organizerId: number | null = null
+
+    if (userRole === 'organizer') {
+        const { data: organizer } = await supabase
+            .from('organizers')
+            .select('id')
+            .eq('profile_id', user.id)
+            .single()
+
+        if (!organizer) {
+            console.error("[activateSubscription] Organizer not found for user:", user.id)
+            return { success: false, error: "Organizer not found" }
+        }
+        organizerId = organizer.id
+        console.log(`[activateSubscription] Found organizer ID: ${organizerId}`)
+    } else {
+        // Default to tenant
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('profile_id', user.id)
+            .single()
+
+        if (!tenant) {
+            console.error("[activateSubscription] Tenant not found for user:", user.id)
+            return { success: false, error: "Tenant not found" }
+        }
+        tenantId = tenant.id
+        console.log(`[activateSubscription] Found tenant ID: ${tenantId}`)
+    }
 
     // 2. Calculate Validity
     const now = new Date()
     const endDate = new Date()
     endDate.setDate(now.getDate() + 30) // Monthly subscription
 
-    // 3. Insert Subscription
-    const { error } = await supabase.from('subscriptions').insert({
-        tenant_id: tenant.id,
-        plan_type: params.planType,
-        status: 'active',
-        start_date: now.toISOString(),
-        end_date: endDate.toISOString(),
-        amount: params.amount,
-        payment_ref: params.paymentRef
-    })
+    // 3. Insert Subscription (only for tenants currently)
+    // For organizers, we update the organizers table directly
+    if (tenantId) {
+        const { error } = await supabase.from('subscriptions').insert({
+            tenant_id: tenantId,
+            plan_type: params.planType,
+            status: 'active',
+            start_date: now.toISOString(),
+            end_date: endDate.toISOString(),
+            amount: params.amount,
+            payment_ref: params.paymentRef
+        })
 
-    if (error) {
-        console.error("Subscription activation error:", error)
-        return { success: false, error: "Gagal mengaktifkan langganan." }
-    }
+        if (error) {
+            console.error("[activateSubscription] Subscription insert error:", error)
+            return { success: false, error: "Gagal mengaktifkan langganan." }
+        }
 
-    // 4. Update tenant accounting_status to active
-    const { error: tenantUpdateError } = await supabase
-        .from('tenants')
-        .update({ accounting_status: 'active' })
-        .eq('id', tenant.id)
+        // 4. Update tenant accounting_status to active
+        const { error: tenantUpdateError } = await supabase
+            .from('tenants')
+            .update({ accounting_status: 'active' })
+            .eq('id', tenantId)
 
-    if (tenantUpdateError) {
-        console.error("Tenant status update error:", tenantUpdateError)
-        // Don't fail the whole operation, but log it
+        if (tenantUpdateError) {
+            console.error("[activateSubscription] Tenant status update error:", tenantUpdateError)
+        }
+    } else if (organizerId) {
+        // For organizers - update organizers table (no subscription record for now)
+        // TODO: Add organizer_id column to subscriptions table if needed
+        const { error: orgUpdateError } = await supabase
+            .from('organizers')
+            .update({ 
+                accounting_status: 'active'
+            })
+            .eq('id', organizerId)
+
+        if (orgUpdateError) {
+            console.error("[activateSubscription] Organizer status update error:", orgUpdateError)
+            return { success: false, error: "Gagal mengaktifkan langganan penganjur." }
+        }
+
+        // Also create a record in admin_transactions for tracking
+        const adminSupabase = createAdminClient()
+        const { error: adminTxError } = await adminSupabase
+            .from('admin_transactions')
+            .insert({
+                description: `Langganan Pelan ${params.planType} - Organizer ${user.email}`,
+                amount: params.amount,
+                type: 'income',
+                category: 'Langganan',
+                date: now.toISOString().split('T')[0],
+                status: 'completed',
+                payment_method: 'online',
+                payment_reference: params.paymentRef,
+                metadata: {
+                    plan_type: params.planType,
+                    payer_email: user.email,
+                    user_id: user.id,
+                    user_role: 'organizer',
+                    organizer_id: organizerId,
+                    is_online_payment: true,
+                    activated_at: now.toISOString()
+                }
+            })
+
+        if (adminTxError) {
+            console.error("[activateSubscription] Admin transaction error:", adminTxError)
+            // Don't fail - the organizer status was updated
+        }
     }
 
     // Revalidate all relevant paths
@@ -62,6 +141,7 @@ export async function activateSubscription(params: {
     revalidatePath('/dashboard/settings')
     revalidatePath('/dashboard/subscription')
 
+    console.log(`[activateSubscription] Success for ${userRole}:`, { tenantId, organizerId })
     return { success: true }
 }
 
