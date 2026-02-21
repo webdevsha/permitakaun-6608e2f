@@ -780,10 +780,23 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
         }
       }
       else if (role === 'organizer') {
+        // Upload files
+        if (files.profile) newUrls.profile = await handleFileUpload(files.profile, 'profile')
+        if (files.ssm) newUrls.ssm = await handleFileUpload(files.ssm, 'ssm')
+        if (files.food) newUrls.food = await handleFileUpload(files.food, 'food')
+        if (files.other) newUrls.other = await handleFileUpload(files.other, 'other')
+
         const payload = {
           name: formData.businessName || formData.fullName, // Organizer name usually business name
           phone: formData.phone || null,
-          email: formData.email
+          email: formData.email,
+          ssm_number: formData.ssmNumber || null,
+          ic_number: formData.icNumber || null,
+          address: formData.address || null,
+          profile_image_url: newUrls.profile || null,
+          ssm_file_url: newUrls.ssm || null,
+          food_handling_cert_url: newUrls.food || null,
+          other_docs_url: newUrls.other || null
         }
         if (entityId) {
           console.log('[SettingsModule] Updating organizers table with entityId:', entityId)
@@ -1013,15 +1026,15 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {(role === 'tenant' || role === 'admin') && (
+                  {(role === 'tenant' || role === 'admin' || role === 'organizer') && (
                     <DataField label="No. Pendaftaran SSM" value={formData.ssmNumber} field="ssmNumber" placeholder="Contoh: 202401001234" isEditing={isEditing} onChange={handleInputChange} />
                   )}
-                  {role === 'tenant' && (
+                  {(role === 'tenant' || role === 'organizer') && (
                     <DataField label="No. Kad Pengenalan" value={formData.icNumber} field="icNumber" placeholder="Contoh: 880101-14-1234" isEditing={isEditing} onChange={handleInputChange} />
                   )}
                 </div>
 
-                {(role === 'tenant' || role === 'admin') && (
+                {(role === 'tenant' || role === 'admin' || role === 'organizer') && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <DataField label="Alamat Surat Menyurat" value={formData.address} field="address" isEditing={isEditing} onChange={handleInputChange} />
                   </div>
@@ -1099,8 +1112,8 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
             {/* Documents & Photo */}
 
 
-            {/* Documents & Photo (Tenant Only) */}
-            {role === 'tenant' && (
+            {/* Documents & Photo (Tenant & Organizer) */}
+            {(role === 'tenant' || role === 'organizer') && (
               <div className="space-y-6">
                 {/* Profile Photo */}
                 <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
