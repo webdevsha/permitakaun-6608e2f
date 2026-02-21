@@ -25,7 +25,8 @@ export function Footer() {
               © 2025 PERMIT AKAUN v2.1
             </p>
             <p className="text-muted-foreground text-[10px] font-semibold italic">
-              Designed for efficiency and transparency
+              Designed for efficiency and transparency.
+              <br />Designed & developed by <a href="https://shafiranoh.com"><u>Cubic Tech</u></a>. 
             </p>
           </div>
         </div>
