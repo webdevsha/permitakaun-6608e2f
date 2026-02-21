@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink, Building, Search } from "lucide-react"
+import { CreditCard, Loader2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Store, ExternalLink, Building, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
@@ -73,6 +73,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   // Category Selection State
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<Record<number, string>>({})
+  const [deletingLocation, setDeletingLocation] = useState<number | null>(null)
 
   const handleUpdateCategory = async (rentalId: number) => {
     const category = selectedCategory[rentalId] || "monthly"
@@ -89,6 +90,28 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       toast.error('Gagal kemas kini: ' + e.message)
     } finally {
       setIsUpdatingCategory(false)
+    }
+  }
+
+  const handleDeleteLocation = async (rentalId: number) => {
+    if (!confirm('Adakah anda pasti mahu memadam permohonan tapak ini?')) return
+    
+    setDeletingLocation(rentalId)
+    try {
+      const { error } = await supabase
+        .from('tenant_locations')
+        .delete()
+        .eq('id', rentalId)
+      
+      if (error) throw error
+      
+      toast.success('Tapak berjaya dipadam')
+      // Refresh the list
+      setMyLocations(prev => prev.filter(l => l.id !== rentalId))
+    } catch (e: any) {
+      toast.error('Gagal memadam tapak: ' + e.message)
+    } finally {
+      setDeletingLocation(null)
     }
   }
 
@@ -576,14 +599,14 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
             <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="rounded-xl shadow-lg shadow-primary/20">
-                  <Plus className="mr-2 h-4 w-4" /> Mohon Tapak Baru
+                  <Plus className="mr-2 h-4 w-4" /> Lokasi Penganjur Saya
                 </Button>
               </DialogTrigger>
               <DialogContent className="bg-white rounded-3xl">
                 <DialogHeader>
-                  <DialogTitle>Permohonan Sewa Tapak</DialogTitle>
+                  <DialogTitle>Lokasi Penganjur Saya</DialogTitle>
                   <DialogDescription>
-                    Pilih lokasi penganjur dan jenis sewaan.
+                    Senarai lokasi dari penganjur yang telah dipautkan. Pilih lokasi untuk memohon sewaan.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
@@ -683,19 +706,48 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                       )}
 
                       <div className="space-y-2">
-                        <Label>Lokasi Pasar</Label>
-                        <Select value={applyLocationId} onValueChange={setApplyLocationId}>
-                          <SelectTrigger className="rounded-xl h-11">
-                            <SelectValue placeholder="Pilih lokasi..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableLocations.map((loc: any) => (
-                              <SelectItem key={loc.id} value={loc.id.toString()}>
-                                {loc.name} ({loc.operating_days})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Label>Lokasi Penganjur Saya</Label>
+                        <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-xl p-2">
+                          {availableLocations.map((loc: any) => (
+                            <div
+                              key={loc.id}
+                              onClick={() => setApplyLocationId(loc.id.toString())}
+                              className={cn(
+                                "p-3 rounded-lg cursor-pointer transition-all border",
+                                applyLocationId === loc.id.toString()
+                                  ? "bg-primary/10 border-primary"
+                                  : "bg-white border-border hover:border-primary/50"
+                              )}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  {loc.program_name && (
+                                    <Badge variant="outline" className="text-[10px] mb-1 bg-primary/5">
+                                      {loc.program_name}
+                                    </Badge>
+                                  )}
+                                  <p className="font-medium text-sm">{loc.name}</p>
+                                  {loc.organizers?.name && (
+                                    <p className="text-xs text-muted-foreground">{loc.organizers.name}</p>
+                                  )}
+                                </div>
+                                {applyLocationId === loc.id.toString() && (
+                                  <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                                )}
+                              </div>
+                              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {loc.type === 'daily' ? 'Mingguan' : 
+                                   loc.type === 'monthly' ? 'Bulanan' : 
+                                   loc.type === 'expo' ? 'Expo' : loc.type}
+                                </Badge>
+                                {loc.operating_days && (
+                                  <span>{loc.operating_days}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="p-3 bg-secondary/20 rounded-xl text-xs text-muted-foreground flex gap-2">
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -762,14 +814,37 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
               <Card key={rental.id} className="bg-white border-border/50 shadow-sm rounded-3xl overflow-hidden hover:shadow-md transition-all">
                 <CardHeader className="pb-4 bg-secondary/30 border-b border-border/30">
                   <div className="flex justify-between items-start">
-                    <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
-                    <Badge className={cn("capitalize border-none",
-                      rental.status === 'active' ? "bg-brand-green/10 text-brand-green" :
-                        rental.status === 'approved' ? "bg-brand-green hover:bg-brand-green/90 text-white" :
-                          rental.status === 'pending' ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
-                    )}>
-                      {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
-                    </Badge>
+                    <div className="flex-1">
+                      <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
+                      {rental.program_name && (
+                        <p className="text-xs text-muted-foreground mt-1">{rental.program_name}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={cn("capitalize border-none",
+                        rental.status === 'active' ? "bg-brand-green/10 text-brand-green" :
+                          rental.status === 'approved' ? "bg-brand-green hover:bg-brand-green/90 text-white" :
+                            rental.status === 'pending' ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
+                      )}>
+                        {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
+                      </Badge>
+                      {/* Delete button for approved/pending locations */}
+                      {(rental.status === 'approved' || rental.status === 'pending') && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteLocation(rental.id)}
+                          disabled={deletingLocation === rental.id}
+                        >
+                          {deletingLocation === rental.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <CardDescription className="font-mono">
                     {rental.status === 'active' ? (
@@ -837,18 +912,59 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                   {availableLocations.map((loc) => (
                     <Card key={loc.id} className="bg-white border-border/50 shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-all">
                       <CardHeader className="pb-3 bg-secondary/10">
+                        {/* Program Name Badge */}
+                        {loc.program_name && (
+                          <Badge variant="outline" className="mb-2 text-[10px] bg-primary/5 border-primary/20 text-primary">
+                            {loc.program_name}
+                          </Badge>
+                        )}
                         <CardTitle className="text-base font-bold">{loc.name}</CardTitle>
-                        <CardDescription className="text-xs">{loc.program_name}</CardDescription>
+                        <CardDescription className="text-xs">
+                          {loc.organizers?.name && (
+                            <span className="flex items-center gap-1 mt-1">
+                              <Building className="w-3 h-3" />
+                              {loc.organizers.name}
+                            </span>
+                          )}
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-4 text-sm space-y-3">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Operasi:</span>
-                          <span className="font-medium">{loc.operating_days}</span>
+                        {/* Location Type Badge */}
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-[10px] capitalize">
+                            {loc.type === 'daily' ? 'Mingguan' : 
+                             loc.type === 'monthly' ? 'Bulanan' : 
+                             loc.type === 'expo' ? 'Expo/Karnival' :
+                             loc.type === 'bazar_ramadhan' ? 'Bazar Ramadhan' :
+                             loc.type === 'bazar_raya' ? 'Bazar Raya' : loc.type}
+                          </Badge>
+                          {loc.operating_days && (
+                            <span className="text-xs text-muted-foreground">{loc.operating_days}</span>
+                          )}
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Kadar Bermula:</span>
-                          <span className="text-lg font-bold text-primary">RM {loc.display_price}</span>
+                        
+                        {/* Rates Preview */}
+                        <div className="bg-muted/30 rounded-lg p-2 space-y-1">
+                          {loc.rate_khemah > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Khemah:</span>
+                              <span className="font-medium">RM {loc.rate_khemah}/minggu</span>
+                            </div>
+                          )}
+                          {loc.rate_cbs > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">CBS:</span>
+                              <span className="font-medium">RM {loc.rate_cbs}/minggu</span>
+                            </div>
+                          )}
+                          {loc.rate_monthly > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Bulanan:</span>
+                              <span className="font-medium">RM {loc.rate_monthly}</span>
+                            </div>
+                          )}
                         </div>
+                        
                         <Button className="w-full rounded-xl mt-2" size="sm" onClick={() => {
                           setApplyLocationId(loc.id.toString())
                           setIsApplyDialogOpen(true)

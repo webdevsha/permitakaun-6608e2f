@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -126,18 +126,27 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
   // Admin: Fetch Organizers List
   const [organizersList, setOrganizersList] = useState<any[]>([])
+  const [organizersLoading, setOrganizersLoading] = useState(false)
 
-  // Fetch Organizers on mount/access
-  // We can do this with a useEffect or SWR, but let's check current pattern.
-  // The component receives initialLocations.
-  // We'll add a useEffect to fetch organizers if admin.
-
-  useSWR('organizers-list', async () => {
-    if (role === 'admin' || role === 'superadmin' || role === 'staff') {
-      const { data } = await supabase.from('organizers').select('id, name, organizer_code').eq('status', 'active')
-      setOrganizersList(data || [])
+  // Fetch Organizers on mount (only once)
+  useEffect(() => {
+    async function fetchOrganizers() {
+      if (role === 'admin' || role === 'superadmin' || role === 'staff') {
+        setOrganizersLoading(true)
+        try {
+          const { data } = await supabase
+            .from('organizers')
+            .select('id, name, organizer_code')
+            .eq('status', 'active')
+            .order('name')
+          setOrganizersList(data || [])
+        } finally {
+          setOrganizersLoading(false)
+        }
+      }
     }
-  })
+    fetchOrganizers()
+  }, [role, supabase])
 
   const resetForm = () => {
     setFormData({
@@ -526,11 +535,19 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                     <Select
                       value={formData.organizer_id}
                       onValueChange={(v) => setFormData({ ...formData, organizer_id: v })}
+                      disabled={organizersLoading}
                     >
                       <SelectTrigger className="rounded-xl">
-                        <SelectValue placeholder="Pilih Penganjur" />
+                        {organizersLoading ? (
+                          <span className="text-muted-foreground">Memuat...</span>
+                        ) : (
+                          <SelectValue placeholder="Pilih Penganjur" />
+                        )}
                       </SelectTrigger>
                       <SelectContent>
+                        {organizersList.length === 0 && !organizersLoading && (
+                          <SelectItem value="" disabled>Tiada penganjur aktif</SelectItem>
+                        )}
                         {organizersList.map(org => (
                           <SelectItem key={org.id} value={org.id.toString()}>
                             {org.name} ({org.organizer_code})

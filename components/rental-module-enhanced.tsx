@@ -18,7 +18,8 @@ import {
   CreditCard,
   Upload,
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
@@ -84,6 +85,7 @@ export function EnhancedRentalModule({
   // Category selection state
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<Record<number, string>>({})
+  const [deletingLocation, setDeletingLocation] = useState<number | null>(null)
 
   // Fetch fresh data
   const refreshData = useCallback(async () => {
@@ -216,6 +218,26 @@ export function EnhancedRentalModule({
       toast.error('Gagal kemas kini: ' + e.message)
     } finally {
       setIsUpdatingCategory(false)
+    }
+  }
+
+  const handleDeleteLocation = async (rentalId: number) => {
+    if (!confirm("Adakah anda pasti mahu memadam permohonan tapak ini?")) return
+
+    setDeletingLocation(rentalId)
+    try {
+      const { error } = await supabase
+        .from('tenant_locations')
+        .update({ is_active: false, status: 'inactive' })
+        .eq('id', rentalId)
+      
+      if (error) throw error
+      toast.success('Permohonan tapak berjaya dipadam')
+      refreshData()
+    } catch (e: any) {
+      toast.error('Gagal memadam: ' + e.message)
+    } finally {
+      setDeletingLocation(null)
     }
   }
 
@@ -412,7 +434,7 @@ export function EnhancedRentalModule({
           </TabsTrigger>
         </TabsList>
 
-        {/* Status Tab - Tapak Sewaan Saya + Pilih Lokasi Baharu */}
+        {/* Status Tab - Tapak Sewaan Saya + Lokasi Penganjur Saya */}
         <TabsContent value="status" className="mt-6 space-y-6">
           {/* Waiting for Approval State */}
           {!hasApprovedOrganizer && (
@@ -495,6 +517,8 @@ export function EnhancedRentalModule({
                       setSelectedCategory={setSelectedCategory}
                       isUpdatingCategory={isUpdatingCategory}
                       onUpdateCategory={handleUpdateCategory}
+                      onDeleteLocation={handleDeleteLocation}
+                      isDeleting={deletingLocation === rental.id}
                     />
                   ))}
                 </div>
@@ -502,7 +526,7 @@ export function EnhancedRentalModule({
             </CardContent>
           </Card>
 
-          {/* Pilih Lokasi Baharu Section - Only show if has approved organizer */}
+          {/* Lokasi Penganjur Saya Section - Only show if has approved organizer */}
           {hasApprovedOrganizer && (
             <LocationSelector
               tenantId={tenant.id}
@@ -755,13 +779,17 @@ function RentalCard({
   selectedCategory,
   setSelectedCategory,
   isUpdatingCategory,
-  onUpdateCategory
+  onUpdateCategory,
+  onDeleteLocation,
+  isDeleting
 }: { 
   rental: any
   selectedCategory: Record<number, string>
   setSelectedCategory: React.Dispatch<React.SetStateAction<Record<number, string>>>
   isUpdatingCategory: boolean
   onUpdateCategory: (rentalId: number) => void
+  onDeleteLocation?: (rentalId: number) => void
+  isDeleting?: boolean
 }) {
   return (
     <Card className={cn(
@@ -770,15 +798,38 @@ function RentalCard({
     )}>
       <CardHeader className="pb-4 bg-secondary/30 border-b border-border/30">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
-          <Badge className={cn("capitalize border-none",
-            rental.status === 'active' ? "bg-green-100 text-green-700" :
-            rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
-            rental.status === 'pending' ? "bg-amber-100 text-amber-700" : 
-            "bg-gray-100 text-gray-600"
-          )}>
-            {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
-          </Badge>
+          <div className="flex-1">
+            <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
+            {rental.program_name && (
+              <p className="text-xs text-muted-foreground mt-1">{rental.program_name}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={cn("capitalize border-none",
+              rental.status === 'active' ? "bg-green-100 text-green-700" :
+              rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
+              rental.status === 'pending' ? "bg-amber-100 text-amber-700" : 
+              "bg-gray-100 text-gray-600"
+            )}>
+              {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
+            </Badge>
+            {/* Delete button for approved/pending locations */}
+            {onDeleteLocation && (rental.status === 'approved' || rental.status === 'pending') && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                onClick={() => onDeleteLocation(rental.id)}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+          </div>
         </div>
         <CardDescription className="font-mono">
           {rental.status === 'active' ? (
@@ -898,10 +949,10 @@ function LocationSelector({
       <CardHeader>
         <CardTitle className="text-lg font-serif flex items-center gap-2">
           <Plus className="w-5 h-5 text-primary" />
-          Pilih Lokasi Baharu
+          Lokasi Penganjur Saya
         </CardTitle>
         <CardDescription>
-          Pilih satu atau lebih lokasi untuk dipohon
+          Senarai lokasi dari penganjur yang telah dipautkan. Pilih satu atau lebih lokasi untuk dipohon.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
