@@ -373,11 +373,122 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
   const [isMounted, setIsMounted] = React.useState(false)
+  const [businessName, setBusinessName] = React.useState<string>("")
+  const [adminInfo, setAdminInfo] = React.useState<{ name: string, organizer_code: string } | null>(null)
 
   // CRITICAL: Use server-provided initial data as source of truth
   const user = initialUser || authUser
   const role = initialRole || authRole
   const userRole = role || "tenant"
+
+  // Fetch business name from tenant/organizer profile
+  React.useEffect(() => {
+    const fetchBusinessName = async () => {
+      if (!user?.id) return
+
+      const supabase = createClient()
+
+      // Fetch based on role
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      const userRoleStr = userProfile?.role
+
+      if (userRoleStr === 'organizer') {
+        const { data: organizer } = await supabase
+          .from('organizers')
+          .select('name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (organizer?.name) {
+          setBusinessName(organizer.name)
+          return
+        }
+      } else if (userRoleStr === 'admin') {
+        const { data: admin } = await supabase
+          .from('admins')
+          .select('full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (admin?.full_name) {
+          setBusinessName(admin.full_name)
+          return
+        }
+      } else if (userRoleStr === 'staff') {
+        const { data: staff } = await supabase
+          .from('staff')
+          .select('full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (staff?.full_name) {
+          setBusinessName(staff.full_name)
+          return
+        }
+      } else {
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('business_name, full_name')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (tenant?.business_name) {
+          setBusinessName(tenant.business_name)
+          return
+        } else if (tenant?.full_name) {
+          setBusinessName(tenant.full_name)
+          return
+        }
+      }
+    }
+
+    fetchBusinessName()
+  }, [user?.id])
+
+  // Fetch admin info for staff
+  React.useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (role !== 'staff' || !user?.id) return
+
+      const supabase = createClient()
+
+      const { data: staffProfile } = await supabase
+        .from('profiles')
+        .select('organizer_code')
+        .eq('id', user.id)
+        .single()
+
+      if (!staffProfile?.organizer_code) return
+
+      const { data: organizer } = await supabase
+        .from('organizers')
+        .select('name, organizer_code')
+        .eq('organizer_code', staffProfile.organizer_code)
+        .single()
+
+      if (organizer) {
+        setAdminInfo(organizer)
+        return
+      }
+
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('organizer_code', staffProfile.organizer_code)
+        .eq('role', 'admin')
+        .single()
+
+      if (adminProfile) {
+        setAdminInfo({
+          name: adminProfile.full_name || adminProfile.email,
+          organizer_code: staffProfile.organizer_code
+        })
+      }
+    }
+
+    fetchAdminInfo()
+  }, [role, user?.id])
 
   React.useEffect(() => {
     setIsMounted(true)
@@ -449,7 +560,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
         </div>
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-secondary rounded-full flex items-center justify-center text-xs font-bold text-primary">
-            U
+            {(businessName || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
           </div>
         </div>
       </div>
@@ -502,13 +613,19 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
                 })}
               </div>
               <div className="p-4 border-t border-border/50">
+                {userRole === 'staff' && adminInfo && (
+                  <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                    <p className="text-[10px] text-blue-600 uppercase font-semibold tracking-wider">Staf bagi</p>
+                    <p className="text-xs text-blue-800 font-medium truncate">{adminInfo.name}</p>
+                  </div>
+                )}
                 <div className="flex items-center gap-3 px-4 mb-4">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                    {user?.email?.charAt(0).toUpperCase() || "U"}
+                    {(businessName || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="text-sm font-bold">{user?.email?.split('@')[0]}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-sm font-bold truncate">{businessName || user?.user_metadata?.full_name || user?.email?.split('@')[0]}</p>
+                    <p className="text-xs text-muted-foreground capitalize truncate">{userRole}</p>
                   </div>
                 </div>
                 <Button
@@ -536,7 +653,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
           <Bell className="h-5 w-5 text-muted-foreground" />
         </Button>
         <div className="h-8 w-8 bg-secondary rounded-full flex items-center justify-center text-xs font-bold text-primary">
-          {user?.email?.charAt(0).toUpperCase()}
+          {(businessName || user?.user_metadata?.full_name || user?.email || "U").charAt(0).toUpperCase()}
         </div>
       </div>
     </div>
