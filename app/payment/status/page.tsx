@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { CheckCircle2, XCircle, Loader2, ArrowLeft, Home, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { createClient } from "@/utils/supabase/client"
 
 // Lazy load activateSubscription - only import when needed
 const activateSubscription = async (params: any) => {
@@ -20,13 +21,36 @@ function PaymentStatusContent() {
     const [status, setStatus] = useState<'loading' | 'success' | 'failure' | 'error'>('loading')
     const [details, setDetails] = useState<any>({})
     const [errorMessage, setErrorMessage] = useState<string>("")
+    const [isRefreshingSession, setIsRefreshingSession] = useState(false)
+
+    useEffect(() => {
+        // Refresh session when coming back from external payment
+        const refreshAuthSession = async () => {
+            const supabase = createClient()
+            try {
+                setIsRefreshingSession(true)
+                // This refreshes the session from cookies
+                const { data: { session }, error } = await supabase.auth.getSession()
+                if (error) {
+                    console.warn("[PaymentStatus] Session refresh warning:", error)
+                }
+                console.log("[PaymentStatus] Session status:", session ? "Active" : "No session")
+            } catch (e) {
+                console.error("[PaymentStatus] Session refresh error:", e)
+            } finally {
+                setIsRefreshingSession(false)
+            }
+        }
+
+        refreshAuthSession()
+    }, [])
 
     useEffect(() => {
         const verifyPayment = async () => {
             try {
                 // 1. Check Gateway Source
                 const gateway = searchParams.get('gateway')
-                const nextPath = searchParams.get('next') || '/dashboard'
+                const nextPath = searchParams.get('next') || '/dashboard/rentals'
 
                 // Metadata Checks
                 const isSubscription = searchParams.get('isSubscription') === 'true'
@@ -127,17 +151,19 @@ function PaymentStatusContent() {
     }, [searchParams])
 
     const handleNext = () => {
-        const nextPath = searchParams.get('next') || '/dashboard'
-        router.push(nextPath)
+        const nextPath = searchParams.get('next') || '/dashboard/rentals'
+        // Use window.location.href for hard redirect to preserve session
+        // This ensures cookies are properly sent
+        window.location.href = nextPath
     }
 
     const handleRetry = () => {
-        const nextPath = searchParams.get('next') || '/dashboard'
-        router.push(nextPath)
+        const nextPath = searchParams.get('next') || '/dashboard/rentals'
+        window.location.href = nextPath
     }
 
     const handleGoHome = () => {
-        router.push('/')
+        window.location.href = '/dashboard/rentals'
     }
 
     const getTitle = () => {
@@ -192,6 +218,12 @@ function PaymentStatusContent() {
                     <CardDescription>
                         {getDescription()}
                     </CardDescription>
+                    {isRefreshingSession && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                            <Loader2 className="w-3 h-3 inline animate-spin mr-1" />
+                            Memperbaharui sesi...
+                        </p>
+                    )}
                 </CardHeader>
 
                 <CardContent className="space-y-4 pt-6 text-center">
@@ -215,19 +247,33 @@ function PaymentStatusContent() {
 
                 <CardFooter className="flex flex-col gap-3 pb-8 px-8">
                     {status === 'success' ? (
-                        <Button onClick={handleNext} className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20 bg-brand-green hover:bg-brand-green/90">
+                        <Button 
+                            onClick={handleNext} 
+                            className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20 bg-brand-green hover:bg-brand-green/90"
+                        >
                             <Home className="mr-2 h-4 w-4" /> Kembali ke Halaman Utama
                         </Button>
                     ) : status === 'failure' ? (
-                        <Button onClick={handleRetry} className="w-full h-12 rounded-xl text-base font-bold shadow-sm" variant="outline">
+                        <Button 
+                            onClick={handleRetry} 
+                            className="w-full h-12 rounded-xl text-base font-bold shadow-sm" 
+                            variant="outline"
+                        >
                             <ArrowLeft className="mr-2 h-4 w-4" /> Cuba Semula
                         </Button>
                     ) : status === 'error' ? (
                         <>
-                            <Button onClick={handleGoHome} className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20">
+                            <Button 
+                                onClick={handleGoHome} 
+                                className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20"
+                            >
                                 <Home className="mr-2 h-4 w-4" /> Ke Halaman Utama
                             </Button>
-                            <Button onClick={handleRetry} variant="outline" className="w-full h-12 rounded-xl">
+                            <Button 
+                                onClick={handleRetry} 
+                                variant="outline" 
+                                className="w-full h-12 rounded-xl"
+                            >
                                 Cuba Semula
                             </Button>
                         </>
