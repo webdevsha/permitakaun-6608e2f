@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { AppSidebar, MobileNav } from "@/components/app-sidebar"
+import { Footer } from "@/components/footer"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -77,19 +78,23 @@ export default function DashboardLayoutClient({
     }
 
     return (
-        <div className="min-h-screen flex w-full bg-secondary">
-            <AppSidebar
-                isCollapsed={false}
-                setIsCollapsed={() => { }}
-                initialUser={initialUser}
-                initialRole={initialRole}
-                initialProfile={initialProfile}
-            />
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                    {children}
-                </div>
-            </main>
+        <div className="min-h-screen flex flex-col w-full bg-secondary">
+            <MobileNav initialUser={initialUser} initialRole={initialRole} />
+            <div className="flex flex-1 w-full">
+                <AppSidebar
+                    isCollapsed={false}
+                    setIsCollapsed={() => { }}
+                    initialUser={initialUser}
+                    initialRole={initialRole}
+                    initialProfile={initialProfile}
+                />
+                <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                        {children}
+                    </div>
+                    <Footer />
+                </main>
+            </div>
         </div>
     )
 }

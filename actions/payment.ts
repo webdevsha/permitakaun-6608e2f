@@ -168,6 +168,17 @@ export async function initiatePayment(params: {
                 // Use admin client to bypass RLS
                 const adminSupabase = createAdminClient()
 
+                // Fetch the user's role so admin approval and organizer RLS policy work correctly
+                let userRole = 'tenant'
+                if (user?.id) {
+                    const { data: profile } = await adminSupabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', user.id)
+                        .single()
+                    if (profile?.role) userRole = profile.role
+                }
+
                 const insertData: any = {
                     description: params.description,
                     amount: params.amount,
@@ -190,6 +201,7 @@ export async function initiatePayment(params: {
                             payer_email: email,
                             payer_name: name,
                             user_id: user?.id,
+                            user_role: userRole,
                             plan_type: params.metadata?.planType || 'basic',
                             is_subscription: true
                         },
@@ -212,6 +224,36 @@ export async function initiatePayment(params: {
                         console.log("[Payment] Recorded subscription payment (fallback).")
                     } catch (fallbackError) {
                         console.error("[Payment] Fallback insert failed:", fallbackError)
+                    }
+                }
+
+                // For organizer subscriptions: also record in organizer_transactions
+                // so the organizer can see their own Langganan payment history
+                if (userRole === 'organizer' && user?.id) {
+                    try {
+                        const { data: organizer } = await adminSupabase
+                            .from('organizers')
+                            .select('id')
+                            .eq('profile_id', user.id)
+                            .single()
+
+                        if (organizer) {
+                            await adminSupabase.from('organizer_transactions').insert({
+                                organizer_id: organizer.id,
+                                description: params.description,
+                                amount: params.amount,
+                                type: 'expense',
+                                category: 'Langganan',
+                                date: new Date().toISOString().split('T')[0],
+                                status: 'pending',
+                                payment_reference: result.id,
+                                receipt_url: result.url,
+                                is_sandbox: mode === 'sandbox'
+                            })
+                            console.log("[Payment] Recorded organizer subscription expense to organizer_transactions.")
+                        }
+                    } catch (orgTxError) {
+                        console.error("[Payment] Failed to record organizer_transaction for subscription:", orgTxError)
                     }
                 }
             } else {

@@ -137,7 +137,78 @@ export async function POST(req: NextRequest) {
                 console.log("[Payment Callback] No payer email found in metadata")
             }
 
+            // If this is a subscription payment, also activate the organizer's subscription
+            if (orgTx.category === 'Langganan') {
+                const adminTxRecord = await supabase
+                    .from('admin_transactions')
+                    .select('id, metadata')
+                    .eq('payment_reference', billplzId)
+                    .eq('category', 'Langganan')
+                    .maybeSingle()
+
+                const orgMeta = adminTxRecord.data?.metadata || {}
+                const userId = orgMeta.user_id
+                const planType = orgMeta.plan_type || 'basic'
+                if (userId) {
+                    // Mark admin_transaction approved too
+                    await supabase
+                        .from('admin_transactions')
+                        .update({ status: 'approved', receipt_url: receipt_url?.toString(), updated_at: new Date().toISOString() })
+                        .eq('payment_reference', billplzId)
+                        .eq('category', 'Langganan')
+
+                    const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
+                    await updateUserSubscription(supabase, userId, formattedAmount, billplzId, planType)
+                }
+            }
+
             return NextResponse.json({ success: true, type: 'organizer_transaction' })
+        }
+
+        // For subscription payments - check admin_transactions
+        console.log("[Payment Callback] Checking admin_transactions for subscription payment...")
+
+        const { data: adminTx } = await supabase
+            .from('admin_transactions')
+            .select('*')
+            .eq('payment_reference', billplzId)
+            .eq('category', 'Langganan')
+            .maybeSingle()
+
+        if (adminTx) {
+            console.log("[Payment Callback] Found admin_transaction subscription record:", adminTx.id)
+
+            // Mark admin_transaction as approved
+            await supabase
+                .from('admin_transactions')
+                .update({
+                    status: 'approved',
+                    receipt_url: receipt_url?.toString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', adminTx.id)
+
+            // Also update the matching organizer_transactions record (if exists)
+            await supabase
+                .from('organizer_transactions')
+                .update({
+                    status: 'approved',
+                    receipt_url: receipt_url?.toString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('payment_reference', billplzId)
+                .eq('category', 'Langganan')
+
+            // Auto-activate the subscription since payment is confirmed by gateway
+            const metadata = adminTx.metadata || {}
+            const userId = metadata.user_id
+            const planType = metadata.plan_type || 'basic'
+            if (userId) {
+                const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
+                await updateUserSubscription(supabase, userId, formattedAmount, billplzId, planType)
+            }
+
+            return NextResponse.json({ success: true, type: 'subscription_payment' })
         }
 
         console.warn("[Payment Callback] Payment record not found for billplz_id:", billplzId)
@@ -211,7 +282,18 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                 .single()
 
             if (organizer) {
-                // Update organizer accounting status and store subscription info
+                // Insert into subscriptions table so it appears in Langganan Aktif
+                await supabase.from('subscriptions').insert({
+                    tenant_id: null,
+                    plan_type: planType,
+                    status: 'active',
+                    start_date: now.toISOString(),
+                    end_date: endDate.toISOString(),
+                    amount: parseFloat(amount),
+                    payment_ref: paymentRef
+                })
+
+                // Update organizer accounting status
                 await supabase
                     .from('organizers')
                     .update({
