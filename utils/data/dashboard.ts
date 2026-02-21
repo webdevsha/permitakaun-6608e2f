@@ -284,12 +284,9 @@ async function fetchDashboardDataInternal(
 
                             return {
                                 ...t,
-                                // Add link context
                                 link_id: link.id,
                                 link_status: link.status,
-                                // Legacy compatibility (optional)
                                 organizer_code: orgCode,
-
                                 locations: t.tenant_locations?.map((l: any) => ({
                                     name: l.locations?.name,
                                     status: l.status
@@ -302,6 +299,7 @@ async function fetchDashboardDataInternal(
                         }).filter(Boolean)
                     } catch (e) {
                         console.error('[Dashboard] Error fetching organizer tenants:', e)
+                        tenants = []
                     }
                 }
 
@@ -566,17 +564,29 @@ export async function fetchLocations() {
     // Fetch tenant counts for each location
     const locationsWithCounts = await Promise.all(
         locations.map(async (loc: any) => {
-            const { count, error: countError } = await supabase
-                .from('tenant_locations')
-                .select('*', { count: 'exact', head: true })
-                .eq('location_id', loc.id)
-                .eq('status', 'active')
+            try {
+                // Try to get count - use a simpler query first
+                const { count, error: countError } = await withTimeout(
+                    () => supabase
+                        .from('tenant_locations')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('location_id', loc.id)
+                        .eq('status', 'active'),
+                    2000,
+                    `count tenants for location ${loc.id}`
+                )
 
-            if (countError) {
-                console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
+                if (countError) {
+                    console.warn(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError.message || countError)
+                    return { ...loc, tenant_count: 0 }
+                }
+
+                return { ...loc, tenant_count: count || 0 }
+            } catch (e: any) {
+                // If count fails (e.g., timeout or RLS), return location with count 0
+                console.warn(`[fetchLocations] Failed to count tenants for location ${loc.id}:`, e?.message || e)
+                return { ...loc, tenant_count: 0 }
             }
-
-            return { ...loc, tenant_count: count || 0 }
         })
     )
 

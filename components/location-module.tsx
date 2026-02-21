@@ -265,15 +265,14 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         await logAction('UPDATE', 'location', formData.id, payload)
         toast.success(role === 'staff' ? "Lokasi dikemaskini. Menunggu kelulusan." : "Lokasi berjaya dikemaskini")
       } else {
-        let organizerId = null;
+        // For organizers, get their organizer_id first before building payload
+        let finalPayload = { ...payload };
+        
         if (role === 'organizer') {
           const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
-          organizerId = orgData?.id
-        }
-
-        const finalPayload = {
-          ...payload,
-          organizer_id: organizerId || payload.organizer_id
+          if (orgData?.id) {
+            finalPayload.organizer_id = orgData.id
+          }
         }
 
         const { data: newLoc, error } = await supabase.from('locations').insert(finalPayload).select().single()
@@ -423,7 +422,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       const result = await initiatePayment({
         amount: amount,
         description: `Sewa Tapak: ${rentLocation.name} (${rentType})`,
-        redirectPath: '/dashboard/tenant' // Returning to dashboard
+        redirectPath: '/dashboard/tenant', // Returning to dashboard
+        locationId: rentLocation.id  // Pass location ID for proper organizer routing
       })
 
       console.log("[Client] Payment Result:", result)
@@ -434,6 +434,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         const { error } = await supabase.from('tenant_locations').insert({
           tenant_id: userTenant.id,
           location_id: rentLocation.id,
+          organizer_id: rentLocation.organizer_id,  // Set organizer_id for proper routing
           rate_type: rentType,
           status: 'active'
         })

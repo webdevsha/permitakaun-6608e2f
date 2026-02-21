@@ -32,7 +32,7 @@ export async function createPublicPaymentTransaction(data: {
                 amount: data.amount,
                 type: 'income',
                 category: 'Sewa',
-                status: 'pending',
+                status: 'approved',  // Rental payments don't need approval
                 date: new Date().toISOString().split('T')[0],
                 organizer_id: data.organizer_id,
                 location_id: data.location_id,

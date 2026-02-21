@@ -16,7 +16,8 @@ export async function initiatePayment(params: {
     redirectPath: string,
     transactionId?: string, // For public payments - update existing record
     payerEmail?: string,    // For public payments - use provided email
-    payerName?: string      // For public payments - use provided name
+    payerName?: string,     // For public payments - use provided name
+    locationId?: number     // For rental payments - track which location is being rented
 }) {
     const supabase = await createClient()
 
@@ -268,6 +269,7 @@ export async function initiatePayment(params: {
                     const { error: txError } = await supabase.from('tenant_payments').insert({
                         tenant_id: tenant.id,
                         organizer_code: tenant.organizer_code,
+                        location_id: params.locationId || null,  // Track which location is being rented
                         payment_date: new Date().toISOString(),
                         amount: params.amount,
                         status: 'pending',

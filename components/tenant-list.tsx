@@ -160,9 +160,20 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
       setIsUpdating(true)
       try {
          if (tenant.link_id) {
-            // Organizer Context: Update Link Status
+            // Organizer Context: Update Link Status via tenant_organizers
             const { error } = await supabase.from('tenant_organizers').update({ status: newStatus }).eq('id', tenant.link_id)
             if (error) throw error
+         } else if (tenant.locations?.length > 0 && role === 'organizer') {
+            // Tenant linked via tenant_locations - need to get organizer_id first
+            const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+            if (orgData?.id) {
+               const { error } = await supabase
+                  .from('tenant_locations')
+                  .update({ status: newStatus, is_active: newStatus === 'active' })
+                  .eq('tenant_id', tenant.id)
+                  .eq('organizer_id', orgData.id)
+               if (error) throw error
+            }
          } else {
             // Admin Context: Update Global Status
             const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenant.id)
@@ -204,10 +215,22 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
    const handleApproveTenant = async (tenant: any) => {
       try {
          if (tenant.link_id) {
-            // Organizer: Approve Link
+            // Organizer: Approve Link via tenant_organizers
             const { error } = await supabase.from('tenant_organizers').update({ status: 'active' }).eq('id', tenant.link_id)
             if (error) throw error
             await logAction('APPROVE', 'tenant_link', tenant.link_id, { status: 'active' })
+         } else if (tenant.locations?.length > 0 && role === 'organizer') {
+            // Tenant linked via tenant_locations - approve their locations
+            const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
+            if (orgData?.id) {
+               const { error } = await supabase
+                  .from('tenant_locations')
+                  .update({ status: 'active', is_active: true })
+                  .eq('tenant_id', tenant.id)
+                  .eq('organizer_id', orgData.id)
+               if (error) throw error
+               await logAction('APPROVE', 'tenant_locations', tenant.id, { status: 'active', organizer_id: orgData.id })
+            }
          } else {
             // Admin: Approve Tenant Account
             const { error } = await supabase.from('tenants').update({ status: 'active' }).eq('id', tenant.id)
