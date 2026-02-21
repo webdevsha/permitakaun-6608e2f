@@ -29,7 +29,7 @@ This SQL file contains all the database schema changes required for the recent f
 ### 2. **locations table** - Add monthly rate columns
 - **Columns added:**
   - `rate_monthly_khemah` (NUMERIC, default 0) - Monthly rate for Khemah stalls
-  - `rate_monthly_cbs` (NUMERIC, default 0) - Monthly rate for CBS/Lori stalls
+  - `rate_monthly_cbs` (NUMERIC, default 0) - Monthly rate for CBS stalls
 - **Purpose:** Allow monthly locations to have different rates for different stall types
 - **Used in:** Location creation/edit dialog and rental flow
 

@@ -801,7 +801,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                           <SelectContent>
                             <SelectItem value="monthly">Bulanan</SelectItem>
                             <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
-                            <SelectItem value="cbs">Mingguan (CBS/Lori)</SelectItem>
+                            <SelectItem value="cbs">Mingguan (CBS)</SelectItem>
                           </SelectContent>
                         </Select>
                         <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white shadow-sm" onClick={() => handleUpdateCategory(rental.id)} disabled={isUpdatingCategory}>

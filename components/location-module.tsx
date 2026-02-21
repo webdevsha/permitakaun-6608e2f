@@ -759,7 +759,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Kadar Bulanan (CBS/Lori)</Label>
+                          <Label className="text-xs">Kadar Bulanan (CBS)</Label>
                           <Input
                             type="number"
                             value={formData.rate_monthly_cbs}
@@ -825,7 +825,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="monthly_khemah">Khemah (RM {rentLocation.rate_monthly_khemah || rentLocation.rate_monthly})</SelectItem>
-                    <SelectItem value="monthly_cbs">CBS / Lori (RM {rentLocation.rate_monthly_cbs || rentLocation.rate_monthly})</SelectItem>
+                    <SelectItem value="monthly_cbs">CBS (RM {rentLocation.rate_monthly_cbs || rentLocation.rate_monthly})</SelectItem>
                     <SelectItem value="monthly">Standard (RM {rentLocation.rate_monthly})</SelectItem>
                   </SelectContent>
                 </Select>

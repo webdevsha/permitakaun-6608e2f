@@ -807,7 +807,7 @@ function RentalCard({
             >
               <option value="monthly">Bulanan</option>
               <option value="khemah">Mingguan (Khemah)</option>
-              <option value="cbs">Mingguan (CBS/Lori)</option>
+              <option value="cbs">Mingguan (CBS)</option>
             </select>
             <Button 
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
