@@ -606,7 +606,7 @@ export async function fetchSettingsData() {
                 'organizer profile'
             )
             if (org) {
-                profile = { ...profile, id: org.id, business_name: org.name, organizer_code: org.organizer_code, status: org.status }
+                profile = { ...profile, ...org, id: org.id, business_name: org.name, organizer_code: org.organizer_code, status: org.status }
             }
         } else if (role === 'admin') {
             const { data: admin } = await withTimeout(

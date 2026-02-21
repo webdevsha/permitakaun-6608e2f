@@ -5,6 +5,13 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// We want the user to execute a script that explicitly tests the exact SQL from the trigger
-// and captures the error message properly without needing to signup through the auth system.
-// We'll write this script to ask the user to run it.
+async function main() {
+    const { data, error } = await supabase.from('organizers').select('*').limit(1)
+    if (data && data.length > 0) {
+        console.log('Columns in organizers table:', Object.keys(data[0]))
+    } else {
+        console.log('No data to infer columns from or error:', error)
+    }
+}
+
+main()

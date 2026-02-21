@@ -16,6 +16,14 @@ export type Organizer = {
   organizer_code: string
   status: string
   created_at: string
+  ic_number?: string | null
+  ssm_number?: string | null
+  address?: string | null
+  profile_image_url?: string | null
+  ssm_file_url?: string | null
+  ic_file_url?: string | null
+  food_handling_cert_url?: string | null
+  other_docs_url?: string | null
 }
 
 export type Location = {
