@@ -112,82 +112,54 @@ export function EnhancedRentalModule({
         setLinkedOrganizers(orgData as LinkedOrganizer[])
       }
 
-      // Get approved organizer IDs
-      const approvedOrgIds = (orgData || [])
-        .filter((link: any) => link.status === 'approved' || link.status === 'active')
-        .map((link: any) => link.organizer_id)
+      // Fetch ALL active locations system-wide (all organizers)
+      const { data: allLocData } = await supabase
+        .from('locations')
+        .select('*')
+        .order('program_name')
 
-      // Fetch ALL locations from approved organizers (including assigned ones)
-      if (approvedOrgIds.length > 0) {
-        // Get locations
-        const { data: allLocData } = await supabase
-          .from('locations')
-          .select(`
-            id,
-            name,
-            program_name,
-            address,
-            google_maps_url,
-            rate_khemah,
-            rate_cbs,
-            rate_monthly,
-            rate_monthly_khemah,
-            rate_monthly_cbs,
-            operating_days,
-            type,
-            organizer_id
-          `)
-          .in('organizer_id', approvedOrgIds)
-          .eq('status', 'active')
-          .order('program_name')
+      const locOrgIds = [...new Set((allLocData || []).map((l: any) => l.organizer_id).filter(Boolean))]
+      const { data: orgsData } = locOrgIds.length > 0
+        ? await supabase.from('organizers').select('id, name').in('id', locOrgIds)
+        : { data: [] }
 
-        // Get organizer names separately
-        const { data: orgsData } = await supabase
-          .from('organizers')
-          .select('id, name')
-          .in('id', approvedOrgIds)
+      const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
 
-        const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
+      // Get assigned location IDs
+      const { data: assignedLocs } = await supabase
+        .from('tenant_locations')
+        .select('location_id')
+        .eq('tenant_id', tenant.id)
+        .eq('is_active', true)
 
-        // Get assigned location IDs
-        const { data: assignedLocs } = await supabase
-          .from('tenant_locations')
-          .select('location_id')
-          .eq('tenant_id', tenant.id)
-          .eq('is_active', true)
+      const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
 
-        const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
+      const updatedAllLocations = (allLocData || []).map((l: any) => ({
+        location_id: l.id,
+        location_name: l.name,
+        program_name: l.program_name,
+        organizer_id: l.organizer_id,
+        organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
+        rate_khemah: l.rate_khemah,
+        rate_cbs: l.rate_cbs,
+        rate_monthly: l.rate_monthly,
+        rate_monthly_khemah: l.rate_monthly_khemah,
+        rate_monthly_cbs: l.rate_monthly_cbs,
+        operating_days: l.operating_days || 'Setiap Hari',
+        type: l.type,
+        display_price: l.rate_monthly || l.rate_khemah || 0,
+        google_maps_url: l.google_maps_url,
+        address: l.address,
+        is_assigned: assignedIds.has(l.id)
+      }))
 
-        // Build allLocations with is_assigned flag
-        const updatedAllLocations = (allLocData || []).map((l: any) => ({
-          location_id: l.id,
-          location_name: l.name,
-          program_name: l.program_name,
-          organizer_id: l.organizer_id,
-          organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
-          rate_khemah: l.rate_khemah,
-          rate_cbs: l.rate_cbs,
-          rate_monthly: l.rate_monthly,
-          rate_monthly_khemah: l.rate_monthly_khemah,
-          rate_monthly_cbs: l.rate_monthly_cbs,
-          operating_days: l.operating_days || 'Setiap Hari',
-          type: l.type,
-          display_price: l.rate_monthly || l.rate_khemah || 0,
-          google_maps_url: l.google_maps_url,
-          address: l.address,
-          is_assigned: assignedIds.has(l.id)
-        }))
-
-        setAllLocations(updatedAllLocations)
-        
-        // Available locations are those NOT assigned
-        setAvailableLocations(updatedAllLocations.filter((loc: any) => !loc.is_assigned))
-      }
+      setAllLocations(updatedAllLocations)
+      setAvailableLocations(updatedAllLocations.filter((loc: any) => !loc.is_assigned))
 
       // Refresh my locations
       const { data: myLocData } = await supabase
         .from('tenant_locations')
-        .select(`*, locations:location_id (*)`)
+        .select(`*, locations:location_id (*), organizers:organizer_id (name, id)`)
         .eq('tenant_id', tenant.id)
         .eq('is_active', true)
 
@@ -195,7 +167,16 @@ export function EnhancedRentalModule({
         const updatedLocs = myLocData.map((item: any) => ({
           ...item,
           display_price: item.locations?.rate_monthly || item.locations?.rate_khemah || 0,
-          location_name: item.locations?.name
+          location_name: item.locations?.name,
+          program_name: item.locations?.program_name,
+          google_maps_url: item.locations?.google_maps_url,
+          address: item.locations?.address,
+          organizer_name: item.organizers?.name,
+          rate_monthly: item.locations?.rate_monthly,
+          rate_khemah: item.locations?.rate_khemah,
+          rate_cbs: item.locations?.rate_cbs,
+          rate_monthly_khemah: item.locations?.rate_monthly_khemah,
+          rate_monthly_cbs: item.locations?.rate_monthly_cbs
         }))
         setMyLocations(updatedLocs)
         
@@ -288,12 +269,10 @@ export function EnhancedRentalModule({
 
     setDeletingLocation(rentalId)
     try {
-      const { error } = await supabase
-        .from('tenant_locations')
-        .update({ is_active: false, status: 'inactive' })
-        .eq('id', rentalId)
-      
-      if (error) throw error
+      const { deleteTenantLocationAction } = await import("@/actions/tenant-organizer")
+      const result = await deleteTenantLocationAction(rentalId, tenant.id)
+
+      if (!result.success) throw new Error(result.error)
       toast.success('Permohonan tapak berjaya dipadam')
       refreshData()
     } catch (e: any) {
@@ -1101,9 +1080,7 @@ function LocationSelector({
                   Tiada program tersedia
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {hasApprovedOrganizer 
-                    ? "Penganjur anda tidak mempunyai lokasi aktif" 
-                    : "Sila tunggu kelulusan penganjur terlebih dahulu"}
+                  Tiada lokasi aktif dalam sistem
                 </p>
               </div>
             </div>
@@ -1138,7 +1115,12 @@ function LocationSelector({
                       ) : (
                         <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
                       )}
-                      <span className="font-medium text-sm">{program}</span>
+                      <div>
+                        <span className="font-medium text-sm">{program}</span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {[...new Set(allLocations.filter((l: any) => l.program_name === program).map((l: any) => l.location_name))].join(', ')}
+                        </p>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -1252,6 +1234,11 @@ function LocationSelector({
                                   )}
                                 </div>
                                 <p className="font-medium text-sm truncate">{loc.location_name}</p>
+                                {loc.organizer_name && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Building2 className="w-3 h-3" />{loc.organizer_name}
+                                  </p>
+                                )}
                                 <p className="text-xs text-muted-foreground">
                                   {loc.operating_days}
                                 </p>

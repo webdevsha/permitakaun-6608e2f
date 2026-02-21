@@ -37,57 +37,33 @@ export default async function RentalsPage() {
         linkedOrganizers = orgData || []
     }
 
-    // Get approved organizer IDs
-    const approvedOrgIds = linkedOrganizers
-        .filter((link: any) => link.status === 'approved' || link.status === 'active')
-        .map((link: any) => link.organizer_id)
-
-    // Get all locations from approved organizers (for showing all programs)
+    // Get all active locations from ALL organizers (system-wide) for "Mohon Program Baru"
     let allLocations: any[] = []
     let availableLocations: any[] = []
-    
-    if (tenantData && approvedOrgIds.length > 0) {
-        // Get ALL locations from approved organizers
-        // Note: Using separate query for organizers to avoid RLS issues with joins
-        const { data: locData, error: locError } = await supabase
+
+    if (tenantData) {
+        const { data: locData } = await supabase
             .from('locations')
-            .select(`
-                id,
-                name,
-                program_name,
-                address,
-                google_maps_url,
-                rate_khemah,
-                rate_cbs,
-                rate_monthly,
-                rate_monthly_khemah,
-                rate_monthly_cbs,
-                operating_days,
-                type,
-                organizer_id
-            `)
-            .in('organizer_id', approvedOrgIds)
-            .eq('status', 'active')
+            .select('*')
             .order('program_name')
-        
-        // Get organizer names separately
-        const { data: orgsData } = await supabase
-            .from('organizers')
-            .select('id, name')
-            .in('id', approvedOrgIds)
-        
+
+        // Get all organizer names
+        const orgIds = [...new Set((locData || []).map((l: any) => l.organizer_id).filter(Boolean))]
+        const { data: orgsData } = orgIds.length > 0
+            ? await supabase.from('organizers').select('id, name').in('id', orgIds)
+            : { data: [] }
+
         const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
-        
+
         // Get already assigned location IDs
         const { data: assignedLocs } = await supabase
             .from('tenant_locations')
             .select('location_id')
             .eq('tenant_id', tenantData.id)
             .eq('is_active', true)
-        
+
         const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
-        
-        // ALL locations (for showing programs)
+
         allLocations = (locData || []).map((l: any) => ({
             location_id: l.id,
             location_name: l.name,
@@ -104,10 +80,9 @@ export default async function RentalsPage() {
             display_price: l.rate_monthly || l.rate_khemah || 0,
             google_maps_url: l.google_maps_url,
             address: l.address,
-            is_assigned: assignedIds.has(l.id) // Mark if already assigned
+            is_assigned: assignedIds.has(l.id)
         }))
-        
-        // Available locations only (for filtering)
+
         availableLocations = allLocations.filter((loc: any) => !loc.is_assigned)
     }
 
