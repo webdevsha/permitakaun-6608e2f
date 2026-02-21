@@ -515,11 +515,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const perspectiveTransactions = transactions || []
 
-  // For tenants, include pending transactions in calculations (it's their own Akaun)
-  // For organizers/admins, only count approved transactions
-  // Use 'role' from auth (available immediately) rather than userRole state
-  const isTenantRole = role === 'tenant'
-  const statusFilter = isTenantRole ? ['approved', 'pending'] : ['approved']
+  // Include both approved and pending transactions for all roles
+  // Admins/organizers own the data so pending is still valid revenue
+  // Tenants also see their own pending transactions
+  const statusFilter = ['approved', 'pending']
 
   // 1. Paid Up Capital (Modal)
   // Updated to include new capital terms
@@ -1971,7 +1970,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     <CardTitle className="font-serif text-2xl text-emerald-900">Penyata Aliran Tunai</CardTitle>
                     <CardDescription className="text-emerald-700/70">
                       Ringkasan kemasukan dan perbelanjaan tunai
-                      {isTenantRole && <span className="block text-xs mt-1 text-emerald-600/70">* Termasuk transaksi yang belum disahkan</span>}
+                      {role === 'tenant' && <span className="block text-xs mt-1 text-emerald-600/70">* Termasuk transaksi yang belum disahkan</span>}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">

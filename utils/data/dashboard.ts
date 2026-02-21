@@ -77,7 +77,7 @@ async function fetchDashboardDataInternal(
 
     try {
         // --- ADMIN & SUPERADMIN (Organization Owners) ---
-        // All admins (including admin@kumim.my) should only see their OWN organization's data
+        // All admins/superadmins see all data system-wide
         if (role === 'admin' || role === 'superadmin') {
             const isDeveloperAdmin = email === 'admin@permit.com'
 
@@ -125,30 +125,15 @@ async function fetchDashboardDataInternal(
 
             // Fetch Transactions with timeout
             try {
-                // All admins (including admin@kumim.my) should only see their OWN organization's transactions
+                // All admins/superadmins see ALL transactions system-wide
                 let txQuery = supabase
                     .from('organizer_transactions')
                     .select('*, tenants(full_name, business_name, organizer_code)')
                     .order('date', { ascending: false })
-                    .limit(100) // Increased limit for admin view
+                    .limit(500)
 
-                // Filter by organizer_id if we can determine it from organizerCode
-                if (organizerCode && !isDeveloperAdmin) {
-                    try {
-                        const { data: orgData } = await supabase
-                            .from('organizers')
-                            .select('id')
-                            .eq('organizer_code', organizerCode)
-                            .maybeSingle()
-                        if (orgData) {
-                            txQuery = txQuery.eq('organizer_id', orgData.id)
-                        }
-                    } catch (filterErr) {
-                        console.warn('[Dashboard] Could not filter by organizer:', filterErr)
-                        // Continue without filter if it fails
-                    }
-                } else if (!isDeveloperAdmin) {
-                    // Filter out seed data if no organizer code
+                // Only exclude seed data for non-developer admins
+                if (!isDeveloperAdmin) {
                     try {
                         const { data: seedOrg } = await supabase
                             .from('organizers')
