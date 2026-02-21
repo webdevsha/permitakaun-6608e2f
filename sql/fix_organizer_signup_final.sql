@@ -1,12 +1,15 @@
--- Final fix for organizer signup - ensures organizer_code is generated properly
+-- ============================================================================
+-- FINAL COMPLETE FIX: Organizer Signup Database Error
+-- ============================================================================
+-- This script fixes the missing sequence issue and restores the correct trigger.
 
--- Step 1: Ensure sequence exists
-CREATE SEQUENCE IF NOT EXISTS organizer_code_seq START 1000;
+-- 1. Create the sequence if it doesn't exist
+CREATE SEQUENCE IF NOT EXISTS public.organizer_code_seq START 1000;
 
--- Step 2: Drop existing trigger
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- 2. Grant permissions on the sequence
+GRANT USAGE, SELECT ON SEQUENCE public.organizer_code_seq TO anon, authenticated, postgres, service_role;
 
--- Step 3: Create fixed trigger function with better error handling
+-- 3. Restore the correct trigger function (without updated_at and with proper error handling)
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
 DECLARE
@@ -16,8 +19,6 @@ BEGIN
   -- Get role from metadata, default to 'tenant'
   user_role := COALESCE(new.raw_user_meta_data->>'role', 'tenant');
   
-  RAISE NOTICE 'Creating user: %, role: %', new.email, user_role;
-  
   -- Create profile with the correct role
   INSERT INTO public.profiles (id, email, full_name, role)
   VALUES (
@@ -26,8 +27,6 @@ BEGIN
     new.raw_user_meta_data->>'full_name',
     user_role
   );
-  
-  RAISE NOTICE 'Profile created for: %', new.email;
   
   -- Create tenant record if role is 'tenant'
   IF user_role = 'tenant' THEN
@@ -55,60 +54,47 @@ BEGIN
         new.raw_user_meta_data->>'organizer_code',
         'pending'
       );
-      RAISE NOTICE 'Tenant record created for: %', new.email;
     ELSE
       UPDATE public.tenants 
       SET profile_id = new.id 
       WHERE email = new.email;
-      RAISE NOTICE 'Tenant record updated for: %', new.email;
     END IF;
   END IF;
   
   -- Create organizer record if role is 'organizer'
   IF user_role = 'organizer' THEN
-    RAISE NOTICE 'Processing organizer signup for: %', new.email;
-    
     IF NOT EXISTS (SELECT 1 FROM public.organizers WHERE email = new.email) THEN
-      -- Generate unique organizer code
-      new_org_code := 'ORG' || nextval('organizer_code_seq');
-      RAISE NOTICE 'Generated organizer code: % for %', new_org_code, new.email;
+      -- Generate unique organizer code using the sequence we just ensured exists
+      new_org_code := 'ORG' || nextval('public.organizer_code_seq');
       
-      -- Insert organizer with all required fields
+      -- Insert organizer with ALL required fields
       INSERT INTO public.organizers (
         profile_id,
         email,
         name,
         organizer_code,
         status,
-        accounting_status,
-        created_at,
-        updated_at
+        created_at
       ) VALUES (
         new.id,
         new.email,
         COALESCE(new.raw_user_meta_data->>'full_name', 'New Organizer'),
         new_org_code,
         'pending',
-        'inactive',
-        NOW(),
         NOW()
       );
-      
-      RAISE NOTICE 'Organizer record created for: % with code: %', new.email, new_org_code;
       
       -- Update profiles table with the new organizer code
       UPDATE public.profiles 
       SET organizer_code = new_org_code 
       WHERE id = new.id;
-      
-      RAISE NOTICE 'Profile updated with organizer_code: %', new_org_code;
     ELSE
-      -- Link existing organizer record
+      -- Link existing organizer
       UPDATE public.organizers 
       SET profile_id = new.id 
       WHERE email = new.email;
       
-      -- Get existing organizer code and update profile
+      -- Get existing code and update profile
       SELECT organizer_code INTO new_org_code 
       FROM public.organizers 
       WHERE email = new.email;
@@ -116,39 +102,20 @@ BEGIN
       UPDATE public.profiles 
       SET organizer_code = new_org_code 
       WHERE id = new.id;
-      
-      RAISE NOTICE 'Existing organizer linked for: %', new.email;
     END IF;
   END IF;
   
   RETURN new;
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE EXCEPTION 'Error in handle_new_user trigger: % (SQLSTATE: %)', SQLERRM, SQLSTATE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Step 4: Recreate the trigger
+-- 4. Re-create the trigger just to be safe
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
 CREATE TRIGGER on_auth_user_created 
   AFTER INSERT ON auth.users 
   FOR EACH ROW 
   EXECUTE PROCEDURE public.handle_new_user();
 
--- Step 5: Verify trigger is installed
-SELECT 
-    tgname AS trigger_name,
-    tgrelid::regclass AS table_name,
-    proname AS function_name,
-    tgenabled AS enabled
-FROM pg_trigger t
-JOIN pg_proc p ON t.tgfoid = p.oid
-WHERE tgname = 'on_auth_user_created';
-
--- Step 6: Check if organizers table allows NULL in organizer_code (it shouldn't)
--- This shows current constraints
-SELECT 
-    column_name,
-    is_nullable,
-    data_type
-FROM information_schema.columns
-WHERE table_name = 'organizers' AND column_name = 'organizer_code';
+-- 5. Clean up the debug table as it is no longer needed
+DROP TABLE IF EXISTS public.debug_logs;

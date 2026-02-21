@@ -79,15 +79,13 @@ BEGIN
         name,
         organizer_code,
         status,
-        created_at,
-        updated_at
+        created_at
       ) VALUES (
         new.id,
         new.email,
         COALESCE(new.raw_user_meta_data->>'full_name', 'New Organizer'),
         new_org_code,
         'pending',
-        NOW(),
         NOW()
       );
       
