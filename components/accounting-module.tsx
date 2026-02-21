@@ -367,7 +367,22 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
 
-  if (isLoading || !user || (user && !role) || (role === 'tenant' && activePlan === undefined)) {
+  // Loading states - role specific messages
+  const isPrivilegedRole = role === 'admin' || role === 'superadmin' || role === 'staff'
+  
+  if (isLoading || !user || (user && !role)) {
+    return (
+      <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
+        <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-primary" />
+        <p className="font-semibold text-sm">
+          {isPrivilegedRole ? 'Memuatkan modul...' : 'Menyemak kelayakan pelan dan memuatkan modul...'}
+        </p>
+      </div>
+    )
+  }
+
+  // Tenant-specific: wait for plan check
+  if (role === 'tenant' && activePlan === undefined) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
         <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-primary" />

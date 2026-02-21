@@ -30,6 +30,7 @@ export type Location = {
   total_lots: number
   created_at: string
   organizer_id?: string | null
+  status?: string
 }
 
 export type Tenant = {
@@ -56,11 +57,98 @@ export type TenantLocation = {
   id: number
   tenant_id: number
   location_id: number
+  organizer_id?: string | null
   stall_number: string | null
   rate_type: 'khemah' | 'cbs' | 'monthly'
   status: string
+  is_active?: boolean
   created_at: string
   locations?: Location // For join queries
+}
+
+// ============================================================================
+// TENANT-ORGANIZER WORKFLOW TYPES
+// ============================================================================
+
+/**
+ * Tenant-Organizer Request/Link
+ * Tracks the approval workflow between tenants and organizers
+ */
+export type TenantOrganizerRequest = {
+  id: number
+  tenant_id: number
+  organizer_id: string
+  status: 'pending' | 'approved' | 'rejected' | 'active'
+  requested_at: string
+  approved_at?: string | null
+  rejected_at?: string | null
+  rejection_reason?: string | null
+  created_at: string
+  updated_at: string
+  // Join fields
+  tenants?: Tenant
+  organizers?: Organizer
+}
+
+/**
+ * Linked Organizer (for tenant view)
+ */
+export type LinkedOrganizer = {
+  id: number
+  status: 'pending' | 'approved' | 'active' | 'rejected'
+  requested_at: string
+  approved_at?: string | null
+  rejected_at?: string | null
+  rejection_reason?: string | null
+  organizers: {
+    id: string
+    name: string
+    organizer_code: string
+    email: string | null
+    phone?: string | null
+  }
+}
+
+/**
+ * Pending Request (for organizer/admin view)
+ */
+export type PendingTenantRequest = {
+  id: number
+  tenant_id: number
+  organizer_id: string
+  status: 'pending'
+  requested_at: string
+  tenants: {
+    id: number
+    full_name: string
+    business_name: string | null
+    phone_number: string | null
+    email: string | null
+    ic_number: string | null
+    profile_image_url: string | null
+  }
+  organizers: {
+    id: string
+    name: string
+    organizer_code: string
+    email: string | null
+  }
+}
+
+/**
+ * Available Location for Tenant
+ * Locations from approved organizers that tenant can apply for
+ */
+export type AvailableLocation = {
+  location_id: number
+  location_name: string
+  organizer_id: string
+  organizer_name: string
+  rate_khemah: number
+  rate_cbs: number
+  rate_monthly: number
+  operating_days: string
+  type: 'daily' | 'monthly'
 }
 
 // ============================================================================

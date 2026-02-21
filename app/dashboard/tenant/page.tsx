@@ -1,5 +1,5 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
-import { ArrowRight, TrendingUp, AlertCircle, Loader2 } from "lucide-react"
+import { ArrowRight, TrendingUp, AlertCircle, Loader2, Building2, CheckCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
+import { OrganizerValidation } from "@/components/organizer-validation"
 
 // Server-side access check to avoid client/server mismatch
 async function checkAccessServer(user: any, role: string) {
@@ -70,12 +71,6 @@ async function checkAccessServer(user: any, role: string) {
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-/**
- * Tenant Dashboard Page
- * 
- * This page should only be accessible to users with tenant role.
- * Server-side role verification prevents unauthorized access.
- */
 // Helper for timeout
 async function withTimeout<T>(
     queryFn: () => any,
@@ -132,9 +127,44 @@ export default async function TenantDashboardPage() {
 
     const role = determineUserRole(profile, user.email)
 
-    // Only tenants should access this page
-    // Organizers/admins/superadmins can also use this as a simplified view
-    // But if someone tries to access with wrong expectations, they can still see
+    // Fetch tenant data and linked organizers
+    let tenantData: any = null
+    let linkedOrganizers: any[] = []
+    let hasApprovedOrganizer = false
+
+    try {
+        const tenantResult: any = await withTimeout(
+            () => supabase
+                .from('tenants')
+                .select('*')
+                .eq('profile_id', user.id)
+                .maybeSingle(),
+            3000,
+            'getTenant'
+        )
+        tenantData = tenantResult.data
+
+        if (tenantData) {
+            const orgResult: any = await withTimeout(
+                () => supabase
+                    .from('tenant_organizers')
+                    .select(`
+                        *,
+                        organizers(id, name, organizer_code, email)
+                    `)
+                    .eq('tenant_id', tenantData.id)
+                    .order('requested_at', { ascending: false }),
+                3000,
+                'getLinkedOrganizers'
+            )
+            linkedOrganizers = orgResult.data || []
+            hasApprovedOrganizer = linkedOrganizers.some(
+                o => o.status === 'approved' || o.status === 'active'
+            )
+        }
+    } catch (e) {
+        console.error('[TenantDashboard] Error fetching tenant data:', e)
+    }
 
     // Fetch dashboard data with timeout
     let data: any;
@@ -146,7 +176,6 @@ export default async function TenantDashboardPage() {
         )
     } catch (e) {
         console.error('[TenantDashboard] Timeout fetching dashboard data:', e)
-        // Use empty data as fallback
         data = { myLocations: [], userProfile: profile, transactions: [], tenants: [], overdueTenants: [], organizers: [], availableLocations: [], role: role || 'tenant' }
     }
 
@@ -210,6 +239,14 @@ export default async function TenantDashboardPage() {
                 </div>
             </header>
 
+            {/* Organizer Validation Section */}
+            {tenantData && (
+                <OrganizerValidation
+                    tenantId={tenantData.id}
+                    linkedOrganizers={linkedOrganizers}
+                />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="bg-primary text-primary-foreground border-none shadow-xl shadow-primary/20 rounded-[2rem]">
                     <CardHeader className="pb-2">
@@ -247,22 +284,71 @@ export default async function TenantDashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* New Section: Browse Locations (Placeholder for Penganjur Locations) */}
-                <div className="md:col-span-2">
-                    <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
-                        <CardHeader>
-                            <CardTitle>Cari Tapak Sewaan</CardTitle>
-                            <CardDescription>Lihat senarai lokasi mengikut penganjur.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Link href="/dashboard/rentals">
-                                <Button variant="outline" className="rounded-xl">
-                                    Semak Lokasi
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                </div>
+                {/* Status Cards */}
+                {hasApprovedOrganizer ? (
+                    <div className="md:col-span-2">
+                        <Card className="bg-green-50 border-green-200 shadow-sm rounded-[2rem]">
+                            <CardHeader>
+                                <CardTitle className="text-green-800 flex items-center gap-2">
+                                    <CheckCircle className="w-5 h-5" />
+                                    Sedia untuk Sewaan
+                                </CardTitle>
+                                <CardDescription className="text-green-700">
+                                    Anda telah diluluskan oleh penganjur. Anda kini boleh memohon lokasi dan membuat pembayaran sewa.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/dashboard/rentals">
+                                    <Button className="bg-green-600 hover:bg-green-700 text-white rounded-xl">
+                                        Urus Sewaan
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </div>
+                ) : linkedOrganizers.some(o => o.status === 'pending') ? (
+                    <div className="md:col-span-2">
+                        <Card className="bg-amber-50 border-amber-200 shadow-sm rounded-[2rem]">
+                            <CardHeader>
+                                <CardTitle className="text-amber-800 flex items-center gap-2">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Menunggu Kelulusan
+                                </CardTitle>
+                                <CardDescription className="text-amber-700">
+                                    Permohonan anda sedang dalam semakan. Anda akan dapat mengakses lokasi sebaik sahaja diluluskan.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/dashboard/rentals">
+                                    <Button variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-100 rounded-xl">
+                                        Semak Status
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </div>
+                ) : (
+                    <div className="md:col-span-2">
+                        <Card className="bg-white border-border/50 shadow-sm rounded-[2rem]">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Building2 className="w-5 h-5 text-primary" />
+                                    Pautkan Penganjur
+                                </CardTitle>
+                                <CardDescription>
+                                    Sila pautkan dengan sekurang-kurangnya satu penganjur untuk memohon lokasi sewaan.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/dashboard/rentals">
+                                    <Button className="bg-primary hover:bg-primary/90 text-white rounded-xl">
+                                        Tambah Penganjur
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
             </div>
         </div>
     )

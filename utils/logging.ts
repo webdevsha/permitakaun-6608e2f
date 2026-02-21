@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/client"
 
 export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT'
-export type ResourceType = 'location' | 'tenant' | 'transaction' | 'organizer'
+export type ResourceType = 'location' | 'tenant' | 'transaction' | 'organizer' | 'tenant_link'
 
 export async function logAction(
     action: ActionType,

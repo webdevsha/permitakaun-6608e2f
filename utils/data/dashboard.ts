@@ -205,8 +205,8 @@ async function fetchDashboardDataInternal(
         }
         // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
         else if (role === 'organizer' || role === 'staff') {
-            let orgId = null
-            let orgCode = null // Store code for tenant filtering
+            let orgId: string | null = null
+            let orgCode: string | null = null // Store code for tenant filtering
 
             if (role === 'organizer') {
                 const { data: org } = await withTimeout(
@@ -546,8 +546,24 @@ export async function fetchLocations() {
     }
     if (!locations) return []
 
-    // Return locations without counting (to save time)
-    return locations.map((loc: any) => ({ ...loc, tenant_count: 0 }))
+    // Fetch tenant counts for each location
+    const locationsWithCounts = await Promise.all(
+        locations.map(async (loc: any) => {
+            const { count, error: countError } = await supabase
+                .from('tenant_locations')
+                .select('*', { count: 'exact', head: true })
+                .eq('location_id', loc.id)
+                .eq('status', 'active')
+            
+            if (countError) {
+                console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
+            }
+            
+            return { ...loc, tenant_count: count || 0 }
+        })
+    )
+    
+    return locationsWithCounts
 }
 
 export async function fetchSettingsData() {
