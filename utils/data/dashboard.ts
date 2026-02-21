@@ -81,46 +81,43 @@ async function fetchDashboardDataInternal(
         if (role === 'admin' || role === 'superadmin') {
             const isDeveloperAdmin = email === 'admin@permit.com'
 
-            // Fetch Tenants with timeout - filtered by organizer_code
+            // Fetch all tenants system-wide for admin
             try {
                 let tQuery = supabase
                     .from('tenants')
-                    .select('*, tenant_locations(*, locations(*))')
+                    .select('*, tenant_locations(*, locations(*)), tenant_organizers(status, organizers(name, organizer_code))')
                     .order('created_at', { ascending: false })
-                    .limit(100) // Limit to prevent timeouts
-
-                // Filter by organizer_code if available
-                if (organizerCode) {
-                    tQuery = tQuery.eq('organizer_code', organizerCode)
-                } else if (!isDeveloperAdmin) {
-                    // If no organizer code and not developer admin, exclude seed data
-                    tQuery = tQuery.neq('organizer_code', 'ORG001')
-                }
+                    .limit(100)
 
                 const { data: t, error } = await withTimeout(() => tQuery, 5000, 'tenants query')
 
                 if (error) throw error
 
-                // Get organizer name map
+                // Get organizer profile_ids to exclude organizers from tenant list
                 const { data: allOrganizers } = await withTimeout(
-                    () => supabase.from('organizers').select('profile_id, organizer_code, name').limit(100),
+                    () => supabase.from('organizers').select('profile_id').limit(100),
                     3000,
-                    'organizers query'
+                    'organizer profiles query'
                 )
-                const validOrganizers = allOrganizers?.filter(o => o.organizer_code) || []
-                const organizerNameMap = new Map(validOrganizers.map(o => [o.organizer_code, o.name]))
+                const organizerProfileIds = new Set((allOrganizers || []).filter(o => o.profile_id).map(o => o.profile_id))
 
-                tenants = (t || []).map(tenant => ({
-                    ...tenant,
-                    locations: tenant.tenant_locations?.map((l: any) => ({
-                        name: l.locations?.name,
-                        status: l.status // Include status for TenantList
-                    })) || [],
-                    organizerName: tenant.organizer_code ? (organizerNameMap.get(tenant.organizer_code) || tenant.organizer_code) : '-',
-                    lastPaymentDate: "Tiada Rekod",
-                    lastPaymentAmount: 0,
-                    paymentStatus: 'active'
-                }))
+                tenants = (t || []).filter(tenant => !tenant.profile_id || !organizerProfileIds.has(tenant.profile_id)).map(tenant => {
+                    // Get linked organizer name from tenant_organizers junction
+                    const activeLink = tenant.tenant_organizers?.find((to: any) => to.status === 'active')
+                    const linkedOrgName = activeLink?.organizers?.name || null
+
+                    return {
+                        ...tenant,
+                        locations: tenant.tenant_locations?.map((l: any) => ({
+                            name: l.locations?.name,
+                            status: l.status
+                        })) || [],
+                        organizerName: linkedOrgName || '-',
+                        lastPaymentDate: "Tiada Rekod",
+                        lastPaymentAmount: 0,
+                        paymentStatus: 'active'
+                    }
+                })
             } catch (e: any) {
                 console.error('[Dashboard] Error fetching tenants:', e.message || e)
                 tenants = []
@@ -224,12 +221,8 @@ async function fetchDashboardDataInternal(
             try {
                 let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
                 
-                // Filter by organizer_code for regular admins
-                // Only developer admin sees all organizers
-                if (organizerCode && !isDeveloperAdmin) {
-                    orgQuery = orgQuery.eq('organizer_code', organizerCode)
-                } else if (!isDeveloperAdmin) {
-                    // Exclude seed data for non-privileged users
+                // Admins see all organizers; only exclude seed data for non-developer admins
+                if (!isDeveloperAdmin) {
                     orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
                 }
                 

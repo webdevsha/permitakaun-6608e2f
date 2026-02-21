@@ -72,64 +72,56 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    const [addingTenant, setAddingTenant] = useState(false)
 
    // Fetch pending request count (organizer links, location requests, AND rental payments)
+   // Only fetch when organizerId is available (matches PendingApprovalsCombined which returns empty without it)
    useEffect(() => {
+      if (!organizerId) {
+         setPendingRequestCount(0)
+         return
+      }
+
       const fetchPendingCount = async () => {
          // Count pending organizer links
-         let orgQuery = supabase
+         const { count: orgCount, error: orgError } = await supabase
             .from('tenant_organizers')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending')
-         
-         if (organizerId) {
-            orgQuery = orgQuery.eq('organizer_id', organizerId)
-         }
-         
-         const { count: orgCount, error: orgError } = await orgQuery
-         
+            .eq('organizer_id', organizerId)
+
          // Count pending location requests
-         let locQuery = supabase
+         const { count: locCount, error: locError } = await supabase
             .from('tenant_locations')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending')
             .eq('is_active', true)
-         
-         if (organizerId) {
-            locQuery = locQuery.eq('organizer_id', organizerId)
-         }
-         
-         const { count: locCount, error: locError } = await locQuery
-         
+            .eq('organizer_id', organizerId)
+
          // Count pending rental payments
-         // All users (including admins) should only see payments from their own organization
          let paymentCount = 0
-         if (organizerId) {
-            // For organizers, get payments from their tenants
-            const { data: tenantLocs } = await supabase
-               .from('tenant_locations')
-               .select('tenant_id')
-               .eq('organizer_id', organizerId)
-               .eq('is_active', true)
-            
-            const tenantIds = tenantLocs?.map(tl => tl.tenant_id) || []
-            
-            if (tenantIds.length > 0) {
-               const { count: pCount, error: pError } = await supabase
-                  .from('tenant_payments')
-                  .select('id', { count: 'exact', head: true })
-                  .eq('status', 'pending')
-                  .in('tenant_id', tenantIds)
-               
-               if (!pError) {
-                  paymentCount = pCount || 0
-               }
+         const { data: tenantLocs } = await supabase
+            .from('tenant_locations')
+            .select('tenant_id')
+            .eq('organizer_id', organizerId)
+            .eq('is_active', true)
+
+         const tenantIds = tenantLocs?.map(tl => tl.tenant_id) || []
+
+         if (tenantIds.length > 0) {
+            const { count: pCount, error: pError } = await supabase
+               .from('tenant_payments')
+               .select('id', { count: 'exact', head: true })
+               .eq('status', 'pending')
+               .in('tenant_id', tenantIds)
+
+            if (!pError) {
+               paymentCount = pCount || 0
             }
          }
-         
+
          if (!orgError && !locError) {
             setPendingRequestCount((orgCount || 0) + (locCount || 0) + paymentCount)
          }
       }
-      
+
       fetchPendingCount()
    }, [supabase, organizerId, isRefreshing, isAdmin])
 
