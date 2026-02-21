@@ -118,20 +118,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     const { data: tenantData } = await supabase.from('tenants').select('id, accounting_status').eq('profile_id', initialSession.user.id).single()
                     if (tenantData?.accounting_status === 'active') {
                       const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('tenant_id', tenantData.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
-
-                      // Specific hardcode mock for the owner account to test Enterprise via code
-                      if (initialSession.user.email === 'nshfnoh@proton.me') {
-                        setActivePlan('premium')
-                      } else {
-                        setActivePlan(subData?.plan_type || 'basic')
-                      }
+                      setActivePlan(subData?.plan_type || 'basic')
                     } else {
-                      if (initialSession.user.email === 'nshfnoh@proton.me') {
-                        setActivePlan('premium')
-                      } else {
-                        setActivePlan(null)
-                      }
+                      setActivePlan(null)
                     }
+                  }
+
+                  // Global plan mocks based on email (overrides database)
+                  if (initialSession.user.email === 'nshfnoh@proton.me') {
+                    setActivePlan('premium')
+                  } else if (initialSession.user.email === 'hai@shafiranoh.com') {
+                    setActivePlan('standard')
                   }
                 }
               } catch (err) {
@@ -220,6 +217,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               setActivePlan(null)
             }
+          }
+
+          // Global plan mocks based on email (overrides database)
+          if (currentSession.user.email === 'nshfnoh@proton.me') {
+            setActivePlan('premium')
+          } else if (currentSession.user.email === 'hai@shafiranoh.com') {
+            setActivePlan('standard')
           }
         }
       } else {

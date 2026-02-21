@@ -373,7 +373,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // Loading states - role specific messages
   const isPrivilegedRole = role === 'admin' || role === 'superadmin' || role === 'staff'
-  
+
   if (isLoading || !user || (user && !role)) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
@@ -984,7 +984,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const isEnterprise = activePlan === 'premium'
   const isSdnBhd = activePlan === 'standard'
 
-  // Free Trial / Admin = All access. Enterprise = 3. Sdn Bhd = 4.
+  // Enterprise = 3. Sdn Bhd = 4. Others (like Ultimate or full access) = 7.
   const allowedTabungs = isEnterprise
     ? ['operating', 'tax', 'zakat']
     : isSdnBhd
@@ -1137,15 +1137,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Label className="flex items-center gap-2">
                     <Upload className="w-4 h-4" /> Muat Naik Resit
                   </Label>
-                  
+
                   {/* Show existing receipt with X button to remove */}
                   {existingReceiptUrl && !removeExistingReceipt && !receiptFile && (
                     <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl border border-border/50">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <FileText className="w-4 h-4 text-primary flex-shrink-0" />
-                        <a 
-                          href={existingReceiptUrl} 
-                          target="_blank" 
+                        <a
+                          href={existingReceiptUrl}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-primary hover:underline truncate"
                         >
@@ -1164,7 +1164,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       </Button>
                     </div>
                   )}
-                  
+
                   {/* Show message if receipt was removed */}
                   {removeExistingReceipt && !receiptFile && (
                     <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200">
@@ -1180,7 +1180,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       </Button>
                     </div>
                   )}
-                  
+
                   {/* File input for new upload */}
                   <Input
                     type="file"
@@ -1193,7 +1193,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     }}
                     className="h-10 pt-1.5 rounded-xl bg-secondary/20 cursor-pointer text-xs"
                   />
-                  
+
                   {/* Show new file info */}
                   {receiptFile && (
                     <div className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/20">
@@ -1792,7 +1792,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       </Button>
                     </div>
                   )}
-                  
+
                   {/* Show summary when all items are displayed */}
                   {!hasMore && filteredTransactions.length > 5 && (
                     <div className="p-3 border-t border-border/10 text-center text-xs text-muted-foreground bg-slate-50/30">
@@ -2017,6 +2017,55 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Analisis Untung Rugi Ringkas (Profit & Loss) - Only for Sdn Bhd and above */}
+            {!isEnterprise && (
+              <Card className="bg-white border-border/50 shadow-sm rounded-[2rem] overflow-hidden print:w-full print:break-inside-avoid shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+                <CardHeader className="bg-amber-50/50 border-b border-amber-100/50 pb-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="font-serif text-2xl text-amber-900">Analisis Untung Rugi Ringkas</CardTitle>
+                      <CardDescription className="text-amber-700/70">Ringkasan pendapatan dan perbelanjaan operasi</CardDescription>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl shadow-sm">
+                      <TrendingUp className="w-6 h-6 text-amber-600" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableBody>
+                      <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                        <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Pendapatan (Revenue)</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="pl-10 font-medium">Jumlah Pendapatan Operasi</TableCell>
+                        <TableCell className="text-right pr-10 font-mono text-emerald-600">
+                          RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                        <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Perbelanjaan (Expenses)</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="pl-10 font-medium text-red-600">Jumlah Kos Operasi & Lain-lain</TableCell>
+                        <TableCell className="text-right pr-10 font-mono text-red-500">
+                          (RM {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                        </TableCell>
+                      </TableRow>
+                      <TableRow className={cn("text-white hover:text-white/90 print:text-black print:bg-slate-100", netProfit >= 0 ? "bg-amber-600 hover:bg-amber-600/90" : "bg-red-600 hover:bg-red-600/90")}>
+                        <TableCell className="pl-6 py-6 font-bold text-lg">Untung / (Rugi) Bersih</TableCell>
+                        <TableCell className="text-right pr-10 font-bold text-xl font-mono">
+                          RM {netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
 
           </div>
         </TabsContent>
