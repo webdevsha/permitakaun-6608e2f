@@ -355,56 +355,71 @@ export default function PublicPaymentPage() {
                             <Label className="mb-3 block">Pilih Jenis Sewaan <span className="text-red-500">*</span></Label>
                             {selectedLocation.type === 'daily' ? (
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Button
-                                        type="button"
-                                        variant={selectedRateType === 'khemah' ? 'default' : 'outline'}
-                                        onClick={() => setSelectedRateType('khemah')}
-                                        className="h-auto py-3 flex flex-col items-center"
-                                    >
-                                        <span className="font-bold">Khemah</span>
-                                        <span className="text-xs opacity-80">RM {selectedLocation.rate_khemah}/minggu</span>
-                                        <span className="text-[10px]">~RM {(selectedLocation.rate_khemah * 4).toFixed(0)}/bulan</span>
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={selectedRateType === 'cbs' ? 'default' : 'outline'}
-                                        onClick={() => setSelectedRateType('cbs')}
-                                        className="h-auto py-3 flex flex-col items-center"
-                                    >
-                                        <span className="font-bold">CBS</span>
-                                        <span className="text-xs opacity-80">RM {selectedLocation.rate_cbs}/minggu</span>
-                                        <span className="text-[10px]">~RM {(selectedLocation.rate_cbs * 4).toFixed(0)}/bulan</span>
-                                    </Button>
+                                    {/* Only show Khemah if rate > 0 */}
+                                    {selectedLocation.rate_khemah > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant={selectedRateType === 'khemah' ? 'default' : 'outline'}
+                                            onClick={() => setSelectedRateType('khemah')}
+                                            className="h-auto py-3 flex flex-col items-center"
+                                        >
+                                            <span className="font-bold">Khemah</span>
+                                            <span className="text-xs opacity-80">RM {selectedLocation.rate_khemah}/minggu</span>
+                                            <span className="text-[10px]">~RM {(selectedLocation.rate_khemah * 4).toFixed(0)}/bulan</span>
+                                        </Button>
+                                    )}
+                                    {/* Only show CBS if rate > 0 */}
+                                    {selectedLocation.rate_cbs > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant={selectedRateType === 'cbs' ? 'default' : 'outline'}
+                                            onClick={() => setSelectedRateType('cbs')}
+                                            className="h-auto py-3 flex flex-col items-center"
+                                        >
+                                            <span className="font-bold">CBS</span>
+                                            <span className="text-xs opacity-80">RM {selectedLocation.rate_cbs}/minggu</span>
+                                            <span className="text-[10px]">~RM {(selectedLocation.rate_cbs * 4).toFixed(0)}/bulan</span>
+                                        </Button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-3 gap-3">
-                                    <Button
-                                        type="button"
-                                        variant={selectedRateType === 'monthly_khemah' ? 'default' : 'outline'}
-                                        onClick={() => setSelectedRateType('monthly_khemah')}
-                                        className="h-auto py-3 flex flex-col items-center"
-                                    >
-                                        <span className="font-bold">Khemah</span>
-                                        <span className="text-xs">RM {selectedLocation.rate_monthly_khemah || selectedLocation.rate_monthly}/bln</span>
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={selectedRateType === 'monthly_cbs' ? 'default' : 'outline'}
-                                        onClick={() => setSelectedRateType('monthly_cbs')}
-                                        className="h-auto py-3 flex flex-col items-center"
-                                    >
-                                        <span className="font-bold">CBS</span>
-                                        <span className="text-xs">RM {selectedLocation.rate_monthly_cbs || selectedLocation.rate_monthly}/bln</span>
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={selectedRateType === 'monthly' ? 'default' : 'outline'}
-                                        onClick={() => setSelectedRateType('monthly')}
-                                        className="h-auto py-3 flex flex-col items-center"
-                                    >
-                                        <span className="font-bold">Standard</span>
-                                        <span className="text-xs">RM {selectedLocation.rate_monthly}/bln</span>
-                                    </Button>
+                                    {/* Only show Khemah if rate > 0 */}
+                                    {(selectedLocation.rate_monthly_khemah > 0 || selectedLocation.rate_monthly > 0) && (
+                                        <Button
+                                            type="button"
+                                            variant={selectedRateType === 'monthly_khemah' ? 'default' : 'outline'}
+                                            onClick={() => setSelectedRateType('monthly_khemah')}
+                                            className="h-auto py-3 flex flex-col items-center"
+                                        >
+                                            <span className="font-bold">Khemah</span>
+                                            <span className="text-xs">RM {selectedLocation.rate_monthly_khemah || selectedLocation.rate_monthly}/bln</span>
+                                        </Button>
+                                    )}
+                                    {/* Only show CBS if rate > 0 */}
+                                    {(selectedLocation.rate_monthly_cbs > 0 || selectedLocation.rate_monthly > 0) && (
+                                        <Button
+                                            type="button"
+                                            variant={selectedRateType === 'monthly_cbs' ? 'default' : 'outline'}
+                                            onClick={() => setSelectedRateType('monthly_cbs')}
+                                            className="h-auto py-3 flex flex-col items-center"
+                                        >
+                                            <span className="font-bold">CBS</span>
+                                            <span className="text-xs">RM {selectedLocation.rate_monthly_cbs || selectedLocation.rate_monthly}/bln</span>
+                                        </Button>
+                                    )}
+                                    {/* Only show Standard if rate > 0 */}
+                                    {selectedLocation.rate_monthly > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant={selectedRateType === 'monthly' ? 'default' : 'outline'}
+                                            onClick={() => setSelectedRateType('monthly')}
+                                            className="h-auto py-3 flex flex-col items-center"
+                                        >
+                                            <span className="font-bold">Standard</span>
+                                            <span className="text-xs">RM {selectedLocation.rate_monthly}/bln</span>
+                                        </Button>
+                                    )}
                                 </div>
                             )}
                         </div>

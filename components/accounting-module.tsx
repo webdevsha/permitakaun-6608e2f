@@ -349,6 +349,57 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
   }
 
+  // Auto-adjust percentages to make total = 100%
+  const handleAutoAdjustPercentages = () => {
+    const isEnterprise = activePlan === 'premium'
+    const isSdnBhd = activePlan === 'standard'
+    const allowedTabungs = isEnterprise
+      ? ['operating', 'tax', 'zakat']
+      : isSdnBhd
+        ? ['operating', 'tax', 'zakat', 'investment']
+        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+
+    const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
+    
+    if (currentTotal === 0) {
+      toast.error("Sila masukkan nilai peratus terlebih dahulu")
+      return
+    }
+
+    // Calculate the factor to multiply each percentage to reach 100%
+    const factor = 100 / currentTotal
+    
+    const newPercentages = { ...percentages }
+    allowedTabungs.forEach((key) => {
+      const currentValue = percentages[key as keyof typeof percentages] || 0
+      newPercentages[key as keyof typeof percentages] = Number((currentValue * factor).toFixed(1))
+    })
+
+    // Handle rounding error - adjust the last tabung to ensure exactly 100%
+    const newTotal = allowedTabungs.reduce((sum, key) => sum + (newPercentages[key as keyof typeof percentages] || 0), 0)
+    if (Math.abs(newTotal - 100) > 0.01 && allowedTabungs.length > 0) {
+      const lastKey = allowedTabungs[allowedTabungs.length - 1] as keyof typeof percentages
+      newPercentages[lastKey] = Number((newPercentages[lastKey] + (100 - newTotal)).toFixed(1))
+    }
+
+    setPercentages(newPercentages)
+    toast.success(`Peratusan telah digenapkan kepada 100% (daripada ${currentTotal.toFixed(1)}%)`)
+  }
+
+  // Calculate remaining percentage needed to reach 100%
+  const getRemainingPercentage = () => {
+    const isEnterprise = activePlan === 'premium'
+    const isSdnBhd = activePlan === 'standard'
+    const allowedTabungs = isEnterprise
+      ? ['operating', 'tax', 'zakat']
+      : isSdnBhd
+        ? ['operating', 'tax', 'zakat', 'investment']
+        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+
+    const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
+    return 100 - currentTotal
+  }
+
   const handleSaveSystemSettings = async () => {
     try {
       const { error } = await supabase.from('system_settings').upsert({
@@ -1388,13 +1439,56 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           <Input className="col-span-6 h-9" type="text" value={bankNames.emergency} onChange={(e) => setBankNames({ ...bankNames, emergency: e.target.value })} placeholder="Contoh: Maybank Savings" />
                         </div>
 
-                        <div className="flex justify-between items-center pt-4 border-t">
-                          <p className={cn("text-xs font-bold",
-                            currentTotalPercent === 100 ? "text-green-600" : "text-red-600"
-                          )}>
-                            Jumlah: {currentTotalPercent.toFixed(1)}%
-                          </p>
-                          <Button onClick={handleSaveConfig} size="sm">Simpan</Button>
+                        <div className="flex flex-col gap-3 pt-4 border-t">
+                          {/* Total and Remaining Percentage Display */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex flex-col">
+                              <p className={cn("text-sm font-bold",
+                                Math.abs(currentTotalPercent - 100) < 0.1 ? "text-green-600" : "text-red-600"
+                              )}>
+                                Jumlah: {currentTotalPercent.toFixed(1)}%
+                              </p>
+                              {Math.abs(currentTotalPercent - 100) > 0.1 && (
+                                <p className="text-xs text-muted-foreground">
+                                  {getRemainingPercentage() > 0 
+                                    ? `Baki diperlukan: +${getRemainingPercentage().toFixed(1)}% untuk genap 100%` 
+                                    : `Lebihan: ${Math.abs(getRemainingPercentage()).toFixed(1)}% melebihi 100%`}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {Math.abs(currentTotalPercent - 100) > 0.1 && (
+                                <Button 
+                                  onClick={handleAutoAdjustPercentages} 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-xs bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                                >
+                                  ✨ Genapkan 100%
+                                </Button>
+                              )}
+                              <Button 
+                                onClick={handleSaveConfig} 
+                                size="sm"
+                                disabled={Math.abs(currentTotalPercent - 100) > 0.1}
+                              >
+                                Simpan
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {/* Warning Message */}
+                          {Math.abs(currentTotalPercent - 100) > 0.1 && (
+                            <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                              <span className="mt-0.5">⚠️</span>
+                              <p>
+                                Jumlah peratus mestilah tepat 100% untuk simpan. 
+                                {getRemainingPercentage() > 0 
+                                  ? ` Sila tambah ${getRemainingPercentage().toFixed(1)}% lagi.` 
+                                  : ` Sila kurangkan ${Math.abs(getRemainingPercentage()).toFixed(1)}%.`}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </DialogContent>
