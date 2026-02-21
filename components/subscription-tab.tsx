@@ -33,26 +33,15 @@ export function SubscriptionTab() {
   const [userEmail, setUserEmail] = useState<string>("")
 
   useEffect(() => {
-    if (user?.email) {
+    if (user?.email && role) {
       setUserEmail(user.email)
       fetchSubscriptionData()
-    } else {
-      // If no user initially, make sure we don't stick on loading forever if it never comes
-      const timer = setTimeout(() => setLoading(false), 2000)
-      return () => clearTimeout(timer)
     }
+    // Keep loading true until user+role are available; don't use timeout fallback
   }, [user, role])
 
   const fetchSubscriptionData = async () => {
-    // Safety timeout to prevent infinite loading
-    const safetyTimer = setTimeout(() => {
-      if (loading) setLoading(false)
-    }, 5000)
-
-    if (!user || !role) {
-      clearTimeout(safetyTimer)
-      return
-    }
+    if (!user || !role) return
 
     setLoading(true)
     try {
@@ -211,7 +200,6 @@ export function SubscriptionTab() {
     } catch (error) {
       console.error('Error fetching subscription data:', error)
     } finally {
-      clearTimeout(safetyTimer)
       setLoading(false)
     }
   }

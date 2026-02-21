@@ -126,10 +126,15 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    }, [supabase, organizerId, isRefreshing, isAdmin])
 
    // Calculate counts from initialTenants
-   const activeCount = initialTenants?.filter(t => 
-      (t.link_status === 'active' || (!t.link_status && t.status === 'active'))
-   ).length || 0
-   
+   // Treat both 'active' and 'approved' link_status as active (organizer approved the tenant)
+   const isActive = (t: any) => {
+      const ls = t.link_status
+      if (ls === 'active' || ls === 'approved') return true
+      if (!ls && t.status === 'active') return true
+      return false
+   }
+   const activeCount = initialTenants?.filter(isActive).length || 0
+
    const inactiveCount = initialTenants?.filter(t => {
       const status = t.link_status || t.status
       return status === 'inactive' || status === 'rejected'
@@ -139,8 +144,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
       return (initialTenants || [])
          .filter((t: any) => {
             const status = t.link_status || t.status
-            if (filterStatus === "active" && status !== "active") return false
-            if (filterStatus === "inactive" && status !== "inactive") return false
+            if (filterStatus === "active" && !isActive(t)) return false
+            if (filterStatus === "inactive" && status !== "inactive" && status !== "rejected") return false
             if (filterStatus === "pending" && status !== "pending") return false
             if (searchQuery && !t.full_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false
             return true
@@ -429,10 +434,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    }
 
    // Filter tenants for each tab
-   const activeTenants = tenants.filter((t: any) => {
-      const status = t.link_status || t.status
-      return status === 'active'
-   })
+   const activeTenants = tenants.filter((t: any) => isActive(t))
    
    const inactiveTenants = tenants.filter((t: any) => {
       const status = t.link_status || t.status

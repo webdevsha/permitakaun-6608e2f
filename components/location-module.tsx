@@ -246,41 +246,17 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
         end_date: formData.end_date || null,
       }
 
-      // Staff: Default to pending, Admin: Active
-      if (role === 'staff') {
-        payload.status = 'pending'
-      } else {
-        payload.status = 'active'
-      }
+      // Use server action to bypass RLS
+      const { saveLocationAction } = await import("@/actions/location")
+      const result = await saveLocationAction(payload, isEditMode && formData.id ? formData.id : undefined)
 
-      if (role === 'organizer') {
-        delete payload.organizer_id // Don't overwrite organizer_id on update; preserve existing value
-        payload.status = 'active'
-      }
+      if (!result.success) throw new Error(result.error)
 
-      if (isEditMode && formData.id) {
-        const { error } = await supabase.from('locations').update(payload).eq('id', formData.id)
-        if (error) throw error
-
-        await logAction('UPDATE', 'location', formData.id, payload)
-        toast.success(role === 'staff' ? "Lokasi dikemaskini. Menunggu kelulusan." : "Lokasi berjaya dikemaskini")
-      } else {
-        // For organizers, get their organizer_id first before building payload
-        let finalPayload = { ...payload };
-        
-        if (role === 'organizer') {
-          const { data: orgData } = await supabase.from('organizers').select('id').eq('profile_id', (await supabase.auth.getUser()).data.user?.id).single()
-          if (orgData?.id) {
-            finalPayload.organizer_id = orgData.id
-          }
-        }
-
-        const { data: newLoc, error } = await supabase.from('locations').insert(finalPayload).select().single()
-        if (error) throw error
-
-        await logAction('CREATE', 'location', newLoc.id, finalPayload)
-        toast.success(role === 'staff' ? "Lokasi ditambah. Menunggu kelulusan Admin." : "Lokasi baru berjaya ditambah")
-      }
+      toast.success(
+        isEditMode
+          ? (role === 'staff' ? "Lokasi dikemaskini. Menunggu kelulusan." : "Lokasi berjaya dikemaskini")
+          : (role === 'staff' ? "Lokasi ditambah. Menunggu kelulusan Admin." : "Lokasi baru berjaya ditambah")
+      )
 
       setIsDialogOpen(false)
       mutate() // Refresh list
@@ -816,103 +792,59 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
-                          <Input
-                            type="number"
-                            value={formData.rate_khemah}
-                            onChange={(e) => setFormData({ ...formData, rate_khemah: e.target.value })}
-                            className="h-9 bg-white"
-                          />
+                          <Input type="number" value={formData.rate_khemah} onChange={(e) => setFormData({ ...formData, rate_khemah: e.target.value })} className="h-9 bg-white" />
                         </div>
                         <div>
                           <Label className="text-xs">Kadar Seminggu (CBS)</Label>
-                          <Input
-                            type="number"
-                            value={formData.rate_cbs}
-                            onChange={(e) => setFormData({ ...formData, rate_cbs: e.target.value })}
-                            className="h-9 bg-white"
-                          />
+                          <Input type="number" value={formData.rate_cbs} onChange={(e) => setFormData({ ...formData, rate_cbs: e.target.value })} className="h-9 bg-white" />
                         </div>
                         <div>
                           <Label className="text-xs">Kadar Seminggu (Foodtruck)</Label>
-                          <Input
-                            type="number"
-                            value={formData.rate_foodtruck}
-                            onChange={(e) => setFormData({ ...formData, rate_foodtruck: e.target.value })}
-                            className="h-9 bg-white"
-                          />
+                          <Input type="number" value={formData.rate_foodtruck} onChange={(e) => setFormData({ ...formData, rate_foodtruck: e.target.value })} className="h-9 bg-white" />
                         </div>
                       </div>
-
-                      {/* Editable Monthly Estimates */}
                       <div className="bg-secondary/10 p-3 rounded-lg border border-dashed border-secondary/30">
                         <Label className="text-xs font-bold text-muted-foreground mb-2 block">Anggaran Bulanan (Editable)</Label>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div>
                             <Label className="text-[10px] text-muted-foreground">Anggaran Khemah (4 Minggu)</Label>
-                            <Input
-                              type="number"
-                              value={formData.estimate_monthly_khemah}
-                              onChange={(e) => setFormData({ ...formData, estimate_monthly_khemah: e.target.value })}
-                              placeholder={(parseFloat(formData.rate_khemah || '0') * 4).toString()}
-                              className="h-8 bg-white text-xs"
-                            />
+                            <Input type="number" value={formData.estimate_monthly_khemah} onChange={(e) => setFormData({ ...formData, estimate_monthly_khemah: e.target.value })} placeholder={(parseFloat(formData.rate_khemah || '0') * 4).toString()} className="h-8 bg-white text-xs" />
                           </div>
                           <div>
                             <Label className="text-[10px] text-muted-foreground">Anggaran CBS (4 Minggu)</Label>
-                            <Input
-                              type="number"
-                              value={formData.estimate_monthly_cbs}
-                              onChange={(e) => setFormData({ ...formData, estimate_monthly_cbs: e.target.value })}
-                              placeholder={(parseFloat(formData.rate_cbs || '0') * 4).toString()}
-                              className="h-8 bg-white text-xs"
-                            />
+                            <Input type="number" value={formData.estimate_monthly_cbs} onChange={(e) => setFormData({ ...formData, estimate_monthly_cbs: e.target.value })} placeholder={(parseFloat(formData.rate_cbs || '0') * 4).toString()} className="h-8 bg-white text-xs" />
                           </div>
                           <div>
                             <Label className="text-[10px] text-muted-foreground">Anggaran Foodtruck (4 Minggu)</Label>
-                            <Input
-                              type="number"
-                              value={formData.estimate_monthly_foodtruck}
-                              onChange={(e) => setFormData({ ...formData, estimate_monthly_foodtruck: e.target.value })}
-                              placeholder={(parseFloat(formData.rate_foodtruck || '0') * 4).toString()}
-                              className="h-8 bg-white text-xs"
-                            />
+                            <Input type="number" value={formData.estimate_monthly_foodtruck} onChange={(e) => setFormData({ ...formData, estimate_monthly_foodtruck: e.target.value })} placeholder={(parseFloat(formData.rate_foodtruck || '0') * 4).toString()} className="h-8 bg-white text-xs" />
                           </div>
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-2 italic">* Masukkan nilai manual jika ingin override pengiraan automatik (Kadar x 4).</p>
                       </div>
                     </div>
-                  ) : (
+                  ) : formData.type === 'monthly' ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-xs">Kadar Bulanan (Khemah)</Label>
-                          <Input
-                            type="number"
-                            value={formData.rate_monthly_khemah}
-                            onChange={(e) => setFormData({ ...formData, rate_monthly_khemah: e.target.value })}
-                            className="h-9 bg-white"
-                          />
+                          <Input type="number" value={formData.rate_monthly_khemah} onChange={(e) => setFormData({ ...formData, rate_monthly_khemah: e.target.value })} className="h-9 bg-white" />
                         </div>
                         <div>
                           <Label className="text-xs">Kadar Bulanan (CBS)</Label>
-                          <Input
-                            type="number"
-                            value={formData.rate_monthly_cbs}
-                            onChange={(e) => setFormData({ ...formData, rate_monthly_cbs: e.target.value })}
-                            className="h-9 bg-white"
-                          />
+                          <Input type="number" value={formData.rate_monthly_cbs} onChange={(e) => setFormData({ ...formData, rate_monthly_cbs: e.target.value })} className="h-9 bg-white" />
                         </div>
                       </div>
                       <div>
                         <Label className="text-xs">Kadar Sewa Bulanan (Standard)</Label>
-                        <Input
-                          type="number"
-                          value={formData.rate_monthly}
-                          onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })}
-                          className="bg-white"
-                          placeholder="Kadar umum jika tidak specify jenis"
-                        />
+                        <Input type="number" value={formData.rate_monthly} onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })} className="bg-white" placeholder="Kadar umum jika tidak specify jenis" />
                       </div>
+                    </div>
+                  ) : (
+                    /* expo, bazar_ramadhan, bazar_raya — single flat rate per event */
+                    <div>
+                      <Label className="text-xs">Kadar Sewa Per Sesi</Label>
+                      <Input type="number" value={formData.rate_monthly} onChange={(e) => setFormData({ ...formData, rate_monthly: e.target.value })} className="bg-white" placeholder="Contoh: 150" />
+                      <p className="text-[10px] text-muted-foreground mt-1">Kadar tetap untuk setiap penyertaan program ini.</p>
                     </div>
                   )}
                 </div>
@@ -981,7 +913,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
           return (
             <Card key={loc.id} className="border-border/50 shadow-sm bg-white overflow-hidden rounded-[2rem] hover:shadow-md transition-all relative group">
               {role !== 'tenant' && (
-                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                <div className="absolute top-4 right-4 z-10 flex gap-2">
                   {/* Admin Approval Button */}
                   {(role === 'admin' || role === 'superadmin') && loc.status === 'pending' && (
                     <Button size="icon" className="h-8 w-8 rounded-full shadow-sm bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApproveLocation(loc.id)} title="Luluskan">
@@ -1039,7 +971,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   <div className="space-y-1">
                     <span className="text-xs text-muted-foreground block">Jenis</span>
                     <Badge variant="outline" className="capitalize bg-white">
-                      {loc.type === 'daily' ? 'Mingguan' : 'Bulanan'}
+                      {loc.type === 'daily' ? 'Mingguan' : loc.type === 'monthly' ? 'Bulanan' : loc.type === 'expo' ? 'Expo / Karnival' : loc.type === 'bazar_ramadhan' ? 'Bazar Ramadhan' : loc.type === 'bazar_raya' ? 'Bazar Raya' : loc.type}
                     </Badge>
                   </div>
                   <div className="space-y-1">
@@ -1057,57 +989,58 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </p>
                   {loc.type === 'daily' ? (
                     <div className="space-y-2">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground text-xs">Khemah</span>
-                        <div className="text-right">
-                          <span className="font-bold block">RM {loc.rate_khemah} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                          <span className="text-[10px] text-muted-foreground block">~RM {(loc.rate_khemah * 4).toFixed(0)} /bulan</span>
+                      {loc.rate_khemah > 0 && (
+                        <>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-muted-foreground text-xs">Khemah</span>
+                            <span className="font-bold">RM {loc.estimate_monthly_khemah > 0 ? loc.estimate_monthly_khemah : (loc.rate_khemah * 4).toFixed(0)} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
+                          </div>
+                          <div className="h-px bg-border/50" />
+                        </>
+                      )}
+                      {loc.rate_cbs > 0 && (
+                        <>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-muted-foreground text-xs">CBS</span>
+                            <span className="font-bold">RM {loc.estimate_monthly_cbs > 0 ? loc.estimate_monthly_cbs : (loc.rate_cbs * 4).toFixed(0)} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
+                          </div>
+                          <div className="h-px bg-border/50" />
+                        </>
+                      )}
+                      {loc.rate_foodtruck > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground text-xs">Foodtruck</span>
+                          <span className="font-bold">RM {loc.estimate_monthly_foodtruck > 0 ? loc.estimate_monthly_foodtruck : (loc.rate_foodtruck * 4).toFixed(0)} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
                         </div>
-                      </div>
-                      <div className="h-px bg-border/50" />
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground text-xs">CBS</span>
-                        <div className="text-right">
-                          <span className="font-bold block">RM {loc.rate_cbs} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                          <span className="text-[10px] text-muted-foreground block">
-                            ~RM {loc.estimate_monthly_cbs > 0 ? loc.estimate_monthly_cbs.toFixed(0) : (loc.rate_cbs * 4).toFixed(0)} /bulan
-                          </span>
-                        </div>
-                      </div>
-                      <div className="h-px bg-border/50" />
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground text-xs">Foodtruck</span>
-                        <div className="text-right">
-                          <span className="font-bold block">RM {loc.rate_foodtruck} <span className="text-[10px] font-normal text-muted-foreground">/minggu</span></span>
-                          <span className="text-[10px] text-muted-foreground block">
-                            ~RM {loc.estimate_monthly_foodtruck > 0 ? loc.estimate_monthly_foodtruck.toFixed(0) : (loc.rate_foodtruck * 4).toFixed(0)} /bulan
-                          </span>
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  ) : (
+                  ) : loc.type === 'monthly' ? (
                     <div className="space-y-2">
                       {loc.rate_monthly_khemah > 0 && (
-                        <div className="flex justify-between items-center text-sm pt-1">
+                        <div className="flex justify-between items-center text-sm">
                           <span className="text-muted-foreground text-xs">Khemah</span>
-                          <span className="font-bold text-lg">RM {loc.rate_monthly_khemah}</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly_khemah} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
                         </div>
                       )}
                       {loc.rate_monthly_khemah > 0 && loc.rate_monthly_cbs > 0 && <div className="h-px bg-border/50" />}
                       {loc.rate_monthly_cbs > 0 && (
-                        <div className="flex justify-between items-center text-sm pt-1">
+                        <div className="flex justify-between items-center text-sm">
                           <span className="text-muted-foreground text-xs">CBS</span>
-                          <span className="font-bold text-lg">RM {loc.rate_monthly_cbs}</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly_cbs} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
                         </div>
                       )}
-
-                      {/* Fallback to Standard rate if none exist */}
                       {(!loc.rate_monthly_khemah || loc.rate_monthly_khemah <= 0) && (!loc.rate_monthly_cbs || loc.rate_monthly_cbs <= 0) && (
-                        <div className="flex justify-between items-center text-sm pt-1">
+                        <div className="flex justify-between items-center text-sm">
                           <span className="text-muted-foreground">Standard</span>
-                          <span className="font-bold text-lg">RM {loc.rate_monthly}</span>
+                          <span className="font-bold text-lg">RM {loc.rate_monthly} <span className="text-[10px] font-normal text-muted-foreground">/bulan</span></span>
                         </div>
                       )}
+                    </div>
+                  ) : (
+                    /* expo, bazar_ramadhan, bazar_raya — single flat rate */
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground text-xs">Kadar Sewa</span>
+                      <span className="font-bold text-lg">RM {loc.rate_monthly || 0} <span className="text-[10px] font-normal text-muted-foreground">/sesi</span></span>
                     </div>
                   )}
                 </div>
