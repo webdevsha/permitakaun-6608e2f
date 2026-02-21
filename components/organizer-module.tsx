@@ -38,22 +38,22 @@ import { logAction } from "@/utils/logging"
 
 const fetchOrganizers = async () => {
   const supabase = createClient()
-  
+
   // Get current user's profile to determine role
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
-  
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, organizer_code')
     .eq('id', user.id)
     .single()
-  
+
   let query = supabase
     .from('organizers')
     .select('*, locations(*)')
     .order('created_at', { ascending: false })
-  
+
   // For organizers, filter to only show their own record (by profile_id)
   if (profile?.role === 'organizer') {
     query = query.eq('profile_id', user.id)
@@ -72,16 +72,18 @@ const fetchOrganizers = async () => {
     }
   }
   // For admin/superadmin, they see all (or filtered by their org in page.tsx)
-  
+
   const { data, error } = await query
   if (error) throw error
   return data || []
 }
 
-export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any[] }) {
+export function OrganizerModule({ initialOrganizers, userRole: propRole }: { initialOrganizers?: any[], userRole?: string | null }) {
   const router = useRouter()
-  const { role } = useAuth() // Get role
-  
+  const { role: authRole } = useAuth() // Get role
+
+  const role = propRole || authRole
+
   // Use SWR for fresh data after mutations
   // CRITICAL: Use server data as source of truth to prevent flickering
   const { data: organizersData, mutate } = useSWR('organizers', fetchOrganizers, {
@@ -89,7 +91,7 @@ export function OrganizerModule({ initialOrganizers }: { initialOrganizers?: any
     revalidateOnMount: false,
     dedupingInterval: 5000 // Prevent rapid revalidation
   })
-  
+
   // ALWAYS prioritize server-provided initial data to prevent hydration mismatch
   // Only use SWR data after a mutation
   const organizers = initialOrganizers || organizersData || []
