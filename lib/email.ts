@@ -26,7 +26,7 @@ const SENDER_CONFIG = {
 export async function sendEmail({ to, subject, html, apiKeyType = 'default' }: SendEmailProps) {
     // Select API key based on preference
     let apiKey: string | undefined
-    
+
     switch (apiKeyType) {
         case 'shafira':
             apiKey = process.env.BREVO_SHAFIRA || process.env.BREVO_API_KEY
@@ -43,10 +43,10 @@ export async function sendEmail({ to, subject, html, apiKeyType = 'default' }: S
 
     if (!apiKey) {
         console.warn(`BREVO API Key is not set for type: ${apiKeyType}. Email not sent.`)
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: "API Key missing",
-            apiKeyType 
+            apiKeyType
         }
     }
 
@@ -88,8 +88,8 @@ export async function sendEmail({ to, subject, html, apiKeyType = 'default' }: S
 export function getApiKeyInfo() {
     return {
         default: {
-            key: process.env.BREVO_HAZMAN ? '***' + process.env.BREVO_HAZMAN.slice(-10) : 
-                 process.env.BREVO_API_KEY ? '***' + process.env.BREVO_API_KEY.slice(-10) : 'Not set',
+            key: process.env.BREVO_HAZMAN ? '***' + process.env.BREVO_HAZMAN.slice(-10) :
+                process.env.BREVO_API_KEY ? '***' + process.env.BREVO_API_KEY.slice(-10) : 'Not set',
             isSet: !!(process.env.BREVO_HAZMAN || process.env.BREVO_API_KEY),
             label: 'BREVO_HAZMAN (Default/Main)',
             senderEmail: SENDER_CONFIG.default.email

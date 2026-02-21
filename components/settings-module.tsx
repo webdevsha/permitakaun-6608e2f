@@ -84,7 +84,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   }
 
   const myTrialStatus = currentUser ? getTrialStatus(currentUser.created_at) : null
-  
+
   // Check if this is admin@kumim.my - they don't need subscription
   const isAdminExempt = user?.email === 'admin@kumim.my' || user?.email === 'admin@permit.com' || role === 'admin' || role === 'superadmin' || role === 'staff'
 
@@ -95,7 +95,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   // Fetch subscription status for tenant/organizer (skip for admin users)
   useEffect(() => {
     if (!user?.id || !role || (role !== 'tenant' && role !== 'organizer')) return
-    
+
     // Skip subscription check for admin exempt users
     if (isAdminExempt) {
       setAccountStatus('active')
@@ -396,7 +396,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           .eq('organizer_code', adminData.organizer_code)
           .neq('role', 'superadmin')
           .order('created_at', { ascending: false })
-        
+
         // Also exclude hidden demo users for cleaner view
         if (user?.email === 'admin@kumim.my') {
           const hiddenEmails = [
@@ -410,7 +410,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           ]
           query = query.not('email', 'in', `(${hiddenEmails.map(e => `"${e}"`).join(',')})`)
         }
-        
+
         const { data } = await query
         console.log('[Settings] Admin users fetched:', data?.length || 0)
         if (data) setUsersList(data)
