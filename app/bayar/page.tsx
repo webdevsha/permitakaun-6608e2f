@@ -371,7 +371,7 @@ export default function PublicPaymentPage() {
                                         onClick={() => setSelectedRateType('cbs')}
                                         className="h-auto py-3 flex flex-col items-center"
                                     >
-                                        <span className="font-bold">CBS/Lori</span>
+                                        <span className="font-bold">CBS</span>
                                         <span className="text-xs opacity-80">RM {selectedLocation.rate_cbs}/minggu</span>
                                         <span className="text-[10px]">~RM {(selectedLocation.rate_cbs * 4).toFixed(0)}/bulan</span>
                                     </Button>
@@ -393,7 +393,7 @@ export default function PublicPaymentPage() {
                                         onClick={() => setSelectedRateType('monthly_cbs')}
                                         className="h-auto py-3 flex flex-col items-center"
                                     >
-                                        <span className="font-bold">CBS/Lori</span>
+                                        <span className="font-bold">CBS</span>
                                         <span className="text-xs">RM {selectedLocation.rate_monthly_cbs || selectedLocation.rate_monthly}/bln</span>
                                     </Button>
                                     <Button
@@ -474,7 +474,7 @@ export default function PublicPaymentPage() {
                                                     )}
                                                     {loc.rate_monthly_cbs > 0 && (
                                                         <span className="bg-secondary px-2 py-1 rounded">
-                                                            CBS/Lori: RM {loc.rate_monthly_cbs}
+                                                            CBS: RM {loc.rate_monthly_cbs}
                                                         </span>
                                                     )}
                                                     {(!loc.rate_monthly_khemah || loc.rate_monthly_khemah <= 0) && (!loc.rate_monthly_cbs || loc.rate_monthly_cbs <= 0) && (
