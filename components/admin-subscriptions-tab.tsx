@@ -114,13 +114,13 @@ export function AdminSubscriptionsTab() {
         .from('subscriptions')
         .select(`
           *,
-          tenants:tenant_id (name, profile_id)
+          tenants:tenant_id (full_name, profile_id)
         `)
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching subscriptions:', error)
-        return
+        console.error('Error fetching subscriptions:', error.message, error.code, error.details, error.hint)
+        // Don't block the rest of the UI - just show empty subscriptions
       }
 
       // Get tenant emails
@@ -153,20 +153,45 @@ export function AdminSubscriptionsTab() {
         }
       }
 
-      const formattedSubs: SubscriptionRecord[] = (data || []).map((s: any) => ({
-        id: s.id,
-        tenant_id: s.tenant_id,
-        tenant_name: s.tenants?.name,
-        tenant_email: tenantEmails[s.tenant_id],
-        plan_type: s.plan_type,
-        status: s.status,
-        amount: s.amount,
-        start_date: s.start_date,
-        end_date: s.end_date,
-        payment_ref: s.payment_ref,
-        created_at: s.created_at,
-        updated_at: s.updated_at
-      }))
+      // For organizer subscriptions (tenant_id is null), look up payer info from admin_transactions
+      let orgPayerInfo: Record<string, { name: string, email: string }> = {}
+      const orgSubs = (data || []).filter((s: any) => !s.tenant_id && s.payment_ref)
+      if (orgSubs.length > 0) {
+        const paymentRefs = orgSubs.map((s: any) => s.payment_ref)
+        const { data: adminTxs } = await supabase
+          .from('admin_transactions')
+          .select('payment_reference, metadata')
+          .in('payment_reference', paymentRefs)
+          .eq('category', 'Langganan')
+
+        if (adminTxs) {
+          adminTxs.forEach((tx: any) => {
+            const meta = tx.metadata || {}
+            orgPayerInfo[tx.payment_reference] = {
+              name: meta.payer_name || 'Penganjur',
+              email: meta.payer_email || '-'
+            }
+          })
+        }
+      }
+
+      const formattedSubs: SubscriptionRecord[] = (data || []).map((s: any) => {
+        const payerInfo = s.payment_ref ? orgPayerInfo[s.payment_ref] : null
+        return {
+          id: s.id,
+          tenant_id: s.tenant_id,
+          tenant_name: s.tenants?.full_name || payerInfo?.name || (s.tenant_id ? `Tenant #${s.tenant_id}` : 'Penganjur'),
+          tenant_email: tenantEmails[s.tenant_id] || payerInfo?.email || '-',
+          plan_type: s.plan_type,
+          status: s.status,
+          amount: s.amount,
+          start_date: s.start_date,
+          end_date: s.end_date,
+          payment_ref: s.payment_ref,
+          created_at: s.created_at,
+          updated_at: s.updated_at
+        }
+      })
 
       setSubscriptions(formattedSubs)
       
@@ -334,6 +359,17 @@ export function AdminSubscriptionsTab() {
                 updated_at: now.toISOString()
               })
               .eq('id', organizer.id)
+
+            // Also insert into subscriptions table so it appears in Langganan Aktif
+            await supabase.from('subscriptions').insert({
+              tenant_id: null,
+              plan_type: metadata.plan_type || 'basic',
+              status: 'active',
+              start_date: now.toISOString(),
+              end_date: endDate.toISOString(),
+              amount: selectedPayment.amount,
+              payment_ref: selectedPayment.payment_reference
+            })
           }
         }
       }

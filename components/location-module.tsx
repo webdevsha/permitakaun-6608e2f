@@ -254,9 +254,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
       }
 
       if (role === 'organizer') {
-        const { organizer_id, ...rest } = payload
-        Object.assign(payload, rest)
-        payload.status = 'active' // Organizers manage themselves freely? Or pending? Assume active for now.
+        delete payload.organizer_id // Don't overwrite organizer_id on update; preserve existing value
+        payload.status = 'active'
       }
 
       if (isEditMode && formData.id) {
