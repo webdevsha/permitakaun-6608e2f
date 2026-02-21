@@ -101,6 +101,7 @@ export function PendingApprovalsCombined({
       const allRequests: PendingRequest[] = []
 
       // 1. Fetch pending organizer linking requests
+      // Always filter by organizerId - admins should only see their own organization's requests
       let orgQuery = supabase
         .from('tenant_organizers')
         .select(`
@@ -111,8 +112,18 @@ export function PendingApprovalsCombined({
         .eq('status', 'pending')
         .order('requested_at', { ascending: false })
 
+      // Strict filtering: only show requests for this specific organizer
+      // If no organizerId, return empty (don't show other orgs' data)
       if (organizerId) {
         orgQuery = orgQuery.eq('organizer_id', organizerId)
+      } else {
+        // No organizer ID means we can't determine which requests to show
+        // Return empty to prevent showing other organizations' data
+        setRequests([])
+        setFilteredRequests([])
+        setIsLoading(false)
+        setIsRefreshing(false)
+        return
       }
 
       const { data: orgData, error: orgError } = await orgQuery
@@ -137,23 +148,28 @@ export function PendingApprovalsCombined({
       }
 
       // 2. Fetch pending location requests
-      let locQuery = supabase
-        .from('tenant_locations')
-        .select(`
-          *,
-          tenants(id, full_name, business_name, phone_number, email, profile_image_url),
-          locations(id, name, type),
-          organizers(id, name, organizer_code)
-        `)
-        .eq('status', 'pending')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
+      // Always filter by organizerId - admins should only see their own organization's requests
+      let locData: any[] | null = null
+      let locError: any = null
 
       if (organizerId) {
-        locQuery = locQuery.eq('organizer_id', organizerId)
+        const result = await supabase
+          .from('tenant_locations')
+          .select(`
+            *,
+            tenants(id, full_name, business_name, phone_number, email, profile_image_url),
+            locations(id, name, type),
+            organizers(id, name, organizer_code)
+          `)
+          .eq('status', 'pending')
+          .eq('is_active', true)
+          .eq('organizer_id', organizerId)
+          .order('created_at', { ascending: false })
+        
+        locData = result.data
+        locError = result.error
       }
-
-      const { data: locData, error: locError } = await locQuery
+      // If no organizerId, skip location requests entirely
 
       if (!locError && locData) {
         const locRequests: PendingRequest[] = locData.map((item: any) => ({

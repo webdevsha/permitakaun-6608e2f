@@ -100,18 +100,9 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
          const { count: locCount, error: locError } = await locQuery
          
          // Count pending rental payments
+         // All users (including admins) should only see payments from their own organization
          let paymentCount = 0
-         if (isAdmin) {
-            // Admin sees all pending payments
-            const { count: pCount, error: pError } = await supabase
-               .from('tenant_payments')
-               .select('id', { count: 'exact', head: true })
-               .eq('status', 'pending')
-            
-            if (!pError) {
-               paymentCount = pCount || 0
-            }
-         } else if (organizerId) {
+         if (organizerId) {
             // For organizers, get payments from their tenants
             const { data: tenantLocs } = await supabase
                .from('tenant_locations')

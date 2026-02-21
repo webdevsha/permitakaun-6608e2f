@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, Home, Loader2 } from "lucide-react"
+import { CheckCircle, Home, Loader2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 function PaymentSuccessContent() {
@@ -59,6 +59,16 @@ function PaymentSuccessContent() {
                             >
                                 Cetak Resit
                             </Button>
+                        </div>
+
+                        {/* Navigation back to /bayar */}
+                        <div className="pt-2">
+                            <Link href="/bayar" className="block">
+                                <Button className="w-full" variant="secondary">
+                                    <ArrowLeft className="w-4 h-4 mr-2" />
+                                    Kembali ke Bayar
+                                </Button>
+                            </Link>
                         </div>
 
                         <p className="text-xs text-center text-muted-foreground">

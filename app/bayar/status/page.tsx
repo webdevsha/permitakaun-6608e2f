@@ -243,6 +243,17 @@ function PaymentStatusContent() {
                                 </Button>
                             )}
                         </div>
+
+                        {/* Additional navigation for successful payments */}
+                        {transaction.status === 'approved' && (
+                            <div className="pt-2">
+                                <Link href="/bayar" className="block">
+                                    <Button className="w-full" variant="secondary">
+                                        Kembali ke Halaman Bayar
+                                    </Button>
+                                </Link>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
