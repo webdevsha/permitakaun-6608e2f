@@ -5,6 +5,6 @@ export default async function OrganizersPage() {
     const data = await fetchDashboardData()
 
     return (
-        <OrganizerModule initialOrganizers={data.organizers} />
+        <OrganizerModule initialOrganizers={data.organizers} userRole={data.role} />
     )
 }
