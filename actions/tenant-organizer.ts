@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { revalidatePath } from "next/cache"
 
 /**
@@ -235,6 +236,41 @@ export async function addTenantLocationsAction(tenantId: number, locationIds: nu
       error: error.message || "Gagal menambah lokasi"
     }
   }
+}
+
+/**
+ * Delete (soft) a tenant location by marking it inactive
+ */
+export async function deleteTenantLocationAction(rentalId: number, tenantId: number) {
+  // Verify the caller owns this tenant
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: "Tidak dibenarkan" }
+
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('profile_id', user.id)
+    .eq('id', tenantId)
+    .maybeSingle()
+
+  if (!tenant) return { success: false, error: "Peniaga tidak dijumpai" }
+
+  // Use admin client to bypass RLS for the update
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('tenant_locations')
+    .update({ is_active: false, status: 'inactive' })
+    .eq('id', rentalId)
+    .eq('tenant_id', tenantId)
+
+  if (error) {
+    console.error("Error deleting tenant location:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/dashboard/rentals')
+  return { success: true }
 }
 
 /**
