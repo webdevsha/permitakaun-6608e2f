@@ -69,6 +69,19 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false)
   const [applyLocationId, setApplyLocationId] = useState("")
   const [isApplying, setIsApplying] = useState(false)
+  
+  // UI Flow: Programs & Jenis Operasi Selection
+  const [selectedProgram, setSelectedProgram] = useState<string>("")
+  const [selectedJenisOperasi, setSelectedJenisOperasi] = useState<string>("")
+  
+  // Define the 5 Jenis Operasi
+  const JENIS_OPERASI = [
+    { value: "daily", label: "Mingguan (Pasar Malam/Pagi)", types: ["daily"] },
+    { value: "monthly", label: "Bulanan (Kiosk/Uptown)", types: ["monthly"] },
+    { value: "expo", label: "Expo / Karnival", types: ["expo"] },
+    { value: "bazar_ramadhan", label: "Bazar Ramadhan", types: ["bazar_ramadhan"] },
+    { value: "bazar_raya", label: "Bazar Raya", types: ["bazar_raya"] },
+  ]
 
   // Category Selection State
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
@@ -422,7 +435,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     setIsApplying(true)
     try {
       // Find the selected location to get its organizer_id
-      const selectedLocation = availableLocations.find((loc: any) => loc.id.toString() === applyLocationId)
+      const selectedLocation = availableLocations.find((loc: any) => loc.location_id.toString() === applyLocationId)
       const organizerId = selectedLocation?.organizer_id
       
       const { error } = await supabase.from('tenant_locations').insert({
@@ -439,6 +452,8 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       toast.success("Permohonan dihantar! Menunggu kelulusan Admin.")
       setIsApplyDialogOpen(false)
       setApplyLocationId("")
+      setSelectedProgram("")
+      setSelectedJenisOperasi("")
 
       // Refresh list
       window.location.reload()
@@ -447,6 +462,29 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
       setIsApplying(false)
     }
   }
+  
+  // Reset selections when dialog closes
+  const handleDialogClose = (open: boolean) => {
+    setIsApplyDialogOpen(open)
+    if (!open) {
+      setSelectedProgram("")
+      setSelectedJenisOperasi("")
+      setApplyLocationId("")
+    }
+  }
+  
+  // Get unique programs from available locations
+  const uniquePrograms = [...new Set(availableLocations.map((loc: any) => loc.program_name).filter(Boolean))]
+  
+  // Filter locations based on selected program and jenis operasi
+  const filteredLocations = availableLocations.filter((loc: any) => {
+    if (selectedProgram && loc.program_name !== selectedProgram) return false
+    if (selectedJenisOperasi) {
+      const jenis = JENIS_OPERASI.find(j => j.value === selectedJenisOperasi)
+      if (jenis && !jenis.types.includes(loc.type)) return false
+    }
+    return true
+  })
 
   // Location Search Logic
   const [searchLocationId, setSearchLocationId] = useState("")
@@ -601,17 +639,17 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
           )}
 
           <div className="flex justify-end">
-            <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+            <Dialog open={isApplyDialogOpen} onOpenChange={handleDialogClose}>
               <DialogTrigger asChild>
                 <Button className="rounded-xl shadow-lg shadow-primary/20">
-                  <Plus className="mr-2 h-4 w-4" /> Lokasi Penganjur Saya
+                  <Plus className="mr-2 h-4 w-4" /> Mohon Program
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-white rounded-3xl">
+              <DialogContent className="bg-white rounded-3xl max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Lokasi Penganjur Saya</DialogTitle>
+                  <DialogTitle>Mohon Program</DialogTitle>
                   <DialogDescription>
-                    Senarai lokasi dari penganjur yang telah dipautkan. Pilih lokasi untuk memohon sewaan.
+                    Pilih program dan jenis operasi untuk memohon tapak perniagaan.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
@@ -710,50 +748,156 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                         </div>
                       )}
 
-                      <div className="space-y-2">
-                        <Label>Lokasi Penganjur Saya</Label>
-                        <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-xl p-2">
-                          {availableLocations.map((loc: any) => (
-                            <div
-                              key={loc.id}
-                              onClick={() => setApplyLocationId(loc.id.toString())}
+                      {/* Step 1: Select Program */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-bold flex items-center gap-2">
+                          <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">1</span>
+                          Pilih Program
+                        </Label>
+                        <div className="grid grid-cols-1 gap-2">
+                          {uniquePrograms.map((program: string) => (
+                            <button
+                              key={program}
+                              onClick={() => {
+                                setSelectedProgram(program)
+                                setSelectedJenisOperasi("")
+                                setApplyLocationId("")
+                              }}
                               className={cn(
-                                "p-3 rounded-lg cursor-pointer transition-all border",
-                                applyLocationId === loc.id.toString()
-                                  ? "bg-primary/10 border-primary"
+                                "p-3 rounded-lg border text-left transition-all",
+                                selectedProgram === program
+                                  ? "bg-primary/10 border-primary ring-1 ring-primary"
                                   : "bg-white border-border hover:border-primary/50"
                               )}
                             >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  {loc.program_name && (
-                                    <Badge variant="outline" className="text-[10px] mb-1 bg-primary/5">
-                                      {loc.program_name}
-                                    </Badge>
-                                  )}
-                                  <p className="font-medium text-sm">{loc.name}</p>
-                                  {loc.organizers?.name && (
-                                    <p className="text-xs text-muted-foreground">{loc.organizers.name}</p>
-                                  )}
-                                </div>
-                                {applyLocationId === loc.id.toString() && (
-                                  <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                              <div className="flex items-center gap-3">
+                                {selectedProgram === program ? (
+                                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
                                 )}
+                                <span className="font-medium text-sm">{program}</span>
                               </div>
-                              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {loc.type === 'daily' ? 'Mingguan' : 
-                                   loc.type === 'monthly' ? 'Bulanan' : 
-                                   loc.type === 'expo' ? 'Expo' : loc.type}
-                                </Badge>
-                                {loc.operating_days && (
-                                  <span>{loc.operating_days}</span>
-                                )}
-                              </div>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
+
+                      {/* Step 2: Select Jenis Operasi (only after program selected) */}
+                      {selectedProgram && (
+                        <div className="space-y-3 pt-2 border-t border-border/50">
+                          <Label className="text-sm font-bold flex items-center gap-2">
+                            <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">2</span>
+                            Pilih Jenis Operasi
+                          </Label>
+                          <div className="grid grid-cols-1 gap-2">
+                            {JENIS_OPERASI.map((jenis) => {
+                              // Check if this jenis operasi has available locations for selected program
+                              const hasLocations = availableLocations.some((loc: any) => 
+                                loc.program_name === selectedProgram && 
+                                jenis.types.includes(loc.type)
+                              )
+                              return (
+                                <button
+                                  key={jenis.value}
+                                  onClick={() => {
+                                    if (hasLocations) {
+                                      setSelectedJenisOperasi(jenis.value)
+                                      setApplyLocationId("")
+                                    }
+                                  }}
+                                  disabled={!hasLocations}
+                                  className={cn(
+                                    "p-3 rounded-lg border text-left transition-all",
+                                    selectedJenisOperasi === jenis.value
+                                      ? "bg-brand-green/10 border-brand-green ring-1 ring-brand-green"
+                                      : hasLocations
+                                        ? "bg-white border-border hover:border-brand-green/50"
+                                        : "bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      {selectedJenisOperasi === jenis.value ? (
+                                        <CheckCircle2 className="w-5 h-5 text-brand-green shrink-0" />
+                                      ) : (
+                                        <div className={cn(
+                                          "w-5 h-5 rounded-full border-2",
+                                          hasLocations ? "border-muted-foreground/30" : "border-gray-300"
+                                        )} />
+                                      )}
+                                      <span className="font-medium text-sm">{jenis.label}</span>
+                                    </div>
+                                    {!hasLocations && (
+                                      <span className="text-[10px] text-muted-foreground">Tiada</span>
+                                    )}
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 3: Select Specific Location (only after jenis operasi selected) */}
+                      {selectedProgram && selectedJenisOperasi && (
+                        <div className="space-y-3 pt-2 border-t border-border/50">
+                          <Label className="text-sm font-bold flex items-center gap-2">
+                            <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">3</span>
+                            Pilih Lokasi
+                          </Label>
+                          {filteredLocations.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2 max-h-[250px] overflow-y-auto">
+                              {filteredLocations.map((loc: any) => (
+                                <div
+                                  key={loc.location_id}
+                                  onClick={() => setApplyLocationId(loc.location_id.toString())}
+                                  className={cn(
+                                    "p-3 rounded-lg cursor-pointer transition-all border",
+                                    applyLocationId === loc.location_id.toString()
+                                      ? "bg-primary/10 border-primary"
+                                      : "bg-white border-border hover:border-primary/50"
+                                  )}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <p className="font-medium text-sm">{loc.location_name}</p>
+                                      {loc.organizer_name && (
+                                        <p className="text-xs text-muted-foreground">{loc.organizer_name}</p>
+                                      )}
+                                    </div>
+                                    {applyLocationId === loc.location_id.toString() && (
+                                      <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                                    )}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                    {loc.operating_days && (
+                                      <span className="text-muted-foreground">{loc.operating_days}</span>
+                                    )}
+                                    {/* Show available rates */}
+                                    <div className="flex gap-2">
+                                      {loc.rate_khemah > 0 && (
+                                        <Badge variant="secondary" className="text-[10px]">Khemah: RM{loc.rate_khemah}</Badge>
+                                      )}
+                                      {loc.rate_cbs > 0 && (
+                                        <Badge variant="secondary" className="text-[10px]">CBS: RM{loc.rate_cbs}</Badge>
+                                      )}
+                                      {loc.rate_monthly > 0 && (
+                                        <Badge variant="secondary" className="text-[10px]">Bulanan: RM{loc.rate_monthly}</Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-500 text-sm">
+                              <p>Tiada lokasi tersedia untuk pilihan ini.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="p-3 bg-secondary/20 rounded-xl text-xs text-muted-foreground flex gap-2">
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                         <p>Status permohonan akan menjadi "Pending" sehingga diluluskan oleh Admin. Selepas diluluskan, anda boleh memilih kategori sewaan.</p>
@@ -805,9 +949,25 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                     )}
                   </div>
                 </div >
-                <DialogFooter>
-                  <Button onClick={handleApplyRental} disabled={isApplying || !applyLocationId || availableLocations.length === 0} className="w-full rounded-xl">
-                    {isApplying ? <Loader2 className="animate-spin" /> : "Hantar Permohonan"}
+                <DialogFooter className="flex-col gap-2">
+                  {/* Show selection summary */}
+                  {applyLocationId && (
+                    <div className="w-full p-3 bg-brand-green/5 border border-brand-green/20 rounded-xl text-sm">
+                      <p className="font-medium text-brand-green">Ringkasan Permohonan:</p>
+                      <p className="text-foreground">{selectedProgram} • {JENIS_OPERASI.find(j => j.value === selectedJenisOperasi)?.label}</p>
+                      {(() => {
+                        const loc = availableLocations.find((l: any) => l.location_id.toString() === applyLocationId)
+                        return loc ? <p className="text-muted-foreground text-xs">{loc.location_name}</p> : null
+                      })()}
+                    </div>
+                  )}
+                  <Button 
+                    onClick={handleApplyRental} 
+                    disabled={isApplying || !applyLocationId} 
+                    className="w-full rounded-xl bg-brand-green hover:bg-brand-green/90"
+                  >
+                    {isApplying ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                    Hantar Permohonan
                   </Button>
                 </DialogFooter>
               </DialogContent >
@@ -833,14 +993,15 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                       )}>
                         {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
                       </Badge>
-                      {/* Delete button for approved/pending locations */}
-                      {(rental.status === 'approved' || rental.status === 'pending') && (
+                      {/* Delete button for approved/pending/active locations */}
+                      {(rental.status === 'approved' || rental.status === 'pending' || rental.status === 'active') && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDeleteLocation(rental.id)}
                           disabled={deletingLocation === rental.id}
+                          title="Padam permohonan tapak"
                         >
                           {deletingLocation === rental.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -879,9 +1040,16 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                             <SelectValue placeholder="Pilih Kategori" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="monthly">Bulanan</SelectItem>
-                            <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
-                            <SelectItem value="cbs">Mingguan (CBS)</SelectItem>
+                            {/* Only show options with prices > 0 */}
+                            {(rental.rate_monthly > 0 || rental.rate_monthly_khemah > 0 || rental.rate_monthly_cbs > 0) && (
+                              <SelectItem value="monthly">Bulanan</SelectItem>
+                            )}
+                            {(rental.rate_khemah > 0 || rental.rate_monthly_khemah > 0) && (
+                              <SelectItem value="khemah">Mingguan (Khemah)</SelectItem>
+                            )}
+                            {(rental.rate_cbs > 0 || rental.rate_monthly_cbs > 0) && (
+                              <SelectItem value="cbs">Mingguan (CBS)</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                         <Button className="w-full bg-brand-green hover:bg-brand-green/90 text-white shadow-sm" onClick={() => handleUpdateCategory(rental.id)} disabled={isUpdatingCategory}>
@@ -909,8 +1077,8 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                 <div className="bg-blue-50 border-blue-100 border p-4 rounded-2xl flex gap-3 items-start">
                   <Store className="w-5 h-5 text-brand-blue mt-1 shrink-0" />
                   <div>
-                    <h4 className="font-bold text-brand-blue text-sm">Lokasi Tersedia</h4>
-                    <p className="text-xs text-muted-foreground">Senarai tapak yang boleh dipohon dari penganjur anda.</p>
+                    <h4 className="font-bold text-brand-blue text-sm">Program Tersedia</h4>
+                    <p className="text-xs text-muted-foreground">Senarai program yang boleh dipohon dari penganjur anda.</p>
                   </div>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
@@ -971,7 +1139,11 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                         </div>
                         
                         <Button className="w-full rounded-xl mt-2" size="sm" onClick={() => {
-                          setApplyLocationId(loc.id.toString())
+                          // Pre-select the program and jenis operasi based on this location
+                          setSelectedProgram(loc.program_name || "")
+                          const jenis = JENIS_OPERASI.find(j => j.types.includes(loc.type))
+                          setSelectedJenisOperasi(jenis?.value || "")
+                          setApplyLocationId(loc.location_id.toString())
                           setIsApplyDialogOpen(true)
                         }}>
                           Mohon Tapak Ini

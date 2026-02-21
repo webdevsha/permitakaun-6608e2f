@@ -19,7 +19,9 @@ import {
   Upload,
   FileText,
   CheckCircle2,
-  Trash2
+  Trash2,
+  MapPin,
+  ExternalLink
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
@@ -49,6 +51,7 @@ interface EnhancedRentalModuleProps {
   initialLocations: any[]
   initialHistory: any[]
   initialAvailable: any[]
+  initialAllLocations?: any[]
   initialLinkedOrganizers?: LinkedOrganizer[]
 }
 
@@ -57,6 +60,7 @@ export function EnhancedRentalModule({
   initialLocations,
   initialHistory,
   initialAvailable,
+  initialAllLocations = [],
   initialLinkedOrganizers = []
 }: EnhancedRentalModuleProps) {
   const { user } = useAuth()
@@ -68,6 +72,7 @@ export function EnhancedRentalModule({
   const [linkedOrganizers, setLinkedOrganizers] = useState<LinkedOrganizer[]>(initialLinkedOrganizers)
   const [myLocations, setMyLocations] = useState(initialLocations)
   const [availableLocations, setAvailableLocations] = useState(initialAvailable)
+  const [allLocations, setAllLocations] = useState(initialAllLocations)
   const [history, setHistory] = useState(initialHistory)
   const [isLoading, setIsLoading] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
@@ -107,19 +112,76 @@ export function EnhancedRentalModule({
         setLinkedOrganizers(orgData as LinkedOrganizer[])
       }
 
-      // Fetch available locations
-      const { data: locData, error: locError } = await supabase
-        .rpc('get_available_locations_for_tenant', {
-          p_tenant_id: tenant.id
-        })
+      // Get approved organizer IDs
+      const approvedOrgIds = (orgData || [])
+        .filter((link: any) => link.status === 'approved' || link.status === 'active')
+        .map((link: any) => link.organizer_id)
 
-      if (!locError && locData) {
-        setAvailableLocations(locData.map((l: any) => ({
-          ...l,
-          display_price: l.rate_monthly || l.rate_khemah || 0,
+      // Fetch ALL locations from approved organizers (including assigned ones)
+      if (approvedOrgIds.length > 0) {
+        // Get locations
+        const { data: allLocData } = await supabase
+          .from('locations')
+          .select(`
+            id,
+            name,
+            program_name,
+            address,
+            google_maps_url,
+            rate_khemah,
+            rate_cbs,
+            rate_monthly,
+            rate_monthly_khemah,
+            rate_monthly_cbs,
+            operating_days,
+            type,
+            organizer_id
+          `)
+          .in('organizer_id', approvedOrgIds)
+          .eq('status', 'active')
+          .order('program_name')
+
+        // Get organizer names separately
+        const { data: orgsData } = await supabase
+          .from('organizers')
+          .select('id, name')
+          .in('id', approvedOrgIds)
+
+        const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
+
+        // Get assigned location IDs
+        const { data: assignedLocs } = await supabase
+          .from('tenant_locations')
+          .select('location_id')
+          .eq('tenant_id', tenant.id)
+          .eq('is_active', true)
+
+        const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
+
+        // Build allLocations with is_assigned flag
+        const updatedAllLocations = (allLocData || []).map((l: any) => ({
+          location_id: l.id,
+          location_name: l.name,
+          program_name: l.program_name,
+          organizer_id: l.organizer_id,
+          organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
+          rate_khemah: l.rate_khemah,
+          rate_cbs: l.rate_cbs,
+          rate_monthly: l.rate_monthly,
+          rate_monthly_khemah: l.rate_monthly_khemah,
+          rate_monthly_cbs: l.rate_monthly_cbs,
           operating_days: l.operating_days || 'Setiap Hari',
-          organizer_name: l.organizer_name
-        })))
+          type: l.type,
+          display_price: l.rate_monthly || l.rate_khemah || 0,
+          google_maps_url: l.google_maps_url,
+          address: l.address,
+          is_assigned: assignedIds.has(l.id)
+        }))
+
+        setAllLocations(updatedAllLocations)
+        
+        // Available locations are those NOT assigned
+        setAvailableLocations(updatedAllLocations.filter((loc: any) => !loc.is_assigned))
       }
 
       // Refresh my locations
@@ -531,6 +593,8 @@ export function EnhancedRentalModule({
             <LocationSelector
               tenantId={tenant.id}
               availableLocations={availableLocations}
+              allLocations={allLocations}
+              hasApprovedOrganizer={hasApprovedOrganizer}
               onUpdate={refreshData}
             />
           )}
@@ -799,9 +863,19 @@ function RentalCard({
       <CardHeader className="pb-4 bg-secondary/30 border-b border-border/30">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-            <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
+            {/* Program Name Badge */}
             {rental.program_name && (
-              <p className="text-xs text-muted-foreground mt-1">{rental.program_name}</p>
+              <Badge variant="outline" className="mb-2 text-[10px] bg-primary/5 border-primary/20 text-primary">
+                {rental.program_name}
+              </Badge>
+            )}
+            <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
+            {/* Organizer name for all statuses */}
+            {rental.organizer_name && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Building2 className="w-3 h-3" />
+                {rental.organizer_name}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -813,14 +887,15 @@ function RentalCard({
             )}>
               {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
             </Badge>
-            {/* Delete button for approved/pending locations */}
-            {onDeleteLocation && (rental.status === 'approved' || rental.status === 'pending') && (
+            {/* Delete button for approved/pending/active locations */}
+            {onDeleteLocation && (rental.status === 'approved' || rental.status === 'pending' || rental.status === 'active') && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
                 onClick={() => onDeleteLocation(rental.id)}
                 disabled={isDeleting}
+                title="Padam permohonan tapak"
               >
                 {isDeleting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -837,7 +912,9 @@ function RentalCard({
           ) : rental.status === 'approved' ? (
             <span className="italic text-blue-600">Sila pilih kategori sewaan</span>
           ) : (
-            <span className="italic">Menunggu Kelulusan</span>
+            <span className="italic">
+              Menunggu Kelulusan{rental.organizer_name ? ` dari ${rental.organizer_name}` : ''}
+            </span>
           )}
         </CardDescription>
       </CardHeader>
@@ -856,9 +933,16 @@ function RentalCard({
               onChange={(e) => setSelectedCategory(prev => ({ ...prev, [rental.id]: e.target.value }))}
               className="w-full h-10 rounded-lg border border-input bg-white px-3 text-sm"
             >
-              <option value="monthly">Bulanan</option>
-              <option value="khemah">Mingguan (Khemah)</option>
-              <option value="cbs">Mingguan (CBS)</option>
+              {/* Only show options with prices > 0 */}
+              {(rental.rate_monthly > 0 || rental.rate_monthly_khemah > 0 || rental.rate_monthly_cbs > 0) && (
+                <option value="monthly">Bulanan</option>
+              )}
+              {(rental.rate_khemah > 0 || rental.rate_monthly_khemah > 0) && (
+                <option value="khemah">Mingguan (Khemah)</option>
+              )}
+              {(rental.rate_cbs > 0 || rental.rate_monthly_cbs > 0) && (
+                <option value="cbs">Mingguan (CBS)</option>
+              )}
             </select>
             <Button 
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
@@ -871,6 +955,28 @@ function RentalCard({
           </div>
         ) : (
           <>
+            {/* Google Maps Link */}
+            {(rental.google_maps_url || rental.address) && (
+              <div className="mb-4">
+                {rental.google_maps_url ? (
+                  <a 
+                    href={rental.google_maps_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    <span>{rental.address || 'Lihat di Google Maps'}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    {rental.address}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex justify-between items-center text-sm mb-2">
               <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
               <Badge variant="outline" className="capitalize">
@@ -890,17 +996,34 @@ function RentalCard({
   )
 }
 
+// Define the 5 Jenis Operasi
+const JENIS_OPERASI = [
+  { value: "daily", label: "Mingguan (Pasar Malam/Pagi)", types: ["daily"] },
+  { value: "monthly", label: "Bulanan (Kiosk/Uptown)", types: ["monthly"] },
+  { value: "expo", label: "Expo / Karnival", types: ["expo"] },
+  { value: "bazar_ramadhan", label: "Bazar Ramadhan", types: ["bazar_ramadhan"] },
+  { value: "bazar_raya", label: "Bazar Raya", types: ["bazar_raya"] },
+]
+
 function LocationSelector({ 
   tenantId, 
   availableLocations,
+  allLocations,
+  hasApprovedOrganizer,
   onUpdate 
 }: { 
   tenantId: number
   availableLocations: any[]
+  allLocations: any[]
+  hasApprovedOrganizer: boolean
   onUpdate: () => void 
 }) {
   const [selectedLocationIds, setSelectedLocationIds] = useState<number[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // UI Flow: Programs & Jenis Operasi Selection
+  const [selectedProgram, setSelectedProgram] = useState<string>("")
+  const [selectedJenisOperasi, setSelectedJenisOperasi] = useState<string>("")
 
   const handleToggleLocation = (locationId: number) => {
     setSelectedLocationIds(prev => 
@@ -928,6 +1051,8 @@ function LocationSelector({
 
       toast.success(result.message)
       setSelectedLocationIds([])
+      setSelectedProgram("")
+      setSelectedJenisOperasi("")
       onUpdate()
     } catch (error: any) {
       toast.error("Gagal menambah lokasi: " + error.message)
@@ -936,79 +1061,271 @@ function LocationSelector({
     }
   }
 
-  // Group by organizer
-  const groupedByOrganizer = availableLocations.reduce((acc: Record<string, any[]>, loc: any) => {
-    const orgName = loc.organizer_name || 'Lain-lain'
-    if (!acc[orgName]) acc[orgName] = []
-    acc[orgName].push(loc)
-    return acc
-  }, {})
+  // Use allLocations to show all programs (even if tenant has some locations in them)
+  const uniquePrograms = [...new Set(allLocations.map((loc: any) => loc.program_name).filter(Boolean))]
+  
+  // Filter locations based on selected program and jenis operasi
+  // Use allLocations to show all, but mark assigned ones
+  const filteredLocations = allLocations.filter((loc: any) => {
+    if (selectedProgram && loc.program_name !== selectedProgram) return false
+    if (selectedJenisOperasi) {
+      const jenis = JENIS_OPERASI.find(j => j.value === selectedJenisOperasi)
+      if (jenis && !jenis.types.includes(loc.type)) return false
+    }
+    return true
+  })
 
   return (
     <Card className="border-border/50 shadow-sm">
       <CardHeader>
         <CardTitle className="text-lg font-serif flex items-center gap-2">
           <Plus className="w-5 h-5 text-primary" />
-          Lokasi Penganjur Saya
+          Mohon Program Baru
         </CardTitle>
         <CardDescription>
-          Senarai lokasi dari penganjur yang telah dipautkan. Pilih satu atau lebih lokasi untuk dipohon.
+          Pilih program dan jenis operasi untuk memohon tapak perniagaan.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {Object.entries(groupedByOrganizer).map(([orgName, locations]) => (
-          <div key={orgName} className="space-y-2">
-            <h4 className="text-sm font-bold text-muted-foreground flex items-center gap-2">
-              <Building2 className="w-4 h-4" />
-              {orgName}
-            </h4>
-            <div className="grid gap-2 md:grid-cols-2">
-              {(locations as any[]).map((loc: any) => (
-                <label
-                  key={loc.location_id}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
-                    selectedLocationIds.includes(loc.location_id)
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedLocationIds.includes(loc.location_id)}
-                    onChange={() => handleToggleLocation(loc.location_id)}
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{loc.location_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {loc.operating_days} • RM{loc.rate_monthly || loc.rate_khemah || '-'}/bulan
-                    </p>
-                  </div>
-                </label>
-              ))}
+      <CardContent className="space-y-6">
+        {allLocations.length === 0 ? (
+          <div className="space-y-4">
+            {/* Step 1: Select Program - Show even when empty */}
+            <div className="space-y-3">
+              <Label className="text-sm font-bold flex items-center gap-2">
+                <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">1</span>
+                Pilih Program
+              </Label>
+              <div className="text-center py-8 bg-muted/30 rounded-xl border border-dashed border-border">
+                <Building2 className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  Tiada program tersedia
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {hasApprovedOrganizer 
+                    ? "Penganjur anda tidak mempunyai lokasi aktif" 
+                    : "Sila tunggu kelulusan penganjur terlebih dahulu"}
+                </p>
+              </div>
             </div>
           </div>
-        ))}
+        ) : (
+          <>
+            {/* Step 1: Select Program */}
+            <div className="space-y-3">
+              <Label className="text-sm font-bold flex items-center gap-2">
+                <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">1</span>
+                Pilih Program
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {uniquePrograms.map((program: string) => (
+                  <button
+                    key={program}
+                    onClick={() => {
+                      setSelectedProgram(program)
+                      setSelectedJenisOperasi("")
+                      setSelectedLocationIds([])
+                    }}
+                    className={cn(
+                      "p-3 rounded-lg border text-left transition-all",
+                      selectedProgram === program
+                        ? "bg-primary/10 border-primary ring-1 ring-primary"
+                        : "bg-white border-border hover:border-primary/50"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      {selectedProgram === program ? (
+                        <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
+                      )}
+                      <span className="font-medium text-sm">{program}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {selectedLocationIds.length > 0 && (
-          <div className="flex items-center justify-between pt-4 border-t">
-            <p className="text-sm text-muted-foreground">
-              {selectedLocationIds.length} lokasi dipilih
-            </p>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Plus className="w-4 h-4 mr-2" />
-              )}
-              Mohon Lokasi
-            </Button>
-          </div>
+            {/* Step 2: Select Jenis Operasi */}
+            {selectedProgram && (
+              <div className="space-y-3 pt-4 border-t border-border/50">
+                <Label className="text-sm font-bold flex items-center gap-2">
+                  <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">2</span>
+                  Pilih Jenis Operasi
+                </Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {JENIS_OPERASI.map((jenis) => {
+                    // Check if this jenis operasi has any locations for selected program
+                    // Use allLocations to show option even if all locations are assigned
+                    const hasLocations = allLocations.some((loc: any) => 
+                      loc.program_name === selectedProgram && 
+                      jenis.types.includes(loc.type)
+                    )
+                    return (
+                      <button
+                        key={jenis.value}
+                        onClick={() => {
+                          if (hasLocations) {
+                            setSelectedJenisOperasi(jenis.value)
+                            setSelectedLocationIds([])
+                          }
+                        }}
+                        disabled={!hasLocations}
+                        className={cn(
+                          "p-3 rounded-lg border text-left transition-all",
+                          selectedJenisOperasi === jenis.value
+                            ? "bg-green-100 border-green-500 ring-1 ring-green-500"
+                            : hasLocations
+                              ? "bg-white border-border hover:border-green-400"
+                              : "bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {selectedJenisOperasi === jenis.value ? (
+                              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                            ) : (
+                              <div className={cn(
+                                "w-5 h-5 rounded-full border-2",
+                                hasLocations ? "border-muted-foreground/30" : "border-gray-300"
+                              )} />
+                            )}
+                            <span className="font-medium text-sm">{jenis.label}</span>
+                          </div>
+                          {!hasLocations && (
+                            <span className="text-[10px] text-muted-foreground">Tiada</span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Select Specific Locations */}
+            {selectedProgram && selectedJenisOperasi && (
+              <div className="space-y-3 pt-4 border-t border-border/50">
+                <Label className="text-sm font-bold flex items-center gap-2">
+                  <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">3</span>
+                  Pilih Lokasi
+                </Label>
+                
+                {filteredLocations.length > 0 ? (
+                  <>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {filteredLocations.map((loc: any) => {
+                        const isAssigned = loc.is_assigned
+                        return (
+                          <label
+                            key={loc.location_id}
+                            className={cn(
+                              "flex flex-col gap-2 p-3 rounded-xl border transition-all",
+                              isAssigned 
+                                ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                                : selectedLocationIds.includes(loc.location_id)
+                                  ? "border-primary bg-primary/5 cursor-pointer"
+                                  : "border-border hover:border-primary/50 cursor-pointer"
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedLocationIds.includes(loc.location_id)}
+                                onChange={() => !isAssigned && handleToggleLocation(loc.location_id)}
+                                disabled={isAssigned}
+                                className="w-4 h-4 accent-primary mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {/* Program Name Badge */}
+                                  {loc.program_name && (
+                                    <Badge variant="outline" className="text-[10px] bg-primary/5">
+                                      {loc.program_name}
+                                    </Badge>
+                                  )}
+                                  {/* Assigned Badge */}
+                                  {isAssigned && (
+                                    <Badge className="text-[10px] bg-green-100 text-green-700 border-green-200">
+                                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                                      Sudah Dipohon
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="font-medium text-sm truncate">{loc.location_name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {loc.operating_days}
+                                </p>
+                                {/* Show available rates */}
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {loc.rate_khemah > 0 && (
+                                    <Badge variant="secondary" className="text-[10px]">Khemah RM{loc.rate_khemah}</Badge>
+                                  )}
+                                  {loc.rate_cbs > 0 && (
+                                    <Badge variant="secondary" className="text-[10px]">CBS RM{loc.rate_cbs}</Badge>
+                                  )}
+                                  {loc.rate_monthly > 0 && (
+                                    <Badge variant="secondary" className="text-[10px]">Bulanan RM{loc.rate_monthly}</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {/* Google Maps Link */}
+                            {(loc.google_maps_url || loc.address) && (
+                              <div className="pl-7">
+                                {loc.google_maps_url ? (
+                                  <a 
+                                    href={loc.google_maps_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                                  >
+                                    <MapPin className="w-3 h-3" />
+                                    <span className="truncate">{loc.address || 'Lihat di Google Maps'}</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" />
+                                    {loc.address}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    
+                    {/* Show selection count */}
+                    {selectedLocationIds.length > 0 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                          {selectedLocationIds.length} lokasi dipilih
+                        </p>
+                        <Button
+                          onClick={handleSubmit}
+                          disabled={isSubmitting}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                          )}
+                          Hantar Permohonan
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-4 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-500 text-sm">
+                    <p>Tiada lokasi tersedia untuk pilihan ini.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

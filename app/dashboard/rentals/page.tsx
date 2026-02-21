@@ -42,26 +42,41 @@ export default async function RentalsPage() {
         .filter((link: any) => link.status === 'approved' || link.status === 'active')
         .map((link: any) => link.organizer_id)
 
-    // Get available locations directly (not using RPC)
+    // Get all locations from approved organizers (for showing all programs)
+    let allLocations: any[] = []
     let availableLocations: any[] = []
+    
     if (tenantData && approvedOrgIds.length > 0) {
-        // Get locations from approved organizers
-        const { data: locData } = await supabase
+        // Get ALL locations from approved organizers
+        // Note: Using separate query for organizers to avoid RLS issues with joins
+        const { data: locData, error: locError } = await supabase
             .from('locations')
             .select(`
                 id,
                 name,
+                program_name,
+                address,
+                google_maps_url,
                 rate_khemah,
                 rate_cbs,
                 rate_monthly,
+                rate_monthly_khemah,
+                rate_monthly_cbs,
                 operating_days,
                 type,
-                organizer_id,
-                organizers!inner(name)
+                organizer_id
             `)
             .in('organizer_id', approvedOrgIds)
             .eq('status', 'active')
-            .order('name')
+            .order('program_name')
+        
+        // Get organizer names separately
+        const { data: orgsData } = await supabase
+            .from('organizers')
+            .select('id, name')
+            .in('id', approvedOrgIds)
+        
+        const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
         
         // Get already assigned location IDs
         const { data: assignedLocs } = await supabase
@@ -72,36 +87,59 @@ export default async function RentalsPage() {
         
         const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
         
-        // Filter out already assigned locations
-        availableLocations = (locData || [])
-            .filter((loc: any) => !assignedIds.has(loc.id))
-            .map((l: any) => ({
-                location_id: l.id,
-                location_name: l.name,
-                organizer_id: l.organizer_id,
-                organizer_name: l.organizers?.name,
-                rate_khemah: l.rate_khemah,
-                rate_cbs: l.rate_cbs,
-                rate_monthly: l.rate_monthly,
-                operating_days: l.operating_days || 'Setiap Hari',
-                type: l.type,
-                display_price: l.rate_monthly || l.rate_khemah || 0
-            }))
+        // ALL locations (for showing programs)
+        allLocations = (locData || []).map((l: any) => ({
+            location_id: l.id,
+            location_name: l.name,
+            program_name: l.program_name,
+            organizer_id: l.organizer_id,
+            organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
+            rate_khemah: l.rate_khemah,
+            rate_cbs: l.rate_cbs,
+            rate_monthly: l.rate_monthly,
+            rate_monthly_khemah: l.rate_monthly_khemah,
+            rate_monthly_cbs: l.rate_monthly_cbs,
+            operating_days: l.operating_days || 'Setiap Hari',
+            type: l.type,
+            display_price: l.rate_monthly || l.rate_khemah || 0,
+            google_maps_url: l.google_maps_url,
+            address: l.address,
+            is_assigned: assignedIds.has(l.id) // Mark if already assigned
+        }))
+        
+        // Available locations only (for filtering)
+        availableLocations = allLocations.filter((loc: any) => !loc.is_assigned)
     }
 
-    // Get my locations
+    // Get my locations with organizer and program details
     let myLocations: any[] = []
     if (tenantData) {
         const { data: locData } = await supabase
             .from('tenant_locations')
-            .select(`*, locations:location_id (*)`)
+            .select(`
+                *,
+                locations:location_id (*),
+                organizers:organizer_id (name, id)
+            `)
             .eq('tenant_id', tenantData.id)
             .eq('is_active', true)
         
         myLocations = (locData || []).map((item: any) => ({
             ...item,
             display_price: item.locations?.rate_monthly || item.locations?.rate_khemah || 0,
-            location_name: item.locations?.name
+            location_name: item.locations?.name,
+            program_name: item.locations?.program_name,
+            google_maps_url: item.locations?.google_maps_url,
+            address: item.locations?.address,
+            // Organizer info for pending status
+            organizer_name: item.organizers?.name,
+            organizer_id: item.organizer_id,
+            // Include all rate fields for category selection filtering
+            rate_monthly: item.locations?.rate_monthly,
+            rate_khemah: item.locations?.rate_khemah,
+            rate_cbs: item.locations?.rate_cbs,
+            rate_monthly_khemah: item.locations?.rate_monthly_khemah,
+            rate_monthly_cbs: item.locations?.rate_monthly_cbs
         }))
     }
 
@@ -133,6 +171,7 @@ export default async function RentalsPage() {
             initialLocations={myLocations}
             initialHistory={history}
             initialAvailable={availableLocations}
+            initialAllLocations={allLocations}
             initialLinkedOrganizers={linkedOrganizers}
         />
     )
