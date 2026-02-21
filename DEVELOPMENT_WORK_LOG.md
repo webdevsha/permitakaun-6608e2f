@@ -5,38 +5,220 @@
 
 ---
 
-## 2026-02-21
+## 2026-02-07
 
-### 17:40 - Fixed Payment Redirect Logout Issue & Sejarah Bayaran
+### 10:00 - Initial Fixes: Auth, Loader, and Payment System
 
 **Issues:**
-1. Tenants getting logged out after payment when clicking "Kembali ke Halaman Utama"
-2. Sejarah Bayaran showing empty despite tenant having paid multiple times
-
-**Root Causes:**
-- `router.push()` was not preserving session cookies after external redirect from Billplz
-- Code was querying `tenant_transactions` with `is_rent_payment=true`, but rent payments are stored in `tenant_payments` table
+1. GlobalLoader not hiding after 5 seconds
+2. Auth provider blocking profile fetch
+3. Payment system RLS issues
+4. Payment duplication and admin errors
 
 **Changes Made:**
 
-1. **`app/payment/status/page.tsx`**
-   - Changed from `router.push()` to `window.location.href` for hard redirect
-   - Added session refresh via `supabase.auth.refreshSession()` on page mount
-   - Changed default redirect path from `/dashboard` to `/dashboard/rentals`
+1. **`components/global-loader.tsx`**
+   - Force hide GlobalLoader after 5 seconds timeout
+   - Added server debug logs
 
-2. **`app/dashboard/rentals/page.tsx`**
-   - Changed query from `tenant_transactions` to `tenant_payments` table
-   - Updated data mapping for payment fields
+2. **`components/providers/auth-provider.tsx`**
+   - Simplified auth provider with no dependencies
+   - Non-blocking profile fetch
 
-3. **`components/rental-module-enhanced.tsx`**
-   - Updated `fetchHistory()` to query `tenant_payments`
-   - Changed `redirectPath` from `/dashboard?module=rentals&view=history` to `/dashboard/rentals`
+3. **`app/bayar/status/page.tsx`** & **`actions/public-payment.ts`**
+   - Use admin client for public payments
+   - Fix callback and status page
+   - Use RPC functions to bypass RLS
+   - Fixed TransactionData id from string to number
+   - Added fallback for supabaseUrl
+   - Use maybeSingle instead of single to avoid coerce error
+
+4. **`app/bayar/page.tsx`**
+   - Redirect successful payments to /bayar/success
+   - Improve callback logging
+
+5. **`sql/fix_organizer_transactions_rls.sql`**
+   - Fix RLS policy for organizer transactions
+   - Add SQL to verify public payments
 
 **Status:** ✅ Completed
 
 ---
 
-### 17:25 - Fixed Admin Lokasi & Permit Tenant Counts
+### 11:00 - Dashboard Styling & Langganan Setup
+
+**Changes Made:**
+
+1. **`app/dashboard/layout.tsx`** & related files
+   - Update Admin/Organizer dashboard styling to match Tenant
+   - Fix Aksi buttons for Organizer
+
+2. **`components/accounting-module.tsx`**
+   - Add Langganan (Subscription) tab to Tetapan
+   - Add notification in Akaun
+   - Add missing setIsLoading(false) for all early return paths
+
+3. **`actions/subscription.ts`** & related files
+   - Langganan subscription management with manual payment option
+   - Tenant role display fix
+   - Admin Langganan approval tab
+
+**Status:** ✅ Completed
+
+---
+
+## 2026-02-09
+
+### 09:00 - Payment System Enhancements
+
+**Changes Made:**
+
+1. **`app/bayar/status/page.tsx`**
+   - Payment Status Page Error fixes
+   - Payment Redirect URL Fix from local to production
+
+2. **`components/pending-approvals-combined.tsx`**
+   - Debug Payment Duplication and Admin Errors
+   - Email template editing
+
+3. **`lib/email.ts`** & **`actions/email.ts`**
+   - Enhance payment receipt emails with organizer and location details
+   - Improve accounting module's authentication loading state handling
+
+4. **`actions/transaction.ts`**
+   - Filter tenant transactions to show only rent payments
+   - Allow organizers to approve transactions
+
+5. **`components/accounting-module.tsx`**
+   - Standardize transaction status to 'approved'
+   - Add transaction check script
+   - Improve accounting and rental module functionality
+
+6. **`app/dashboard/rentals/page.tsx`**
+   - Implement server-side active subscription checks
+   - Add dedicated location column to rental module payment table
+
+**Status:** ✅ Completed
+
+---
+
+## 2026-02-14
+
+### 14:00 - Landing Page Updates
+
+**Changes Made:**
+
+1. **`app/page.tsx`**
+   - Add subscription plans section to landing page
+   - Update navigation logo
+
+2. **Next.js Config**
+   - Correct Next.js routes types import path
+
+**Status:** ✅ Completed
+
+---
+
+## 2026-02-19
+
+### 09:00 - Accounting Module Enhancements
+
+**Changes Made:**
+
+1. **`components/accounting-module.tsx`**
+   - Enhance accounting module with detailed financial reporting
+   - Print-optimized styles
+   - Search functionality in accounting module
+
+2. **`app/page.tsx`**
+   - Add new landing page banner
+
+3. **`components/location-module.tsx`**
+   - Implement food truck rental rates
+   - Editable monthly estimates for locations
+
+4. **`actions/subscription.ts`**
+   - Enhance subscription management with transaction syncing
+   - Add admin profile fields
+
+5. **`app/payment/page.tsx`**
+   - Simplify subscription payment flow
+   - Remove manual options, directly initiate FPX
+   - SQL scripts to fix accounting statuses and smart sync subscriptions
+
+6. **`components/ui/file-input.tsx`** (new)
+   - Introduce FileInput component for uploads
+   - Enhance locations table with new columns
+   - Refine location program display on payment page
+
+7. **`components/subscription-plans.tsx`**
+   - Display full subscription history
+   - Fallback to subscription table data
+   - SQL scripts for debugging and repairing missing records
+
+**Status:** ✅ Completed
+
+---
+
+### 15:00 - Tenant-Organizer Relationship & RLS Fixes
+
+**Changes Made:**
+
+1. **`sql/enhanced_tenant_organizer_workflow.sql`**
+   - Implement many-to-many tenant-organizer relationships
+   - New junction table `tenant_organizers`
+   - Updated RLS policies
+
+2. **`sql/fix_rls_recursion.sql`**
+   - RLS recursion fixes
+   - Refined policies for transactions, tenants, and organizers
+
+3. **`app/dashboard/rentals/page.tsx`**
+   - Enable tenants to view active locations from linked organizers
+   - Enhance organizer code verification
+
+4. **`components/settings-module.tsx`**
+   - Adjust subscription prices
+   - Update dashboard revalidation settings
+
+5. **`app/api/auth/signup/route.ts`**
+   - Implement tenant rental application approval flow
+   - Refine user signup role assignment with trigger
+
+6. **`components/location-module.tsx`**
+   - Detailed monthly rate display
+   - Enhanced signup trigger with error logging
+   - Organizer code handling
+   - Update location rate fields
+
+**Status:** ✅ Completed
+
+---
+
+## 2026-02-20
+
+### 10:00 - Subscription Tiered Access & Rental Workflow
+
+**Changes Made:**
+
+1. **`components/accounting-module.tsx`**
+   - Implement subscription-based tiered access
+   - Restrict "tabung" limits based on subscription plan
+   - Restrict report downloads for free users
+   - Add related testing scripts
+
+2. **`components/rental-module-enhanced.tsx`** & **`components/pending-approvals-combined.tsx`**
+   - Implement end-to-end rental payment approval workflow
+   - Automatic organizer transaction creation on approval
+   - Remove 'lori' from CBS (Caters, Bazaars, Stalls)
+
+**Status:** ✅ Completed
+
+---
+
+## 2026-02-21
+
+### 10:00 - Admin Lokasi & Permit Tenant Counts Fix
 
 **Issue:** Senarai Peniaga showing (0) for all locations when there are active tenants
 
@@ -53,7 +235,7 @@
 
 ---
 
-### 17:10 - Admin Akaun Improvements & Rental Payment Workflow
+### 11:00 - Admin Akaun Improvements & Rental Payment Workflow
 
 **Issues:**
 1. Admin seeing "Menyemak kelayakan pelan..." when they don't need subscription check
@@ -83,7 +265,7 @@
 
 ---
 
-### 17:16 - Fixed Lokasi Popup Form Mobile Responsiveness
+### 14:00 - Lokasi Popup Form Mobile Responsiveness
 
 **Issue:** Lokasi popup form tidak responsif pada mobile - ruang input terlalu kecil dan tumpang tindih.
 
@@ -103,7 +285,7 @@
 
 ---
 
-### 17:00 - Implemented BREVO API Key Toggle System
+### 14:30 - BREVO API Key Toggle System
 
 **Issue:** BREVO_HAZMAN API key tidak aktif, perlu tukar ke BREVO_SHAFIRA dengan toggle button.
 
@@ -139,7 +321,7 @@
 
 ---
 
-### 16:30 - Added Image Upload Feature for Lokasi
+### 15:30 - Image Upload Feature for Lokasi
 
 **Issue:** Gambar Lokasi hanya menyokong URL, perlu muat naik terus dari laptop/HP.
 
@@ -167,18 +349,11 @@
 4. Public URL saved to `locations.image_url`
 5. Image preview shown in form
 
-**Setup Required:**
-```sql
--- Create Supabase Storage bucket
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('locations', 'locations', true, 5242880, array['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-```
-
 **Status:** ✅ Completed (pending storage bucket creation)
 
 ---
 
-### 15:45 - Fixed "Luluskan" Error for Peniaga & Sewa
+### 16:45 - Fixed "Luluskan" Error for Peniaga & Sewa
 
 **Issue:** Error: `"Gagal meluluskan: null value in column "organizer_id" of relation "organizer_transactions" violates not-null constraint"`
 
@@ -212,6 +387,35 @@ WHERE t.id = tor.tenant_id
 AND tor.status IN ('approved', 'active')
 AND (t.organizer_code IS NULL OR t.organizer_code = '');
 ```
+
+**Status:** ✅ Completed
+
+---
+
+### 17:40 - Fixed Payment Redirect Logout Issue & Sejarah Bayaran
+
+**Issues:**
+1. Tenants getting logged out after payment when clicking "Kembali ke Halaman Utama"
+2. Sejarah Bayaran showing empty despite tenant having paid multiple times
+
+**Root Causes:**
+- `router.push()` was not preserving session cookies after external redirect from Billplz
+- Code was querying `tenant_transactions` with `is_rent_payment=true`, but rent payments are stored in `tenant_payments` table
+
+**Changes Made:**
+
+1. **`app/payment/status/page.tsx`**
+   - Changed from `router.push()` to `window.location.href` for hard redirect
+   - Added session refresh via `supabase.auth.refreshSession()` on page mount
+   - Changed default redirect path from `/dashboard` to `/dashboard/rentals`
+
+2. **`app/dashboard/rentals/page.tsx`**
+   - Changed query from `tenant_transactions` to `tenant_payments` table
+   - Updated data mapping for payment fields
+
+3. **`components/rental-module-enhanced.tsx`**
+   - Updated `fetchHistory()` to query `tenant_payments`
+   - Changed `redirectPath` from `/dashboard?module=rentals&view=history` to `/dashboard/rentals`
 
 **Status:** ✅ Completed
 
@@ -273,28 +477,70 @@ if (!adminOrgCode && !isDeveloperAdmin) {
 ### Bug Fixes
 | Date | Issue | Status |
 |------|-------|--------|
-| 2026-02-21 | Fixed payment redirect logout issue | ✅ Fixed |
-| 2026-02-21 | Fixed Sejarah Bayaran empty issue | ✅ Fixed |
-| 2026-02-21 | Fixed organizer_id null constraint error on approval | ✅ Fixed |
+| 2026-02-07 | Fixed GlobalLoader not hiding | ✅ Fixed |
+| 2026-02-07 | Fixed auth provider blocking | ✅ Fixed |
+| 2026-02-07 | Fixed payment RLS issues | ✅ Fixed |
+| 2026-02-09 | Fixed payment duplication errors | ✅ Fixed |
+| 2026-02-09 | Fixed payment status page errors | ✅ Fixed |
 | 2026-02-21 | Fixed Lokasi form mobile responsiveness | ✅ Fixed |
 | 2026-02-21 | Fixed Admin Lokasi tenant counts showing 0 | ✅ Fixed |
+| 2026-02-21 | Fixed organizer_id null constraint error on approval | ✅ Fixed |
+| 2026-02-21 | Fixed payment redirect logout issue | ✅ Fixed |
+| 2026-02-21 | Fixed Sejarah Bayaran empty issue | ✅ Fixed |
 
 ### New Features
 | Date | Feature | Status |
 |------|---------|--------|
-| 2026-02-21 | Rental payment approval workflow | ✅ Implemented |
-| 2026-02-21 | Auto-create organizer transactions on approval | ✅ Implemented |
-| 2026-02-21 | Image upload for Lokasi | ✅ Implemented |
+| 2026-02-07 | Langganan subscription management | ✅ Implemented |
+| 2026-02-09 | Transaction approval workflow | ✅ Implemented |
+| 2026-02-14 | Landing page subscription plans | ✅ Implemented |
+| 2026-02-19 | Food truck rental rates | ✅ Implemented |
+| 2026-02-19 | Enhanced accounting reporting | ✅ Implemented |
+| 2026-02-19 | File upload for locations | ✅ Implemented |
+| 2026-02-19 | Tenant-organizer many-to-many relationship | ✅ Implemented |
+| 2026-02-20 | Subscription-based tiered access | ✅ Implemented |
+| 2026-02-20 | Rental payment approval workflow | ✅ Implemented |
 | 2026-02-21 | BREVO API key toggle system | ✅ Implemented |
+| 2026-02-21 | Image upload for Lokasi | ✅ Implemented |
 | 2026-02-21 | Include Langganan payments in Transaksi Terkini | ✅ Implemented |
 | 2026-02-21 | Show all tenants for admin@kumim.my | ✅ Implemented |
 
-### Files Modified (Today)
-- `utils/data/dashboard.ts` - Added admin_transactions fetch, removed ORG002 filter for admin@kumim.my
+### Files Modified (Major)
+- `app/payment/status/page.tsx`
+- `app/dashboard/rentals/page.tsx`
+- `components/rental-module-enhanced.tsx`
+- `utils/data/dashboard.ts`
+- `components/accounting-module.tsx`
+- `components/pending-approvals-combined.tsx`
+- `components/tenant-list-enhanced.tsx`
+- `components/location-module.tsx`
+- `lib/email.ts`
+- `actions/email.ts`
+- `actions/subscription.ts`
+- `actions/public-payment.ts`
+- `app/testemail/page.tsx`
+- `sql/enhanced_tenant_organizer_workflow.sql`
+- `sql/fix_rls_recursion.sql`
+- `sql/setup_location_images_storage.sql` (new)
+- `.env`
 
-### Git Commits (Antigravity Branch)
-- `39c763d8` - feat: include Langganan payments in Admin Transaksi Terkini
-- `fdc4507d` - feat: show all tenants and transactions for admin@kumim.my
+### Git Commits (Antigravity Branch - Recent)
+- `8fcc54e2` - docs: add conversation history to development work log
+- `76140acd` - Remove 'lori' from CBS
+- `2d3290e0` - Fixed tenant payment history, rental payment workflow
+- `306c0620` - Subscription-based tiered access
+- `60700086` - Detailed monthly rate display
+- `54308b6b` - Tenant rental application approval flow
+- `f0f645d9` - RLS recursion fixes
+- `ab565d70` - Many-to-many tenant-organizer relationships
+- `373405c4` - Display full subscription history
+- `81f49a9f` - FileInput component, location enhancements
+- `a795fe5b` - Simplify subscription payment flow
+- `80172af7` - Enhanced subscription management
+- `b54b6837` - Food truck rental rates
+- `88ad6d49` - Enhanced accounting module
+- `fdc4507d` - Show all tenants for admin@kumim.my
+- `39c763d8` - Include Langganan payments in Admin Transaksi Terkini
 
 ---
 
@@ -312,7 +558,8 @@ if (!adminOrgCode && !isDeveloperAdmin) {
 - SQL migrations need to be applied to production database
 - Environment variables updated in `.env`
 - Mobile responsiveness tested on viewport < 640px
+- Most work done on `Antigravity` branch
 
 ---
 
-*Last Updated: 2026-02-21 17:52:00+08:00*
+*Last Updated: 2026-02-21 18:00:00+08:00*
