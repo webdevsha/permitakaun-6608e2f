@@ -246,9 +246,19 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
       setIsUpdating(true)
       try {
          if (tenant.link_id) {
+            // Tenant linked via tenant_organizers table
             const { error } = await supabase.from('tenant_organizers').update({ status: newStatus }).eq('id', tenant.link_id)
             if (error) throw error
+         } else if (tenant.locations?.length > 0 && organizerId) {
+            // Tenant linked via tenant_locations - update all their locations for this organizer
+            const { error } = await supabase
+               .from('tenant_locations')
+               .update({ status: newStatus, is_active: newStatus === 'active' })
+               .eq('tenant_id', tenant.id)
+               .eq('organizer_id', organizerId)
+            if (error) throw error
          } else {
+            // Fallback: update tenant's global status
             const { error } = await supabase.from('tenants').update({ status: newStatus }).eq('id', tenant.id)
             if (error) throw error
          }
@@ -348,10 +358,21 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    const handleApproveTenant = async (tenant: any) => {
       try {
          if (tenant.link_id) {
+            // Approve via tenant_organizers
             const { error } = await supabase.from('tenant_organizers').update({ status: 'active' }).eq('id', tenant.link_id)
             if (error) throw error
             await logAction('APPROVE', 'tenant_link', tenant.link_id, { status: 'active' })
+         } else if (tenant.locations?.length > 0 && organizerId) {
+            // Approve via tenant_locations for this organizer
+            const { error } = await supabase
+               .from('tenant_locations')
+               .update({ status: 'active', is_active: true })
+               .eq('tenant_id', tenant.id)
+               .eq('organizer_id', organizerId)
+            if (error) throw error
+            await logAction('APPROVE', 'tenant_locations', tenant.id, { status: 'active', organizer_id: organizerId })
          } else {
+            // Fallback: update tenant's global status
             const { error } = await supabase.from('tenants').update({ status: 'active' }).eq('id', tenant.id)
             if (error) throw error
             await logAction('APPROVE', 'tenant', tenant.id, { status: 'active' })

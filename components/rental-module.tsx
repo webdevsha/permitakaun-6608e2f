@@ -421,9 +421,14 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
 
     setIsApplying(true)
     try {
+      // Find the selected location to get its organizer_id
+      const selectedLocation = availableLocations.find((loc: any) => loc.id.toString() === applyLocationId)
+      const organizerId = selectedLocation?.organizer_id
+      
       const { error } = await supabase.from('tenant_locations').insert({
         tenant_id: tenant.id,
         location_id: parseInt(applyLocationId),
+        organizer_id: organizerId,  // Set organizer_id for proper routing to organizer
         rate_type: 'monthly', // Placeholder, tenant will choose this later upon approval
         status: 'pending', // Require Admin Activation
         stall_number: null // Unfillable by tenant
