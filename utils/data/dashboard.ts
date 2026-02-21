@@ -161,7 +161,7 @@ async function fetchDashboardDataInternal(
                     ...t,
                     table_source: 'organizer_transactions'
                 }))
-                
+
                 console.log(`[Dashboard] Loaded ${transactions.length} transactions for admin`)
             } catch (e: any) {
                 console.error('[Dashboard] Error fetching transactions:', e.message || e)
@@ -198,7 +198,7 @@ async function fetchDashboardDataInternal(
                 transactions = [...transactions, ...formattedAdminTx]
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                     .slice(0, 100) // Keep top 100 after combining
-                
+
                 console.log(`[Dashboard] Combined ${combinedCount} total transactions (organizer: ${transactions.length - formattedAdminTx.length}, admin: ${formattedAdminTx.length})`)
             } catch (e) {
                 console.error('[Dashboard] Error fetching admin transactions:', e)
@@ -571,15 +571,15 @@ export async function fetchLocations() {
                 .select('*', { count: 'exact', head: true })
                 .eq('location_id', loc.id)
                 .eq('status', 'active')
-            
+
             if (countError) {
                 console.error(`[fetchLocations] Error counting tenants for location ${loc.id}:`, countError)
             }
-            
+
             return { ...loc, tenant_count: count || 0 }
         })
     )
-    
+
     return locationsWithCounts
 }
 
