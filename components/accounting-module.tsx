@@ -129,6 +129,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const [systemSettings, setSystemSettings] = useState({ is_active: true, trial_duration_days: 14 })
   const [isSuperadminConfigOpen, setIsSuperadminConfigOpen] = useState(false)
 
+  // Trial status state
+  const [isTrial, setIsTrial] = useState(false)
+
   // Fetch Accounting Config on Mount
   useEffect(() => {
     const fetchConfig = async () => {
@@ -162,6 +165,51 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
   }, [user])
 
+  // Check if user is in trial mode (no active subscription)
+  useEffect(() => {
+    const checkTrialStatus = async () => {
+      if (!user || role !== 'tenant') {
+        setIsTrial(false)
+        return
+      }
+      
+      try {
+        // Check if tenant has active subscription
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('id, accounting_status')
+          .eq('profile_id', user.id)
+          .single()
+
+        // If has active subscription, NEVER show trial badge
+        if (tenant?.accounting_status === 'active') {
+          setIsTrial(false)
+          return
+        }
+
+        // Check if still in trial period (14 days from profile creation)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('created_at')
+          .eq('id', user.id)
+          .single()
+
+        if (profile) {
+          const createdDate = new Date(profile.created_at)
+          const trialEndDate = new Date(createdDate)
+          trialEndDate.setDate(trialEndDate.getDate() + 14)
+          
+          const daysLeft = Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+          setIsTrial(daysLeft > 0)
+        }
+      } catch (error) {
+        console.error('Error checking trial status:', error)
+        setIsTrial(false)
+      }
+    }
+
+    checkTrialStatus()
+  }, [user, role, supabase])
 
   // Simplified init with timeout protection
   useEffect(() => {
@@ -1034,6 +1082,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // --- TIERED ACCESS LOGIC ---
   const isEnterprise = activePlan === 'premium'
   const isSdnBhd = activePlan === 'standard'
+  const isBasic = activePlan === 'basic' || !activePlan
 
   // Enterprise = 3. Sdn Bhd = 4. Others (like Ultimate or full access) = 7.
   const allowedTabungs = isEnterprise
@@ -1049,6 +1098,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const currentTotalPercent = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
 
+  // Determine plan display name for consistency with Subscription page
+  const getPlanDisplayName = () => {
+    if (isEnterprise) return 'Enterprise'
+    if (isSdnBhd) return 'Sdn Bhd'
+    return 'Basic'
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Subscription Notification for Organizers and Tenants */}
@@ -1059,7 +1115,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>
           <p className="text-muted-foreground text-lg flex items-center">
             Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
-            {activePlan && <Badge variant="outline" className="ml-2 uppercase bg-amber-100 text-amber-800 border-amber-200">{activePlan}</Badge>}
+            {isTrial ? (
+              <Badge variant="outline" className="ml-2 uppercase bg-blue-100 text-blue-800 border-blue-200">Percubaan</Badge>
+            ) : (
+              activePlan && <Badge variant="outline" className="ml-2 uppercase bg-amber-100 text-amber-800 border-amber-200">{getPlanDisplayName()}</Badge>
+            )}
           </p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
@@ -1288,7 +1348,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6">
           <TabsTrigger value="dashboard" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Wallet className="w-4 h-4 mr-2" /> {isEnterprise ? '3-Tabung' : isSdnBhd ? '4-Tabung' : '7-Tabung'} Dashboard
+            <Wallet className="w-4 h-4 mr-2" /> {getPlanDisplayName()} Dashboard
           </TabsTrigger>
           <TabsTrigger value="reports" className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white relative overflow-hidden group">
             <div className="flex items-center">

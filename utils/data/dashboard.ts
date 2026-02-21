@@ -77,11 +77,11 @@ async function fetchDashboardDataInternal(
 
     try {
         // --- ADMIN & SUPERADMIN (Organization Owners) ---
-        if (role === 'admin' || role === 'superadmin' || email === 'admin@kumim.my') {
+        // All admins (including admin@kumim.my) should only see their OWN organization's data
+        if (role === 'admin' || role === 'superadmin') {
             const isDeveloperAdmin = email === 'admin@permit.com'
-            const adminOrgCode = email === 'admin@kumim.my' ? 'ORG002' : null
 
-            // Fetch Tenants with timeout
+            // Fetch Tenants with timeout - filtered by organizer_code
             try {
                 let tQuery = supabase
                     .from('tenants')
@@ -89,9 +89,11 @@ async function fetchDashboardDataInternal(
                     .order('created_at', { ascending: false })
                     .limit(100) // Limit to prevent timeouts
 
-                // admin@kumim.my sees ALL tenants (no filter)
-                // Other admins see tenants except ORG001 (seed data)
-                if (!adminOrgCode && !isDeveloperAdmin) {
+                // Filter by organizer_code if available
+                if (organizerCode) {
+                    tQuery = tQuery.eq('organizer_code', organizerCode)
+                } else if (!isDeveloperAdmin) {
+                    // If no organizer code and not developer admin, exclude seed data
                     tQuery = tQuery.neq('organizer_code', 'ORG001')
                 }
 
@@ -126,16 +128,30 @@ async function fetchDashboardDataInternal(
 
             // Fetch Transactions with timeout
             try {
-                // admin@kumim.my and developer admin see ALL transactions across ALL organizers
-                // This gives them full visibility into all financial data
+                // All admins (including admin@kumim.my) should only see their OWN organization's transactions
                 let txQuery = supabase
                     .from('organizer_transactions')
                     .select('*, tenants(full_name, business_name, organizer_code)')
                     .order('date', { ascending: false })
                     .limit(100) // Increased limit for admin view
 
-                // Only filter out seed data for non-privileged admins
-                if (!adminOrgCode && !isDeveloperAdmin) {
+                // Filter by organizer_id if we can determine it from organizerCode
+                if (organizerCode && !isDeveloperAdmin) {
+                    try {
+                        const { data: orgData } = await supabase
+                            .from('organizers')
+                            .select('id')
+                            .eq('organizer_code', organizerCode)
+                            .maybeSingle()
+                        if (orgData) {
+                            txQuery = txQuery.eq('organizer_id', orgData.id)
+                        }
+                    } catch (filterErr) {
+                        console.warn('[Dashboard] Could not filter by organizer:', filterErr)
+                        // Continue without filter if it fails
+                    }
+                } else if (!isDeveloperAdmin) {
+                    // Filter out seed data if no organizer code
                     try {
                         const { data: seedOrg } = await supabase
                             .from('organizers')
@@ -147,7 +163,6 @@ async function fetchDashboardDataInternal(
                         }
                     } catch (filterErr) {
                         console.warn('[Dashboard] Could not filter seed data:', filterErr)
-                        // Continue without filter if it fails
                     }
                 }
 
@@ -208,10 +223,16 @@ async function fetchDashboardDataInternal(
             // Fetch Organizers
             try {
                 let orgQuery = supabase.from('organizers').select('*, locations(*)').order('created_at', { ascending: false })
-                // admin@kumim.my (adminOrgCode exists) and developer admin see all organizers
-                if (!adminOrgCode && !isDeveloperAdmin) {
+                
+                // Filter by organizer_code for regular admins
+                // Only developer admin sees all organizers
+                if (organizerCode && !isDeveloperAdmin) {
+                    orgQuery = orgQuery.eq('organizer_code', organizerCode)
+                } else if (!isDeveloperAdmin) {
+                    // Exclude seed data for non-privileged users
                     orgQuery = orgQuery.not('organizer_code', 'in', '("ORG001","ORGKL01","ORGUD01")')
                 }
+                
                 const { data: org, error } = await withTimeout(() => orgQuery.limit(50), 3000, 'organizers query')
                 if (error) throw error
                 organizers = org || []
