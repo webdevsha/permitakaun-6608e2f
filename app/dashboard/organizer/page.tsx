@@ -68,6 +68,7 @@ export default async function OrganizerDashboardPage() {
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
     const displayName = userProfile?.full_name || organizers?.[0]?.name || 'Penganjur'
+    const organizerCode = userProfile?.organizer_code || organizers?.[0]?.organizer_code
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -80,6 +81,12 @@ export default async function OrganizerDashboardPage() {
                     <p className="text-muted-foreground text-lg font-medium">
                         Selamat datang ke papan pemuka penganjur anda.
                     </p>
+                    {organizerCode && (
+                        <div className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-primary/10 rounded-lg">
+                            <span className="text-xs text-muted-foreground">Kod Penganjur Anda:</span>
+                            <code className="text-sm font-bold text-primary font-mono">{organizerCode}</code>
+                        </div>
+                    )}
                 </div>
             </header>
 
