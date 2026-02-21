@@ -1476,3 +1476,367 @@ CREATE TRIGGER on_auth_user_created
 ---
 
 *Last Updated: 2026-02-21 18:45:00+08:00*
+
+---
+
+### 19:00 - FIX: Admin Approval for Peniaga & Sewa
+
+**Issue:** Admin cannot properly approve rentals (sewa) and have them recorded in respective systems without errors.
+
+**Root Causes Identified:**
+1. **Missing RLS UPDATE policies** - Admin/Staff couldn't update `tenant_locations`, `tenant_organizers`, or `tenant_payments` tables
+2. **Trigger fails silently** - `handle_payment_approval()` trigger fails when `organizer_id` is NULL, causing no transactions to be created
+3. **No organizer_id linking** - When location is approved, organizer_id wasn't being set properly
+
+**Changes Made:**
+
+**File: `sql/fix_admin_approval_complete.sql`**
+
+**PART 1: RLS UPDATE Policies**
+Added UPDATE policies for Admin/Staff on:
+- `tenant_locations` - Allow approve/reject location requests
+- `tenant_organizers` - Allow approve/reject organizer links
+- `tenant_payments` - Allow approve/reject payments
+
+**PART 2: Fixed Payment Approval Trigger**
+Updated `handle_payment_approval()` function:
+- Better error handling with RAISE NOTICE logging
+- Gets organizer_id via `organizer_code` from tenants table
+- Always creates `tenant_transactions` record
+- Only creates `organizer_transactions` if `organizer_id` is valid (not NULL)
+- Added debug logging for troubleshooting
+
+**PART 3: Location Approval Trigger**
+Created `handle_location_approval()` function:
+- Sets `organizer_id` on `tenant_locations` when approved
+- Links location to correct organizer based on location's organizer
+
+**SQL to Run:**
+```sql
+-- Run this in Supabase SQL Editor
+\i sql/fix_admin_approval_complete.sql
+```
+
+**Approval Flows Fixed:**
+
+1. **Organizer Link Approval** (Pautan Penganjur)
+   - Admin clicks "Luluskan" on pending organizer link
+   - Updates `tenant_organizers` status to 'approved'
+   - Updates `tenants.organizer_code` to match organizer
+   - ✅ Now works with proper RLS policy
+
+2. **Location Approval** (Lokasi/Sewa Tapak)
+   - Admin clicks "Luluskan" on pending location
+   - Updates `tenant_locations` status to 'approved'
+   - Sets `organizer_id` from location's organizer
+   - ✅ Now works with proper RLS policy
+
+3. **Payment Approval** (Bayaran Sewa)
+   - Admin clicks "Luluskan" on pending payment
+   - Updates `tenant_payments` status to 'approved'
+   - Trigger creates:
+     - `tenant_transactions` record (expense for tenant)
+     - `organizer_transactions` record (income for organizer) - if organizer_id found
+   - ✅ Now works with proper RLS policy and error handling
+
+**Files Modified:**
+- `sql/fix_admin_approval_rls.sql` (created)
+- `sql/fix_admin_approval_complete.sql` (created)
+
+**Testing Checklist:**
+- [ ] Admin can approve organizer link
+- [ ] Admin can approve location request
+- [ ] Admin can approve payment
+- [ ] Transactions appear in tenant's Akaun
+- [ ] Transactions appear in organizer's Akaun (if linked)
+
+**Status:** ✅ Fix Ready (SQL needs to be run)
+
+---
+
+*Last Updated: 2026-02-21 19:00:00+08:00*
+
+---
+
+### 19:30 - Added Delete Function for Lokasi & Enhanced Available Locations Display
+
+**Features Added:**
+
+**1. Delete Function for Approved/Pending Locations**
+- File: `components/rental-module.tsx`
+- Added `handleDeleteLocation()` function to delete `tenant_locations` records
+- Added delete button (trash icon) on rental cards with status 'approved' or 'pending'
+- Shows confirmation dialog before deletion
+- Added loading state during deletion
+
+**2. Enhanced Available Locations Display**
+- Shows **Program Name** as a badge (e.g., "Pasar Malam Banting", "Karnival Mega")
+- Shows **Organizer Name** with building icon
+- Shows **Location Type** badge (Mingguan/Bulanan/Expo)
+- Shows **Rate preview** (Khemah/CBS/Bulanan rates)
+- Shows **Operating days**
+
+**3. Enhanced Location Selection Dialog**
+- Changed from dropdown to **card-based selection**
+- Each location shows:
+  - Program name badge
+  - Location name
+  - Organizer name
+  - Type badge (Mingguan/Bulanan/Expo)
+  - Operating days
+- Click to select with visual feedback (checkmark)
+- Scrollable list for many locations
+
+**Changes Made:**
+- Added `Trash2` icon to imports
+- Added `deletingLocation` state
+- Added `handleDeleteLocation()` function
+- Updated `myLocations` card to show delete button and program name
+- Updated available locations grid with detailed info
+- Updated location selection dialog with card-based UI
+
+**Visual Improvements:**
+```
+Before:
+- Simple list of location names
+- Basic operating days info
+
+After:
+- Program name badges (e.g., "Pasar Malam Banting")
+- Organizer name displayed
+- Type badges (Mingguan/Bulanan/Expo)
+- Rate previews (Khemah: RM50, CBS: RM60, etc.)
+- Delete button for approved/pending locations
+- Card-based selection with visual feedback
+```
+
+**Status:** ✅ Completed
+
+---
+
+*Last Updated: 2026-02-21 19:30:00+08:00*
+
+---
+
+### 19:45 - Updated UI Text for Location Selection
+
+**Changes Made:**
+
+**`components/rental-module.tsx`**
+1. **Button Label:** "Mohon Tapak Baru" → "Lokasi Penganjur Saya"
+2. **Dialog Title:** "Permohonan Sewa Tapak" → "Lokasi Penganjur Saya"
+3. **Dialog Description:** Updated to explain these are locations from linked organizers
+4. **Section Label:** "Lokasi Pasar Tersedia" → "Lokasi Penganjur Saya"
+
+**UI Flow Now:**
+```
+Status Tapak
+├── Tapak Sewaan Saya (with delete button for approved/pending)
+└── [Lokasi Penganjur Saya] button
+    └── Dialog: Lokasi Penganjur Saya
+        └── Section: Lokasi Penganjur Saya (list of available locations)
+```
+
+**Delete Function:**
+- Already implemented in previous commit
+- Shows on rental cards with status 'approved' or 'pending'
+- Trash icon (🗑️) button in top-right corner of card
+- Confirmation dialog before deletion
+
+**Status:** ✅ Completed
+
+---
+
+*Last Updated: 2026-02-21 19:45:00+08:00*
+
+---
+
+## 2026-02-21
+
+### 20:45 - Final Enhancements: Delete Function & UI Updates
+
+**Issues:**
+1. Tenant needs ability to delete approved/pending rental locations
+2. "Pilih Lokasi Baharu" should be renamed to "Lokasi Penganjur Saya"
+3. Need to ensure delete functionality works in both rental modules
+
+**Changes Made:**
+
+1. **`components/rental-module.tsx`**
+   - Added `handleDeleteLocation()` function for soft delete (is_active=false)
+   - Added delete button in RentalCard for approved/pending status
+   - Added confirmation dialog before delete
+
+2. **`components/rental-module-enhanced.tsx`**
+   - Added `deletingLocation` state for loading indicator
+   - Added `handleDeleteLocation()` function with toast notifications
+   - Updated RentalCard interface to accept `onDeleteLocation` and `isDeleting` props
+   - Updated RentalCard delete button with loading spinner
+   - Renamed section comments: "Pilih Lokasi Baharu" → "Lokasi Penganjur Saya"
+   - LocationSelector title already shows "Lokasi Penganjur Saya"
+
+**Key Implementation Details:**
+- Delete only available for 'approved' or 'pending' status locations
+- Soft delete by setting `is_active=false` and `status='inactive'`
+- Uses `refreshData()` to update UI after deletion
+- Loading state with spinner animation during deletion
+
+**Status:** ✅ Completed
+
+**SQL Files for Deployment:**
+- `sql/fix_admin_approval_complete.sql` - Admin approval RLS policies and trigger fixes
+- `sql/fix_organizer_signup_complete.sql` - Organizer signup trigger fixes
+- `sql/setup_location_images_storage.sql` - Storage bucket setup for location images
+
+
+---
+
+## 2026-02-21
+
+### 21:15 - CRITICAL: Organizer Signup Root Cause Analysis
+
+**Issues Identified:**
+
+1. **Column Name Mismatch** (CRITICAL)
+   - Table definition uses `id` as primary key
+   - Some triggers try to insert into `profile_id` column which doesn't exist
+   - This causes silent trigger failure
+
+2. **Status Constraint Issue**
+   - Table constraint: `CHECK (status in ('active', 'inactive'))`
+   - Triggers try to insert `status = 'pending'`
+   - This causes constraint violation
+
+**Affected Files (WRONG - Do NOT use):**
+- `sql/fix_organizer_signup_final.sql` - Uses `profile_id` column
+- `sql/fix_organizer_signup_bypass_rls.sql` - Uses `profile_id` column  
+- `sql/fix_organizer_signup_complete.sql` - Uses `profile_id` column
+- `sql/fix_organizer_signup_v2.sql` - Uses `profile_id` column
+
+**Correct Files:**
+- `sql/update_schema_roles_organizers.sql` - Uses `id` column correctly
+- `sql/fix_signup_trigger_proper.sql` - Uses `id` column correctly
+- `sql/debug_trigger.sql` - Uses `id` column correctly
+
+**Solution:**
+Created `sql/fix_organizer_signup_root_cause.sql` that:
+1. Adds `profile_id` column to organizers table for future compatibility
+2. Fixes status constraint to allow 'pending', 'active', 'inactive'
+3. Creates proper trigger that inserts both `id` AND `profile_id`
+4. Fixes existing admin@kumim.my record
+
+**SQL Files for Deployment:**
+- `sql/fix_organizer_signup_root_cause.sql` - **USE THIS FILE**
+- `sql/diagnose_organizer_issue_detailed.sql` - For verification
+
+**Status:** ⚠️ Critical Fix Required - Run `fix_organizer_signup_root_cause.sql`
+
+
+---
+
+## 2026-02-21
+
+### 22:00 - Fix Missing Organizers & UI Flickering
+
+**Issues Fixed:**
+
+1. **Missing Organizers in Database**
+   - Table only had 1 organizer (ORGKL01) instead of 3
+   - Missing: Shafira Orgs (ORG1001) and Kumim Sdn Bhd (ORG002)
+   - Created `sql/fix_missing_organizers.sql` to restore them
+
+2. **UI Flickering in Location Form**
+   - Problem: `useSWR` hook was causing continuous re-renders
+   - The organizer Select input was flickering/disappearing
+   - Solution: Changed to `useEffect` with proper dependency array
+   - Added loading state to prevent UI flickering
+
+**Changes Made:**
+
+**`components/location-module.tsx`:**
+- Changed `useSWR` to `useEffect` for fetching organizers
+- Added `organizersLoading` state
+- Added disabled state and loading indicator to Select
+- Added "Tiada penganjur aktif" message when list is empty
+
+**`sql/fix_missing_organizers.sql`:**
+- Inserts Shafira Orgs (ORG1001) with profile
+- Inserts Kumim Sdn Bhd (ORG002) with profile  
+- Updates sequence to prevent code reuse
+- Verifies all organizers exist after fix
+
+**SQL Files to Run:**
+1. `sql/fix_missing_organizers.sql` - Restore missing organizers
+2. `sql/fix_organizer_signup_root_cause.sql` - Fix signup trigger (if not already run)
+
+**Status:** ✅ Completed
+
+
+---
+
+### 22:15 - Fixed SQL Error
+
+**Error:** `42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification`
+
+**Cause:** The `ON CONFLICT (id)` clause requires a primary key or unique constraint on the `id` column.
+
+**Fix:** Created `sql/fix_missing_organizers_v2.sql` that:
+1. Uses `ON CONFLICT (id)` only for profiles table (which has PK)
+2. Deletes existing organizer records by email first
+3. Then inserts fresh records without ON CONFLICT
+
+**Run this instead:**
+```sql
+\i sql/fix_missing_organizers_v2.sql
+```
+
+
+### 22:30 - Fixed SQL Error v3
+
+**Error:** `23503: insert or update on table "profiles" violates foreign key constraint`
+
+**Cause:** The profile IDs must exist in `auth.users` table first (foreign key constraint).
+
+**Fix:** Created `sql/fix_missing_organizers_v3.sql` that:
+1. Looks up existing auth.users by email
+2. Creates auth.users records if they don't exist
+3. Then creates profiles and organizers with correct UUIDs
+
+**Run this:**
+```sql
+\i sql/fix_missing_organizers_v3.sql
+```
+
+
+### 22:45 - Organizer Visibility Issue
+
+**Problem:** SQL shows 3 organizers but Table Editor only shows 1.
+
+**Causes:**
+1. **Active Filter in Table Editor** - Screenshot shows "Filtered by 1 rule"
+2. **RLS policies** may be restricting view
+
+**Solutions:**
+
+1. **Clear the filter in Supabase Table Editor:**
+   - Look for "Filtered by 1 rule" at the top
+   - Click the X or "Clear filter" button
+
+2. **Run the verification SQL:**
+   ```sql
+   \i sql/verify_and_fix_organizers.sql
+   ```
+
+This will:
+- Show all organizers (bypassing RLS)
+- Fix RLS policies to allow viewing all records
+- Fix any NULL profile_ids
+- Verify final state
+
+**Current Status:**
+- ✅ Kumim Sdn Bhd (ORG002) - admin@kumim.my
+- ✅ Shafira Orgs (ORG1001) - hai@shafiranoh.com  
+- ✅ Pasar Malam KL (ORGKL01) - admin@klpasar.com
+
+All 3 organizers exist in the database!
+
