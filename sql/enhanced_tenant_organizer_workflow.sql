@@ -347,10 +347,12 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_organizer_id UUID;
+  v_tenant_id BIGINT;
+  v_organizer_code TEXT;
   v_current_user_is_organizer BOOLEAN;
 BEGIN
-  -- Get the organizer_id for this link
-  SELECT organizer_id INTO v_organizer_id
+  -- Get the organizer_id and tenant_id for this link
+  SELECT organizer_id, tenant_id INTO v_organizer_id, v_tenant_id
   FROM tenant_organizers
   WHERE id = p_link_id;
 
@@ -379,6 +381,12 @@ BEGIN
 
   -- Process the request
   IF p_action = 'approve' THEN
+    -- Get the organizer_code for this organizer
+    SELECT organizer_code INTO v_organizer_code
+    FROM organizers
+    WHERE id = v_organizer_id;
+
+    -- Update tenant_organizers status
     UPDATE tenant_organizers 
     SET status = 'approved',
         approved_at = NOW(),
@@ -386,6 +394,12 @@ BEGIN
         rejection_reason = NULL,
         updated_at = NOW()
     WHERE id = p_link_id;
+    
+    -- ALSO update the tenant's organizer_code so triggers can find the organizer
+    UPDATE tenants
+    SET organizer_code = v_organizer_code,
+        updated_at = NOW()
+    WHERE id = v_tenant_id;
     
     RETURN jsonb_build_object(
       'success', TRUE,

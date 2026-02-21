@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store, Pencil, Save, Building, CheckCircle, Trash2 } from "lucide-react"
+import { Calendar, Plus, MapPin, Loader2, Eye, Users, Store, Pencil, Save, Building, CheckCircle, Trash2, Upload, X, ImageIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -93,6 +93,8 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
   const supabase = createClient()
 
   // Location Form State
@@ -502,7 +504,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                 Tambah Lokasi
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white border-border rounded-3xl sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="bg-white border-border rounded-3xl w-[95vw] sm:w-full sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               {/* Dialog Content Omitted for Brevity - maintained by React composition if not replaced, 
                   but here I am replacing the block. Need to include DialogContent children? 
                   The tool replaces the WHOLE block from StartLine to EndLine.
@@ -586,20 +588,136 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="image_url">Pautan Gambar (URL)</Label>
+                    <Label htmlFor="image_upload">Gambar Lokasi</Label>
+                    
+                    {/* Image Preview */}
+                    {formData.image_url && (
+                      <div className="relative w-full h-40 rounded-xl overflow-hidden border border-border mb-2">
+                        <img 
+                          src={formData.image_url} 
+                          alt="Location preview" 
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, image_url: "" })}
+                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* File Upload Input */}
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="image_upload"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          
+                          // Validate file type
+                          if (!file.type.startsWith('image/')) {
+                            toast.error('Sila pilih fail gambar sahaja (JPG, PNG, GIF)')
+                            return
+                          }
+                          
+                          // Validate file size (max 5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('Saiz gambar terlalu besar. Maksimum 5MB')
+                            return
+                          }
+                          
+                          setSelectedImageFile(file)
+                          setUploadingImage(true)
+                          
+                          try {
+                            // Generate unique filename
+                            const fileExt = file.name.split('.').pop()
+                            const fileName = `location-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+                            
+                            // Upload to Supabase Storage
+                            const { error: uploadError } = await supabase
+                              .storage
+                              .from('locations')
+                              .upload(fileName, file)
+                            
+                            if (uploadError) {
+                              console.error('Upload error:', uploadError)
+                              toast.error('Gagal memuat naik gambar: ' + uploadError.message)
+                              return
+                            }
+                            
+                            // Get public URL
+                            const { data: { publicUrl } } = supabase
+                              .storage
+                              .from('locations')
+                              .getPublicUrl(fileName)
+                            
+                            setFormData({ ...formData, image_url: publicUrl })
+                            toast.success('Gambar berjaya dimuat naik!')
+                          } catch (err: any) {
+                            console.error('Error uploading image:', err)
+                            toast.error('Ralat memuat naik gambar')
+                          } finally {
+                            setUploadingImage(false)
+                            setSelectedImageFile(null)
+                            // Reset the input
+                            e.target.value = ''
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="image_upload"
+                        className={`
+                          flex items-center justify-center gap-2 w-full px-4 py-3 
+                          border-2 border-dashed border-border rounded-xl 
+                          cursor-pointer transition-colors
+                          ${uploadingImage ? 'bg-muted cursor-not-allowed' : 'hover:bg-muted/50 hover:border-primary/50'}
+                        `}
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                            <span className="text-sm text-muted-foreground">Memuat naik...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-5 h-5 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              {formData.image_url ? 'Tukar Gambar' : 'Klik untuk muat naik gambar'}
+                            </span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                    
+                    {/* Or use URL option */}
+                    <div className="flex items-center gap-2 my-2">
+                      <div className="flex-1 h-px bg-border"></div>
+                      <span className="text-xs text-muted-foreground">atau</span>
+                      <div className="flex-1 h-px bg-border"></div>
+                    </div>
+                    
                     <Input
                       id="image_url"
                       value={formData.image_url}
                       onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                      placeholder="https://example.com/image.jpg"
-                      className="rounded-xl"
+                      placeholder="https://example.com/image.jpg (URL gambar)"
+                      className="rounded-xl text-sm"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Format disokong: JPG, PNG, GIF. Maksimum 5MB.
+                    </p>
                   </div>
                 </div>
 
                 {/* Date Selection for Events */}
                 {['expo', 'bazar_ramadhan', 'bazar_raya'].includes(formData.type) && (
-                  <div className="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
                     <div className="grid gap-2">
                       <Label className="text-blue-700">Tarikh Mula</Label>
                       <Input
@@ -621,7 +739,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Jenis Operasi</Label>
                     <Select
@@ -651,7 +769,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Hari/Waktu Operasi</Label>
                     <Input
@@ -678,7 +796,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                   <Label className="font-bold text-primary">Tetapan Kadar Sewa (RM)</Label>
                   {formData.type === 'daily' ? (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <Label className="text-xs">Kadar Seminggu (Khemah)</Label>
                           <Input
@@ -748,7 +866,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-xs">Kadar Bulanan (Khemah)</Label>
                           <Input
@@ -795,7 +913,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
 
       {/* RENT DIALOG */}
       <Dialog open={!!rentLocation} onOpenChange={(open) => !open && setRentLocation(null)}>
-        <DialogContent className="bg-white rounded-3xl">
+        <DialogContent className="bg-white rounded-3xl w-[95vw] sm:w-full sm:max-w-[500px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Sewa Tapak: {rentLocation?.name}</DialogTitle>
             <DialogDescription>Sahkan pilihan sewaan anda.</DialogDescription>
@@ -867,6 +985,21 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                 </div>
               )}
 
+              {/* Location Image */}
+              {loc.image_url && (
+                <div className="w-full h-48 overflow-hidden">
+                  <img 
+                    src={loc.image_url} 
+                    alt={loc.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Hide image if it fails to load
+                      (e.target as HTMLImageElement).style.display = 'none'
+                    }}
+                  />
+                </div>
+              )}
+              
               <CardHeader className="bg-secondary/10 border-b border-border/30 pb-4">
                 <div className="flex flex-col gap-1">
                   <div className="flex justify-between items-start">
@@ -980,7 +1113,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
                           <Users className="mr-2 h-4 w-4" /> Senarai Peniaga ({loc.tenant_count})
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-4xl bg-white rounded-3xl">
+                      <DialogContent className="bg-white rounded-3xl w-[95vw] sm:w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                         <DialogHeader>
                           <DialogTitle className="text-2xl font-serif">Peniaga di {loc.name}</DialogTitle>
                           <DialogDescription>

@@ -47,6 +47,8 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
+      console.log('[Signup] Starting signup with role:', role)
+      
       // 1. Sign Up with Metadata
       // This triggers the database function to create Profile AND Tenant/Organizer records simultaneously
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -62,13 +64,20 @@ export default function SignupPage() {
         }
       })
 
-      if (authError) throw authError
+      console.log('[Signup] Auth response:', { user: authData.user?.id, error: authError })
+
+      if (authError) {
+        console.error('[Signup] Auth error:', authError)
+        throw authError
+      }
 
       if (authData.user) {
         let newOrgCode = undefined
         if (role === 'organizer') {
           // Fetch the generated organizer code that the trigger just created
-          const { data: orgData } = await supabase.from('organizers').select('organizer_code').eq('email', formData.email).maybeSingle()
+          console.log('[Signup] Fetching organizer code for:', formData.email)
+          const { data: orgData, error: orgError } = await supabase.from('organizers').select('organizer_code').eq('email', formData.email).maybeSingle()
+          console.log('[Signup] Organizer data:', orgData, 'Error:', orgError)
           newOrgCode = orgData?.organizer_code
         }
 
@@ -80,6 +89,7 @@ export default function SignupPage() {
       }
 
     } catch (err: any) {
+      console.error('[Signup] Error:', err)
       toast.error("Ralat pendaftaran: " + err.message)
     } finally {
       setLoading(false)

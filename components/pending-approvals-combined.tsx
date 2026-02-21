@@ -322,6 +322,16 @@ export function PendingApprovalsCombined({
 
     try {
       if (request.type === 'organizer_link') {
+        // Get the organizer_id and tenant_id from the request
+        const { data: linkData, error: linkError } = await supabase
+          .from('tenant_organizers')
+          .select('organizer_id, tenant_id')
+          .eq('id', request.id)
+          .single()
+        
+        if (linkError) throw linkError
+        
+        // Update the link status
         const { error } = await supabase
           .from('tenant_organizers')
           .update({ 
@@ -332,6 +342,26 @@ export function PendingApprovalsCombined({
           .eq('id', request.id)
 
         if (error) throw error
+        
+        // Also update the tenant's organizer_code so triggers can find the organizer
+        if (linkData?.organizer_id && linkData?.tenant_id) {
+          const { data: orgData } = await supabase
+            .from('organizers')
+            .select('organizer_code')
+            .eq('id', linkData.organizer_id)
+            .single()
+          
+          if (orgData?.organizer_code) {
+            await supabase
+              .from('tenants')
+              .update({ 
+                organizer_code: orgData.organizer_code,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', linkData.tenant_id)
+          }
+        }
+        
         toast.success(`Pautan penganjur diluluskan`)
 
       } else if (request.type === 'location') {

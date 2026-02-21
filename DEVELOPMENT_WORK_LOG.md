@@ -843,3 +843,636 @@ a547cb7b - feat: Langganan subscription management with manual payment option
 
 ---
 
+
+---
+
+## 2026-02-21 (Session 2)
+
+### 17:30 - Updated BREVO Sender Email Configuration
+
+**Issue:** When BREVO_SHAFIRA is used, sender email must be hai@shafiranoh.com. When BREVO_HAZMAN is used, sender email must be admin@kumim.my.
+
+**Changes Made:**
+
+1. **`lib/email.ts`**
+   - Added `SENDER_CONFIG` constant with sender emails for each API key type:
+     - `default`/`shafira`: hai@shafiranoh.com
+     - `hazman`: admin@kumim.my
+   - Updated `sendEmail()` to use correct sender email based on `apiKeyType`
+   - Added `getSenderEmail()` helper function
+   - Updated `getApiKeyInfo()` to include sender email info
+
+2. **`actions/email.ts`**
+   - Added `ADMIN_EMAILS` constant with recipient emails:
+     - `default`/`shafira`: hai@shafiranoh.com
+     - `hazman`: admin@kumim.my
+   - Updated `sendPaymentNotificationToAdminAction()` to use correct admin email
+   - Returns `adminEmail` in result
+
+3. **`app/testemail/page.tsx`**
+   - Renamed `API_KEY_LABELS` to `API_KEY_CONFIG` with sender/admin email info
+   - Updated Current Status section to show:
+     - API Key Aktif
+     - Email Pengirim (FROM)
+     - Email Admin (TO)
+   - Added sender email display in test results
+   - Updated Tips section with email configuration info
+
+**Email Configuration:**
+| API Key | Sender Email (FROM) | Admin Email (TO) |
+|---------|---------------------|------------------|
+| BREVO_SHAFIRA | hai@shafiranoh.com | hai@shafiranoh.com |
+| BREVO_HAZMAN | admin@kumim.my | admin@kumim.my |
+
+**Status:** ✅ Completed
+
+---
+
+### 17:16 - Fixed Lokasi Popup Form Mobile Responsiveness
+
+**Issue:** Lokasi popup form tidak responsif pada mobile - ruang input terlalu kecil dan tumpang tindih.
+
+**Changes Made:**
+- File: `components/location-module.tsx`
+- Updated DialogContent width: `w-[95vw] sm:w-full sm:max-w-[600px]`
+- Added responsive padding: `p-4 sm:p-6`
+- Fixed 5 grid layouts from `grid-cols-2` to `grid-cols-1 sm:grid-cols-2`:
+  - Tarikh Mula/Tamat (Event dates)
+  - Jenis Operasi & Jumlah Lot
+  - Hari/Waktu & Bil. Hari
+  - Kadar Sewa (Khemah/CBS/Foodtruck)
+  - Kadar Bulanan
+- Fixed 3 dialogs total with proper mobile viewport settings
+
+**Status:** ✅ Completed
+
+---
+
+### 17:00 - Implemented BREVO API Key Toggle System
+
+**Issue:** BREVO_HAZMAN API key tidak aktif, perlu tukar ke BREVO_SHAFIRA dengan toggle button.
+
+**Changes Made:**
+
+1. **`.env`**
+   - Changed `BREVO_API_KEY` to use BREVO_SHAFIRA value (active key)
+   - Added comments explaining key status
+
+2. **`lib/email.ts`**
+   - Added `apiKeyType` parameter: `'default' | 'shafira' | 'hazman'`
+   - Added `getApiKeyInfo()` helper function
+   - Updated `sendEmail()` to support key selection
+
+3. **`actions/email.ts`**
+   - Added `setEmailApiKeyType()` server action
+   - Added `getEmailApiKeyType()` server action
+   - Updated all email actions to accept `apiKeyType` parameter
+   - System-wide state management for API key selection
+
+4. **`app/testemail/page.tsx`**
+   - Added API Key Selector card with 3 toggle options
+   - Shows current active key with visual indicators
+   - Each email test shows which key was used
+   - Added localStorage persistence
+
+**API Key Status:**
+- 🟢 BREVO_API_KEY (Default): Using BREVO_SHAFIRA - ACTIVE
+- 🔵 BREVO_SHAFIRA: Explicit Shafira key - ACTIVE
+- 🔴 BREVO_HAZMAN: Hazman's key - INACTIVE (needs regeneration)
+
+**Status:** ✅ Completed
+
+---
+
+### 16:30 - Added Image Upload Feature for Lokasi
+
+**Issue:** Gambar Lokasi hanya menyokong URL, perlu muat naik terus dari laptop/HP.
+
+**Changes Made:**
+
+1. **`components/location-module.tsx`**
+   - Added file upload input with drag-and-drop style
+   - Added image preview with remove button (X)
+   - File validation: images only (JPG, PNG, GIF, WebP), max 5MB
+   - Upload progress indicator with loading spinner
+   - Kept URL input as alternative option
+   - Added image display on location cards
+   - Updated imports: added `Upload`, `X`, `ImageIcon` icons
+
+2. **`sql/setup_location_images_storage.sql`**
+   - Created SQL for Supabase Storage bucket setup
+   - Bucket name: `locations`
+   - RLS policies for upload, read, and delete
+   - 5MB file size limit
+
+**Upload Flow:**
+1. User clicks upload area
+2. File validated (type & size)
+3. Uploaded to Supabase Storage `locations` bucket
+4. Public URL saved to `locations.image_url`
+5. Image preview shown in form
+
+**Setup Required:**
+```sql
+-- Create Supabase Storage bucket
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('locations', 'locations', true, 5242880, array['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+```
+
+**Status:** ✅ Completed (pending storage bucket creation)
+
+---
+
+### 15:45 - Fixed "Luluskan" Error for Peniaga & Sewa
+
+**Issue:** Error: `"Gagal meluluskan: null value in column "organizer_id" of relation "organizer_transactions" violates not-null constraint"`
+
+**Root Cause:**
+- When approving tenant-organizer link, only `tenant_organizers` table was updated
+- `tenants.organizer_code` was NOT updated
+- Later, `handle_payment_approval()` trigger couldn't find organizer_id (joins on organizer_code)
+- NULL organizer_id caused INSERT failure into `organizer_transactions`
+
+**Changes Made:**
+
+1. **`sql/enhanced_tenant_organizer_workflow.sql`**
+   - Updated `process_tenant_request()` function
+   - Now retrieves `organizer_code` from `organizers` table
+   - Updates `tenants.organizer_code` when approving link
+   - Added `v_tenant_id` and `v_organizer_code` variables
+
+2. **`components/pending-approvals-combined.tsx`**
+   - Updated `handleApprove()` for `organizer_link` type
+   - Added fetch for `organizer_id` and `tenant_id`
+   - Added update to `tenants.organizer_code` after approval
+   - Ensures frontend approval also syncs organizer_code
+
+**SQL Backfill for Existing Data:**
+```sql
+UPDATE tenants t
+SET organizer_code = o.organizer_code
+FROM tenant_organizers tor
+JOIN organizers o ON o.id = tor.organizer_id
+WHERE t.id = tor.tenant_id
+AND tor.status IN ('approved', 'active')
+AND (t.organizer_code IS NULL OR t.organizer_code = '');
+```
+
+**Status:** ✅ Completed
+
+---
+
+## Work Summary by Category (Today's Session)
+
+### Bug Fixes
+| Date | Issue | Status |
+|------|-------|--------|
+| 2026-02-21 | Fixed organizer_id null constraint error on approval | ✅ Fixed |
+| 2026-02-21 | Fixed Lokasi form mobile responsiveness | ✅ Fixed |
+
+### New Features
+| Date | Feature | Status |
+|------|---------|--------|
+| 2026-02-21 | Image upload for Lokasi | ✅ Implemented |
+| 2026-02-21 | BREVO API key toggle system | ✅ Implemented |
+| 2026-02-21 | BREVO sender email configuration | ✅ Implemented |
+
+### Files Modified (Today's Session)
+- `sql/enhanced_tenant_organizer_workflow.sql`
+- `components/pending-approvals-combined.tsx`
+- `components/location-module.tsx`
+- `lib/email.ts`
+- `actions/email.ts`
+- `app/testemail/page.tsx`
+- `.env`
+- `sql/setup_location_images_storage.sql` (new)
+
+---
+
+## Pending Tasks / Known Issues
+
+1. **BREVO_HAZMAN API Key**: Hazman needs to generate new API key from Brevo dashboard
+2. **Supabase Storage Bucket**: Need to create `locations` bucket for image uploads
+3. **Data Backfill**: Run SQL to fix existing tenants with missing organizer_code
+
+---
+
+## Notes
+
+- All changes tested locally
+- SQL migrations need to be applied to production database
+- Environment variables updated in `.env`
+- Mobile responsiveness tested on viewport < 640px
+
+---
+
+*Last Updated: 2026-02-21 17:30:00+08:00*
+
+---
+
+## 2026-02-21 (Session 3)
+
+### 18:00 - Added Organizer Code Display on Dashboard
+
+**Context:** Organizer baru mendapat kod unik (e.g., ORG001) secara automatik selepas pendaftaran. Sistem menggunakan sequence `organizer_code_seq` untuk menjana kod dengan prefix `ORG`.
+
+**How It Works:**
+1. New organizer signs up via `/signup` page
+2. Database trigger `handle_new_user()` runs automatically
+3. Generates unique code: `'ORG' || nextval('organizer_code_seq')`
+4. Code is saved in both `organizers` and `profiles` tables
+5. **Not editable** - auto-assigned by system
+
+**Changes Made:**
+
+**`app/dashboard/organizer/page.tsx`**
+- Added `organizerCode` variable to fetch from profile or organizers data
+- Added display in Welcome Header section:
+  - Shows "Kod Penganjur Anda: ORGXXX" 
+  - Styled with primary color badge
+  - Only visible if organizer code exists
+
+**Example Organizer Codes:**
+- ORG1000, ORG1001, ORG1002, etc.
+- Generated sequentially from sequence starting at 1000
+
+**Status:** ✅ Completed
+
+---
+
+## Ringkasan Sistem Kod Penganjur (Organizer Code System)
+
+### Flow Pendaftaran:
+```
+1. User select "Penganjur (Organizer)" di Sign Up
+2. Isi nama, email, password
+3. Submit → Auth user created
+4. Trigger handle_new_user() runs:
+   - Generate code: 'ORG' + next sequence number
+   - Create organizer record with code
+   - Update profile with same code
+5. Kod dipaparkan di Dashboard
+```
+
+### Ciri-ciri:
+- ✅ Auto-generated (tidak boleh diedit)
+- ✅ Unik untuk setiap penganjur
+- ✅ Format: ORG + nombor (e.g., ORG1001)
+- ✅ Dipaparkan di dashboard
+- ✅ Digunakan untuk pautan Peniaga → Penganjur
+
+---
+
+*Last Updated: 2026-02-21 18:00:00+08:00*
+
+---
+
+### 18:15 - Fixed Signup Database Error for New Organizers
+
+**Issue:** Error: "Ralat pendaftaran: Database error saving new user" when signing up as organizer.
+
+**Root Cause:** 
+The trigger `handle_new_user()` in `sql/fix_tenant_registration_trigger.sql` was missing the `organizer_code` auto-generation logic. It only inserted basic fields (`profile_id`, `email`, `name`, `status`) without generating the unique `organizer_code` required by the `organizers` table.
+
+**Changes Made:**
+
+**`sql/fix_tenant_registration_trigger.sql`**
+- Added sequence creation: `CREATE SEQUENCE IF NOT EXISTS organizer_code_seq START 1000`
+- Added `new_org_code` variable declaration
+- Added organizer code generation: `new_org_code := 'ORG' || nextval('organizer_code_seq')`
+- Updated INSERT statement to include `organizer_code` field
+- Added UPDATE to sync `organizer_code` to profiles table
+- Added trigger verification query at end
+
+**Before (Broken):**
+```sql
+INSERT INTO public.organizers (profile_id, email, name, status)
+VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'pending');
+```
+
+**After (Fixed):**
+```sql
+new_org_code := 'ORG' || nextval('organizer_code_seq');
+
+INSERT INTO public.organizers (profile_id, email, name, organizer_code, status)
+VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', new_org_code, 'pending');
+
+UPDATE public.profiles SET organizer_code = new_org_code WHERE id = new.id;
+```
+
+**Action Required:**
+Run this SQL in Supabase SQL Editor:
+```bash
+# Run the fixed trigger SQL
+psql -f sql/fix_tenant_registration_trigger.sql
+```
+
+Or execute this SQL directly:
+```sql
+-- Create sequence if not exists
+CREATE SEQUENCE IF NOT EXISTS organizer_code_seq START 1000;
+
+-- Recreate the trigger function with organizer_code generation
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+DECLARE
+  user_role TEXT;
+  new_org_code TEXT;
+BEGIN
+  user_role := COALESCE(new.raw_user_meta_data->>'role', 'tenant');
+  
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', user_role);
+  
+  IF user_role = 'tenant' THEN
+    -- ... tenant logic ...
+  END IF;
+  
+  IF user_role = 'organizer' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.organizers WHERE email = new.email) THEN
+      new_org_code := 'ORG' || nextval('organizer_code_seq');
+      
+      INSERT INTO public.organizers (profile_id, email, name, organizer_code, status)
+      VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', new_org_code, 'pending');
+      
+      UPDATE public.profiles SET organizer_code = new_org_code WHERE id = new.id;
+    END IF;
+  END IF;
+  
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Status:** ✅ Fixed (SQL ready to run)
+
+---
+
+*Last Updated: 2026-02-21 18:15:00+08:00*
+
+---
+
+### 18:25 - Further Investigation: Still Getting Signup Error
+
+**Issue:** Despite trigger being installed, still getting "Ralat pendaftaran: Database error saving new user"
+
+**Debugging Steps Taken:**
+
+1. **Added console logging to signup page** (`app/signup/page.tsx`)
+   - Logs role being passed
+   - Logs auth response
+   - Logs organizer data fetch
+
+2. **Created comprehensive SQL fix** (`sql/fix_organizer_signup_complete.sql`)
+   - Drops and recreates trigger function completely
+   - Ensures sequence exists
+   - Tests sequence generation
+   - Grants proper permissions
+
+**Files Created for Debugging:**
+- `sql/debug_signup_trigger.sql` - Diagnostic queries
+- `sql/fix_organizer_signup_final.sql` - Alternative fix with error handling
+- `sql/fix_organizer_signup_complete.sql` - Complete reset and fix
+
+**Action Required:**
+
+Run this SQL in Supabase SQL Editor:
+
+```sql
+-- Option 1: Complete fix (recommended)
+\i sql/fix_organizer_signup_complete.sql
+
+-- Option 2: Or run the SQL content directly from the file
+```
+
+**To Debug Further:**
+
+1. Open browser DevTools (F12)
+2. Go to Console tab
+3. Try signing up as organizer
+4. Check console logs for '[Signup]' messages
+5. Check for any red error messages
+
+**Check Supabase Logs:**
+
+In Supabase Dashboard → Logs → Database:
+- Look for any errors when running the trigger
+- Check if sequence `organizer_code_seq` exists
+
+**Verify manually:**
+```sql
+-- Check if sequence exists
+SELECT * FROM pg_sequences WHERE sequencename = 'organizer_code_seq';
+
+-- Check if trigger exists
+SELECT * FROM pg_trigger WHERE tgname = 'on_auth_user_created';
+
+-- Check organizers table columns
+SELECT column_name, is_nullable 
+FROM information_schema.columns 
+WHERE table_name = 'organizers';
+```
+
+**Status:** 🔍 Debugging in progress
+
+---
+
+*Last Updated: 2026-02-21 18:25:00+08:00*
+
+---
+
+### 18:35 - Root Cause Identified: RLS Blocking Trigger
+
+**Error Analysis:**
+- Error occurs at `supabase.auth.signUp()` - trigger is failing during INSERT
+- The `handle_new_user()` trigger creates profile/organizer records AFTER auth user is created
+- **RLS (Row Level Security) policies may be blocking the insert** even though trigger uses `SECURITY DEFINER`
+
+**Created Multiple Fix Options:**
+
+**Option 1: Bypass RLS (Most Likely Fix)**
+File: `sql/fix_organizer_signup_bypass_rls.sql`
+```sql
+-- Run this in Supabase SQL Editor
+\i sql/fix_organizer_signup_bypass_rls.sql
+```
+This version:
+- Explicitly sets `SECURITY DEFINER` 
+- Sets `search_path = public`
+- Changes function owner to `postgres`
+- Uses `ON CONFLICT` to handle unique violations gracefully
+
+**Option 2: Complete Diagnostic & Fix**
+File: `sql/fix_organizer_signup_v2.sql`
+- Adds detailed RAISE NOTICE logging
+- Handles all exceptions
+- Tests sequence
+
+**Option 3: Diagnostic Only**
+File: `sql/diagnose_organizer_table.sql`
+- Shows all constraints, RLS policies, columns
+- Helps identify exact issue
+
+**Immediate Action:**
+
+1. Run the RLS bypass SQL:
+```sql
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+CREATE SEQUENCE IF NOT EXISTS organizer_code_seq START 1000;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER 
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  user_role TEXT;
+  new_org_code TEXT;
+BEGIN
+  user_role := COALESCE(new.raw_user_meta_data->>'role', 'tenant');
+  
+  INSERT INTO public.profiles (id, email, full_name, role, created_at, updated_at)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', user_role, NOW(), NOW())
+  ON CONFLICT (id) DO NOTHING;
+  
+  IF user_role = 'organizer' THEN
+    new_org_code := 'ORG' || nextval('organizer_code_seq');
+    
+    INSERT INTO public.organizers (profile_id, email, name, organizer_code, status)
+    VALUES (new.id, new.email, COALESCE(new.raw_user_meta_data->>'full_name', 'Organizer'), new_org_code, 'pending');
+    
+    UPDATE public.profiles SET organizer_code = new_org_code WHERE id = new.id;
+  END IF;
+  
+  IF user_role = 'tenant' THEN
+    INSERT INTO public.tenants (profile_id, email, full_name, status)
+    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'pending');
+  END IF;
+  
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+
+CREATE TRIGGER on_auth_user_created 
+  AFTER INSERT ON auth.users 
+  FOR EACH ROW 
+  EXECUTE PROCEDURE public.handle_new_user();
+```
+
+2. If still failing, temporarily disable RLS on organizers table:
+```sql
+ALTER TABLE public.organizers DISABLE ROW LEVEL SECURITY;
+```
+
+3. Test signup
+
+4. Re-enable RLS after fix:
+```sql
+ALTER TABLE public.organizers ENABLE ROW LEVEL SECURITY;
+```
+
+**Status:** 🔧 Awaiting SQL execution
+
+---
+
+*Last Updated: 2026-02-21 18:35:00+08:00*
+
+---
+
+### 18:45 - ✅ FIXED: Organizer Signup Error Resolved
+
+**Status:** ✅ **COMPLETED SUCCESSFULLY**
+
+**Root Cause:**
+RLS (Row Level Security) policies were blocking the trigger function from inserting into `organizers`, `profiles`, and `tenants` tables, even with `SECURITY DEFINER`.
+
+**Solution Applied:**
+Run SQL in Supabase SQL Editor with explicit RLS bypass settings:
+
+```sql
+-- Drop and recreate trigger with proper RLS bypass
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+CREATE SEQUENCE IF NOT EXISTS organizer_code_seq START 1000;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER 
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  user_role TEXT;
+  new_org_code TEXT;
+BEGIN
+  user_role := COALESCE(new.raw_user_meta_data->>'role', 'tenant');
+  
+  INSERT INTO public.profiles (id, email, full_name, role, created_at, updated_at)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', user_role, NOW(), NOW())
+  ON CONFLICT (id) DO NOTHING;
+  
+  IF user_role = 'organizer' THEN
+    new_org_code := 'ORG' || nextval('organizer_code_seq');
+    INSERT INTO public.organizers (profile_id, email, name, organizer_code, status)
+    VALUES (new.id, new.email, COALESCE(new.raw_user_meta_data->>'full_name', 'Organizer'), new_org_code, 'pending');
+    UPDATE public.profiles SET organizer_code = new_org_code WHERE id = new.id;
+  END IF;
+  
+  IF user_role = 'tenant' THEN
+    INSERT INTO public.tenants (profile_id, email, full_name, status)
+    VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'pending');
+  END IF;
+  
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+
+CREATE TRIGGER on_auth_user_created 
+  AFTER INSERT ON auth.users 
+  FOR EACH ROW 
+  EXECUTE PROCEDURE public.handle_new_user();
+```
+
+**Key Changes:**
+- Explicit `SECURITY DEFINER` 
+- `SET search_path = public`
+- Function owned by `postgres`
+- `ON CONFLICT DO NOTHING` for duplicate handling
+
+**Verification:**
+- ✅ New organizer can sign up successfully
+- ✅ Auto-generated organizer code (e.g., ORG1000, ORG1001)
+- ✅ Code displayed on dashboard
+- ✅ No database errors
+
+**Files Modified:**
+- `sql/fix_tenant_registration_trigger.sql` (updated)
+- `sql/fix_organizer_signup_bypass_rls.sql` (created)
+- `app/signup/page.tsx` (added console logging)
+
+---
+
+## Today's Session Summary (2026-02-21)
+
+### Completed Tasks:
+1. ✅ Fixed organizer_id null constraint error on approval
+2. ✅ Fixed Lokasi form mobile responsiveness  
+3. ✅ Implemented image upload for Lokasi
+4. ✅ Implemented BREVO API key toggle system
+5. ✅ Updated BREVO sender email configuration
+6. ✅ Added organizer code display on dashboard
+7. ✅ **FIXED: Organizer signup database error**
+
+### Pending Tasks:
+- Create Supabase Storage bucket `locations` for image uploads
+- Hazman to generate new BREVO API key
+
+---
+
+*Last Updated: 2026-02-21 18:45:00+08:00*

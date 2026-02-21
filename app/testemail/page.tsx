@@ -1,19 +1,54 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Mail, CheckCircle, XCircle, AlertCircle, Send } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Loader2, Mail, CheckCircle, XCircle, AlertCircle, Send, Key } from "lucide-react"
 import { toast } from "sonner"
-import { sendWelcomeEmailAction, sendPaymentReceiptAction, sendAccountActivatedAction } from "@/actions/email"
+import { sendWelcomeEmailAction, sendPaymentReceiptAction, sendAccountActivatedAction, setEmailApiKeyType, getEmailApiKeyType } from "@/actions/email"
+
+type ApiKeyType = 'default' | 'shafira' | 'hazman'
+
+const API_KEY_CONFIG: Record<ApiKeyType, { 
+    name: string; 
+    color: string; 
+    desc: string;
+    senderEmail: string;
+    adminEmail: string;
+}> = {
+    default: { 
+        name: 'BREVO_API_KEY (Shafira)', 
+        color: 'bg-green-100 text-green-800 border-green-300', 
+        desc: 'Key utama - BREVO_SHAFIRA',
+        senderEmail: 'hai@shafiranoh.com',
+        adminEmail: 'hai@shafiranoh.com'
+    },
+    shafira: { 
+        name: 'BREVO_SHAFIRA', 
+        color: 'bg-blue-100 text-blue-800 border-blue-300', 
+        desc: 'Key Shafira',
+        senderEmail: 'hai@shafiranoh.com',
+        adminEmail: 'hai@shafiranoh.com'
+    },
+    hazman: { 
+        name: 'BREVO_HAZMAN', 
+        color: 'bg-red-100 text-red-800 border-red-300', 
+        desc: 'Key Hazman (tidak aktif)',
+        senderEmail: 'admin@kumim.my',
+        adminEmail: 'admin@kumim.my'
+    }
+}
 
 export default function TestEmailPage() {
     const [loading, setLoading] = useState<Record<string, boolean>>({})
     const [results, setResults] = useState<Record<string, any>>({})
+    const [apiKeyType, setApiKeyType] = useState<ApiKeyType>('default')
+    const [isSwitching, setIsSwitching] = useState(false)
 
     // Form states
     const [welcomeData, setWelcomeData] = useState({ email: "", name: "" })
@@ -26,6 +61,36 @@ export default function TestEmailPage() {
     })
     const [activationData, setActivationData] = useState({ email: "", name: "" })
 
+    // Load current API key type on mount
+    useEffect(() => {
+        const loadApiKeyType = async () => {
+            const result = await getEmailApiKeyType()
+            if (result.currentType) {
+                setApiKeyType(result.currentType)
+            }
+        }
+        loadApiKeyType()
+    }, [])
+
+    // Handle API key switch
+    const handleSwitchApiKey = async (newType: ApiKeyType) => {
+        setIsSwitching(true)
+        try {
+            const result = await setEmailApiKeyType(newType)
+            if (result.success) {
+                setApiKeyType(newType)
+                toast.success(`Tukar ke ${API_KEY_CONFIG[newType].name}`)
+                
+                // Also save to localStorage for client-side reference
+                localStorage.setItem('brevo_api_key_type', newType)
+            }
+        } catch (error) {
+            toast.error('Gagal menukar API key')
+        } finally {
+            setIsSwitching(false)
+        }
+    }
+
     const handleSendWelcome = async () => {
         if (!welcomeData.email || !welcomeData.name) {
             toast.error("Sila isi email dan nama")
@@ -34,11 +99,11 @@ export default function TestEmailPage() {
         
         setLoading(prev => ({ ...prev, welcome: true }))
         try {
-            const result = await sendWelcomeEmailAction(welcomeData.email, welcomeData.name)
+            const result = await sendWelcomeEmailAction(welcomeData.email, welcomeData.name, undefined, apiKeyType)
             setResults(prev => ({ ...prev, welcome: result }))
             
             if (result.success) {
-                toast.success("Email selamat datang dihantar!")
+                toast.success(`Email selamat datang dihantar menggunakan ${API_KEY_CONFIG[apiKeyType].name}!`)
             } else {
                 toast.error("Gagal menghantar: " + (result.error?.message || result.error || "Unknown error"))
             }
@@ -63,12 +128,14 @@ export default function TestEmailPage() {
                 receiptData.name, 
                 receiptData.amount, 
                 receiptData.date, 
-                receiptData.description
+                receiptData.description,
+                undefined,
+                apiKeyType
             )
             setResults(prev => ({ ...prev, receipt: result }))
             
             if (result.success) {
-                toast.success("Resit pembayaran dihantar!")
+                toast.success(`Resit pembayaran dihantar menggunakan ${API_KEY_CONFIG[apiKeyType].name}!`)
             } else {
                 toast.error("Gagal menghantar: " + (result.error?.message || result.error || "Unknown error"))
             }
@@ -88,11 +155,11 @@ export default function TestEmailPage() {
         
         setLoading(prev => ({ ...prev, activation: true }))
         try {
-            const result = await sendAccountActivatedAction(activationData.email, activationData.name)
+            const result = await sendAccountActivatedAction(activationData.email, activationData.name, apiKeyType)
             setResults(prev => ({ ...prev, activation: result }))
             
             if (result.success) {
-                toast.success("Email pengaktifan dihantar!")
+                toast.success(`Email pengaktifan dihantar menggunakan ${API_KEY_CONFIG[apiKeyType].name}!`)
             } else {
                 toast.error("Gagal menghantar: " + (result.error?.message || result.error || "Unknown error"))
             }
@@ -127,14 +194,135 @@ export default function TestEmailPage() {
                     </p>
                 </div>
 
+                {/* API Key Selector */}
+                <Card className="border-primary/20">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                            <Key className="w-5 h-5 text-primary" />
+                            <CardTitle className="text-lg">Pilihan API Key Brevo</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Pilih API key untuk menghantar emel. Pilihan ini akan digunakan untuk keseluruhan sistem.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {/* Current Status */}
+                            <div className="p-3 bg-muted rounded-lg space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">API Key Aktif:</span>
+                                    <Badge className={API_KEY_CONFIG[apiKeyType].color}>
+                                        {API_KEY_CONFIG[apiKeyType].name}
+                                    </Badge>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>Email Pengirim (FROM):</span>
+                                    <code className="bg-background px-2 py-0.5 rounded font-mono">
+                                        {API_KEY_CONFIG[apiKeyType].senderEmail}
+                                    </code>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>Email Admin (TO):</span>
+                                    <code className="bg-background px-2 py-0.5 rounded font-mono">
+                                        {API_KEY_CONFIG[apiKeyType].adminEmail}
+                                    </code>
+                                </div>
+                            </div>
+
+                            {/* Toggle Options */}
+                            <div className="grid gap-3">
+                                {/* Default / Shafira */}
+                                <div className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    apiKeyType === 'default' 
+                                        ? 'border-green-500 bg-green-50/50' 
+                                        : 'border-border hover:border-green-200'
+                                }`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                            apiKeyType === 'default' ? 'border-green-500' : 'border-gray-300'
+                                        }`}>
+                                            {apiKeyType === 'default' && <div className="w-2 h-2 rounded-full bg-green-500" />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-sm">BREVO_API_KEY (Default)</p>
+                                            <p className="text-xs text-muted-foreground">Menggunakan BREVO_SHAFIRA - Key aktif</p>
+                                        </div>
+                                    </div>
+                                    <Switch 
+                                        checked={apiKeyType === 'default'}
+                                        onCheckedChange={() => handleSwitchApiKey('default')}
+                                        disabled={isSwitching}
+                                    />
+                                </div>
+
+                                {/* Shafira Explicit */}
+                                <div className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    apiKeyType === 'shafira' 
+                                        ? 'border-blue-500 bg-blue-50/50' 
+                                        : 'border-border hover:border-blue-200'
+                                }`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                            apiKeyType === 'shafira' ? 'border-blue-500' : 'border-gray-300'
+                                        }`}>
+                                            {apiKeyType === 'shafira' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-sm">BREVO_SHAFIRA</p>
+                                            <p className="text-xs text-muted-foreground">Key Shafira secara eksplisit</p>
+                                        </div>
+                                    </div>
+                                    <Switch 
+                                        checked={apiKeyType === 'shafira'}
+                                        onCheckedChange={() => handleSwitchApiKey('shafira')}
+                                        disabled={isSwitching}
+                                    />
+                                </div>
+
+                                {/* Hazman */}
+                                <div className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    apiKeyType === 'hazman' 
+                                        ? 'border-red-500 bg-red-50/50' 
+                                        : 'border-border hover:border-red-200'
+                                }`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                            apiKeyType === 'hazman' ? 'border-red-500' : 'border-gray-300'
+                                        }`}>
+                                            {apiKeyType === 'hazman' && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-sm">BREVO_HAZMAN</p>
+                                            <p className="text-xs text-red-600">⚠️ Key tidak aktif/invalid</p>
+                                        </div>
+                                    </div>
+                                    <Switch 
+                                        checked={apiKeyType === 'hazman'}
+                                        onCheckedChange={() => handleSwitchApiKey('hazman')}
+                                        disabled={isSwitching}
+                                    />
+                                </div>
+                            </div>
+
+                            {isSwitching && (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Menukar API key...
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Brevo Config Status */}
                 <Card className="border-amber-200 bg-amber-50/50">
                     <CardContent className="py-4">
                         <div className="flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
                             <div className="text-sm text-amber-800">
-                                <p className="font-semibold mb-1">Konfigurasi Diperlukan</p>
-                                <p>Pastikan <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_API_KEY</code> telah ditetapkan dalam environment variables.</p>
+                                <p className="font-semibold mb-1">Status Konfigurasi</p>
+                                <p><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_API_KEY</code> kini menggunakan <strong>BREVO_SHAFIRA</strong> (key aktif)</p>
+                                <p className="mt-1"><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_HAZMAN</code> disimpan sebagai backup (key tidak aktif)</p>
                             </div>
                         </div>
                     </CardContent>
@@ -187,7 +375,17 @@ export default function TestEmailPage() {
                                     <div className={`p-4 rounded-lg text-sm ${results.welcome.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                                         <div className="flex items-center gap-2 mb-2">
                                             {getStatusBadge(results.welcome)}
+                                            {results.welcome.apiKeyType && (
+                                                <Badge variant="outline" className="text-xs">
+                                                    {API_KEY_CONFIG[results.welcome.apiKeyType as ApiKeyType]?.name || results.welcome.apiKeyType}
+                                                </Badge>
+                                            )}
                                         </div>
+                                        {results.welcome.sender && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Dihantar dari: <code className="font-mono">{results.welcome.sender}</code>
+                                            </p>
+                                        )}
                                         {results.welcome.error && (
                                             <pre className="text-xs overflow-auto max-h-32 mt-2 p-2 bg-black/5 rounded">
                                                 {JSON.stringify(results.welcome.error, null, 2)}
@@ -205,7 +403,7 @@ export default function TestEmailPage() {
                                     {loading.welcome ? (
                                         <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menghantar...</>
                                     ) : (
-                                        <><Send className="w-4 h-4 mr-2" /> Hantar Emel</>
+                                        <><Send className="w-4 h-4 mr-2" /> Hantar Emel ({API_KEY_CONFIG[apiKeyType].name.split(' ')[0]})</>
                                     )}
                                 </Button>
                             </CardFooter>
@@ -281,7 +479,17 @@ export default function TestEmailPage() {
                                     <div className={`p-4 rounded-lg text-sm ${results.receipt.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                                         <div className="flex items-center gap-2 mb-2">
                                             {getStatusBadge(results.receipt)}
+                                            {results.receipt.apiKeyType && (
+                                                <Badge variant="outline" className="text-xs">
+                                                    {API_KEY_CONFIG[results.receipt.apiKeyType as ApiKeyType]?.name || results.receipt.apiKeyType}
+                                                </Badge>
+                                            )}
                                         </div>
+                                        {results.receipt.sender && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Dihantar dari: <code className="font-mono">{results.receipt.sender}</code>
+                                            </p>
+                                        )}
                                         {results.receipt.error && (
                                             <pre className="text-xs overflow-auto max-h-32 mt-2 p-2 bg-black/5 rounded">
                                                 {JSON.stringify(results.receipt.error, null, 2)}
@@ -299,7 +507,7 @@ export default function TestEmailPage() {
                                     {loading.receipt ? (
                                         <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menghantar...</>
                                     ) : (
-                                        <><Send className="w-4 h-4 mr-2" /> Hantar Resit</>
+                                        <><Send className="w-4 h-4 mr-2" /> Hantar Resit ({API_KEY_CONFIG[apiKeyType].name.split(' ')[0]})</>
                                     )}
                                 </Button>
                             </CardFooter>
@@ -345,7 +553,17 @@ export default function TestEmailPage() {
                                     <div className={`p-4 rounded-lg text-sm ${results.activation.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                                         <div className="flex items-center gap-2 mb-2">
                                             {getStatusBadge(results.activation)}
+                                            {results.activation.apiKeyType && (
+                                                <Badge variant="outline" className="text-xs">
+                                                    {API_KEY_CONFIG[results.activation.apiKeyType as ApiKeyType]?.name || results.activation.apiKeyType}
+                                                </Badge>
+                                            )}
                                         </div>
+                                        {results.activation.sender && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Dihantar dari: <code className="font-mono">{results.activation.sender}</code>
+                                            </p>
+                                        )}
                                         {results.activation.error && (
                                             <pre className="text-xs overflow-auto max-h-32 mt-2 p-2 bg-black/5 rounded">
                                                 {JSON.stringify(results.activation.error, null, 2)}
@@ -363,7 +581,7 @@ export default function TestEmailPage() {
                                     {loading.activation ? (
                                         <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menghantar...</>
                                     ) : (
-                                        <><Send className="w-4 h-4 mr-2" /> Hantar Emel</>
+                                        <><Send className="w-4 h-4 mr-2" /> Hantar Emel ({API_KEY_CONFIG[apiKeyType].name.split(' ')[0]})</>
                                     )}
                                 </Button>
                             </CardFooter>
@@ -374,15 +592,30 @@ export default function TestEmailPage() {
                 {/* Tips Section */}
                 <Card className="bg-blue-50/50 border-blue-200">
                     <CardHeader>
-                        <CardTitle className="text-sm text-blue-800">Tip Penggunaan</CardTitle>
+                        <CardTitle className="text-sm text-blue-800">Tip Penggunaan & Konfigurasi</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                         <ul className="text-sm text-blue-700 space-y-2 list-disc list-inside">
                             <li>Gunakan emel anda sendiri untuk menguji penerimaan</li>
                             <li>Semak folder Spam/Junk jika emel tidak diterima</li>
-                            <li>Pastikan BREVO_API_KEY sah dan aktif di dashboard Brevo</li>
-                            <li>Domain pengirim (hai@shafiranoh.com) perlu diverifikasi di Brevo</li>
+                            <li>Key <strong>BREVO_SHAFIRA</strong> adalah key aktif yang berfungsi</li>
+                            <li>Key <strong>BREVO_HAZMAN</strong> tidak aktif - Hazman perlu generate key baharu</li>
+                            <li>Pilihan API key di sini akan digunakan untuk keseluruhan sistem</li>
                         </ul>
+                        
+                        <div className="pt-3 border-t border-blue-200">
+                            <p className="text-xs font-semibold text-blue-800 mb-2">Konfigurasi Email:</p>
+                            <div className="grid gap-1 text-xs text-blue-700">
+                                <div className="flex justify-between">
+                                    <span>BREVO_SHAFIRA:</span>
+                                    <span className="font-mono">hai@shafiranoh.com</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>BREVO_HAZMAN:</span>
+                                    <span className="font-mono">admin@kumim.my</span>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
