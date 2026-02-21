@@ -22,23 +22,23 @@ const API_KEY_CONFIG: Record<ApiKeyType, {
     adminEmail: string;
 }> = {
     default: { 
-        name: 'BREVO_API_KEY (Shafira)', 
+        name: 'BREVO_HAZMAN (Default)', 
         color: 'bg-green-100 text-green-800 border-green-300', 
-        desc: 'Key utama - BREVO_SHAFIRA',
-        senderEmail: 'hai@shafiranoh.com',
-        adminEmail: 'hai@shafiranoh.com'
+        desc: 'Key utama - BREVO_HAZMAN (Hazman)',
+        senderEmail: 'admin@kumim.my',
+        adminEmail: 'admin@kumim.my'
     },
     shafira: { 
         name: 'BREVO_SHAFIRA', 
         color: 'bg-blue-100 text-blue-800 border-blue-300', 
-        desc: 'Key Shafira',
+        desc: 'Key Shafira (backup)',
         senderEmail: 'hai@shafiranoh.com',
         adminEmail: 'hai@shafiranoh.com'
     },
     hazman: { 
         name: 'BREVO_HAZMAN', 
-        color: 'bg-red-100 text-red-800 border-red-300', 
-        desc: 'Key Hazman (tidak aktif)',
+        color: 'bg-green-100 text-green-800 border-green-300', 
+        desc: 'Key Hazman (default)',
         senderEmail: 'admin@kumim.my',
         adminEmail: 'admin@kumim.my'
     }
@@ -231,7 +231,7 @@ export default function TestEmailPage() {
 
                             {/* Toggle Options */}
                             <div className="grid gap-3">
-                                {/* Default / Shafira */}
+                                {/* Default / Hazman */}
                                 <div className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                                     apiKeyType === 'default' 
                                         ? 'border-green-500 bg-green-50/50' 
@@ -244,8 +244,8 @@ export default function TestEmailPage() {
                                             {apiKeyType === 'default' && <div className="w-2 h-2 rounded-full bg-green-500" />}
                                         </div>
                                         <div>
-                                            <p className="font-medium text-sm">BREVO_API_KEY (Default)</p>
-                                            <p className="text-xs text-muted-foreground">Menggunakan BREVO_SHAFIRA - Key aktif</p>
+                                            <p className="font-medium text-sm">BREVO_HAZMAN (Default)</p>
+                                            <p className="text-xs text-muted-foreground">Key utama sistem - admin@kumim.my</p>
                                         </div>
                                     </div>
                                     <Switch 
@@ -279,21 +279,21 @@ export default function TestEmailPage() {
                                     />
                                 </div>
 
-                                {/* Hazman */}
+                                {/* Hazman Explicit */}
                                 <div className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                                     apiKeyType === 'hazman' 
-                                        ? 'border-red-500 bg-red-50/50' 
-                                        : 'border-border hover:border-red-200'
+                                        ? 'border-green-500 bg-green-50/50' 
+                                        : 'border-border hover:border-green-200'
                                 }`}>
                                     <div className="flex items-center gap-3">
                                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                            apiKeyType === 'hazman' ? 'border-red-500' : 'border-gray-300'
+                                            apiKeyType === 'hazman' ? 'border-green-500' : 'border-gray-300'
                                         }`}>
-                                            {apiKeyType === 'hazman' && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                                            {apiKeyType === 'hazman' && <div className="w-2 h-2 rounded-full bg-green-500" />}
                                         </div>
                                         <div>
-                                            <p className="font-medium text-sm">BREVO_HAZMAN</p>
-                                            <p className="text-xs text-red-600">⚠️ Key tidak aktif/invalid</p>
+                                            <p className="font-medium text-sm">BREVO_HAZMAN (Eksplisit)</p>
+                                            <p className="text-xs text-muted-foreground">Key Hazman secara eksplisit</p>
                                         </div>
                                     </div>
                                     <Switch 
@@ -321,8 +321,8 @@ export default function TestEmailPage() {
                             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
                             <div className="text-sm text-amber-800">
                                 <p className="font-semibold mb-1">Status Konfigurasi</p>
-                                <p><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_API_KEY</code> kini menggunakan <strong>BREVO_SHAFIRA</strong> (key aktif)</p>
-                                <p className="mt-1"><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_HAZMAN</code> disimpan sebagai backup (key tidak aktif)</p>
+                                <p><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_API_KEY</code> kini menggunakan <strong>BREVO_HAZMAN</strong> (key aktif - Hazman)</p>
+                                <p className="mt-1"><code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">BREVO_SHAFIRA</code> disimpan sebagai backup (key Shafira)</p>
                             </div>
                         </div>
                     </CardContent>
@@ -598,8 +598,8 @@ export default function TestEmailPage() {
                         <ul className="text-sm text-blue-700 space-y-2 list-disc list-inside">
                             <li>Gunakan emel anda sendiri untuk menguji penerimaan</li>
                             <li>Semak folder Spam/Junk jika emel tidak diterima</li>
-                            <li>Key <strong>BREVO_SHAFIRA</strong> adalah key aktif yang berfungsi</li>
-                            <li>Key <strong>BREVO_HAZMAN</strong> tidak aktif - Hazman perlu generate key baharu</li>
+                            <li>Key <strong>BREVO_HAZMAN</strong> adalah key utama sistem (admin@kumim.my)</li>
+                            <li>Key <strong>BREVO_SHAFIRA</strong> disediakan sebagai backup (hai@shafiranoh.com)</li>
                             <li>Pilihan API key di sini akan digunakan untuk keseluruhan sistem</li>
                         </ul>
                         

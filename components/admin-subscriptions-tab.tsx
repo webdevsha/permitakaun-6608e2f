@@ -15,7 +15,8 @@ import {
   ExternalLink,
   RefreshCw,
   Search,
-  Filter
+  Filter,
+  Package
 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
@@ -36,7 +37,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger
 } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface SubscriptionPayment {
   id: number
@@ -55,6 +58,21 @@ interface SubscriptionPayment {
   user_role?: string
 }
 
+interface SubscriptionRecord {
+  id: number
+  tenant_id: number
+  tenant_name?: string
+  tenant_email?: string
+  plan_type: string
+  status: string
+  amount: number | null
+  start_date: string | null
+  end_date: string | null
+  payment_ref: string | null
+  created_at: string
+  updated_at: string | null
+}
+
 export function AdminSubscriptionsTab() {
   const supabase = createClient()
 
@@ -67,6 +85,7 @@ export function AdminSubscriptionsTab() {
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [activeTab, setActiveTab] = useState('payments')
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -74,14 +93,98 @@ export function AdminSubscriptionsTab() {
     rejected: 0,
     totalAmount: 0
   })
+  
+  // Subscriptions table data
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([])
+  const [subStats, setSubStats] = useState({ total: 0, active: 0, expired: 0, cancelled: 0 })
 
   useEffect(() => {
     fetchSubscriptionPayments()
+    fetchSubscriptions()
   }, [])
 
   useEffect(() => {
     filterPayments()
   }, [payments, statusFilter, searchQuery])
+
+  const fetchSubscriptions = async () => {
+    try {
+      // Fetch from subscriptions table with tenant info
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select(`
+          *,
+          tenants:tenant_id (name, profile_id)
+        `)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching subscriptions:', error)
+        return
+      }
+
+      // Get tenant emails
+      const tenantIds = data?.map((s: any) => s.tenant_id) || []
+      let tenantEmails: Record<number, string> = {}
+      
+      if (tenantIds.length > 0) {
+        const { data: tenants } = await supabase
+          .from('tenants')
+          .select('id, profile_id')
+          .in('id', tenantIds)
+        
+        if (tenants) {
+          const profileIds = tenants.map((t: any) => t.profile_id).filter(Boolean)
+          if (profileIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .in('id', profileIds)
+            
+            if (profiles) {
+              const profileEmails: Record<string, string> = {}
+              profiles.forEach((p: any) => { profileEmails[p.id] = p.email })
+              
+              tenants.forEach((t: any) => {
+                tenantEmails[t.id] = profileEmails[t.profile_id] || '-'
+              })
+            }
+          }
+        }
+      }
+
+      const formattedSubs: SubscriptionRecord[] = (data || []).map((s: any) => ({
+        id: s.id,
+        tenant_id: s.tenant_id,
+        tenant_name: s.tenants?.name,
+        tenant_email: tenantEmails[s.tenant_id],
+        plan_type: s.plan_type,
+        status: s.status,
+        amount: s.amount,
+        start_date: s.start_date,
+        end_date: s.end_date,
+        payment_ref: s.payment_ref,
+        created_at: s.created_at,
+        updated_at: s.updated_at
+      }))
+
+      setSubscriptions(formattedSubs)
+      
+      // Calculate subscription stats
+      const active = formattedSubs.filter(s => s.status === 'active').length
+      const expired = formattedSubs.filter(s => s.status === 'expired').length
+      const cancelled = formattedSubs.filter(s => s.status === 'cancelled').length
+      
+      setSubStats({
+        total: formattedSubs.length,
+        active,
+        expired,
+        cancelled
+      })
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
 
   const fetchSubscriptionPayments = async () => {
     setLoading(true)
@@ -317,6 +420,31 @@ export function AdminSubscriptionsTab() {
     }
   }
 
+  const getSubscriptionStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Aktif</Badge>
+      case 'trialing':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><RefreshCw className="w-3 h-3 mr-1" /> Percubaan</Badge>
+      case 'cancelled':
+        return <Badge className="bg-red-100 text-red-700 border-red-200"><XCircle className="w-3 h-3 mr-1" /> Batal</Badge>
+      case 'expired':
+        return <Badge className="bg-gray-100 text-gray-700 border-gray-200"><Calendar className="w-3 h-3 mr-1" /> Tamat</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  const getPlanLabel = (plan: string) => {
+    const labels: Record<string, string> = {
+      'basic': 'Asas',
+      'premium': 'Premium', 
+      'enterprise': 'Enterprise',
+      'trial': 'Percubaan'
+    }
+    return labels[plan.toLowerCase()] || plan
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -328,33 +456,46 @@ export function AdminSubscriptionsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Jumlah Bayaran</CardDescription>
-            <CardTitle className="text-2xl">{stats.total}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="bg-yellow-50 border-yellow-100">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-yellow-700">Menunggu</CardDescription>
-            <CardTitle className="text-2xl text-yellow-800">{stats.pending}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="bg-green-50 border-green-100">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-green-700">Diluluskan</CardDescription>
-            <CardTitle className="text-2xl text-green-800">{stats.approved}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="bg-primary/5 border-primary/20">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-primary">Jumlah Kutipan</CardDescription>
-            <CardTitle className="text-2xl text-primary">{formatAmount(stats.totalAmount)}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="payments" className="flex items-center gap-2">
+            <Banknote className="w-4 h-4" />
+            Pembayaran ({stats.total})
+          </TabsTrigger>
+          <TabsTrigger value="subscriptions" className="flex items-center gap-2">
+            <Package className="w-4 h-4" />
+            Langganan Aktif ({subStats.total})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payments" className="space-y-6">
+          {/* Payment Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Jumlah Bayaran</CardDescription>
+                <CardTitle className="text-2xl">{stats.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-yellow-50 border-yellow-100">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-yellow-700">Menunggu</CardDescription>
+                <CardTitle className="text-2xl text-yellow-800">{stats.pending}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-green-50 border-green-100">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-green-700">Diluluskan</CardDescription>
+                <CardTitle className="text-2xl text-green-800">{stats.approved}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-primary/5 border-primary/20">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-primary">Jumlah Kutipan</CardDescription>
+                <CardTitle className="text-2xl text-primary">{formatAmount(stats.totalAmount)}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
 
       {/* Filters */}
       <Card>
@@ -564,6 +705,112 @@ export function AdminSubscriptionsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="subscriptions" className="space-y-6">
+          {/* Subscription Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Jumlah Langganan</CardDescription>
+                <CardTitle className="text-2xl">{subStats.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-green-50 border-green-100">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-green-700">Aktif</CardDescription>
+                <CardTitle className="text-2xl text-green-800">{subStats.active}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-gray-50 border-gray-100">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-gray-700">Tamat</CardDescription>
+                <CardTitle className="text-2xl text-gray-800">{subStats.expired}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card className="bg-red-50 border-red-100">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-red-700">Dibatalkan</CardDescription>
+                <CardTitle className="text-2xl text-red-800">{subStats.cancelled}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+
+          {/* Subscriptions Table */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="font-serif flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    Senarai Langganan Aktif
+                  </CardTitle>
+                  <CardDescription>
+                    Semua langganan dalam sistem termasuk aktif, tamat dan dibatalkan
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchSubscriptions}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {subscriptions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Tiada rekod langganan.</p>
+                  <p className="text-sm mt-2">Langganan akan muncul di sini selepas pembayaran diluluskan.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>Pelan</TableHead>
+                      <TableHead>Jumlah</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Tarikh Mula</TableHead>
+                      <TableHead>Tarikh Tamat</TableHead>
+                      <TableHead>Ref Pembayaran</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {subscriptions.map((sub) => (
+                      <TableRow key={sub.id}>
+                        <TableCell className="font-mono text-xs">#{sub.id}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{sub.tenant_name || `Tenant #${sub.tenant_id}`}</p>
+                            <p className="text-xs text-muted-foreground">{sub.tenant_email || '-'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {getPlanLabel(sub.plan_type)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-bold">
+                          {sub.amount ? `RM ${Number(sub.amount).toFixed(2)}` : '-'}
+                        </TableCell>
+                        <TableCell>{getSubscriptionStatusBadge(sub.status)}</TableCell>
+                        <TableCell>{sub.start_date ? formatDate(sub.start_date) : '-'}</TableCell>
+                        <TableCell>{sub.end_date ? formatDate(sub.end_date) : '-'}</TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-slate-100 px-2 py-1 rounded">
+                            {sub.payment_ref || '-'}
+                          </code>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

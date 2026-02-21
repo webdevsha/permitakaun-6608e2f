@@ -84,14 +84,24 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
   }
 
   const myTrialStatus = currentUser ? getTrialStatus(currentUser.created_at) : null
+  
+  // Check if this is admin@kumim.my - they don't need subscription
+  const isAdminExempt = user?.email === 'admin@kumim.my' || user?.email === 'admin@permit.com' || role === 'admin' || role === 'superadmin' || role === 'staff'
 
   // Account Status State
   const [accountStatus, setAccountStatus] = useState<'trial' | 'active' | 'expired'>('trial')
   const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null)
 
-  // Fetch subscription status for tenant/organizer
+  // Fetch subscription status for tenant/organizer (skip for admin users)
   useEffect(() => {
     if (!user?.id || !role || (role !== 'tenant' && role !== 'organizer')) return
+    
+    // Skip subscription check for admin exempt users
+    if (isAdminExempt) {
+      setAccountStatus('active')
+      setSubscriptionEndDate('Lifetime Admin Access')
+      return
+    }
 
     const checkSubscription = async () => {
       try {
@@ -168,7 +178,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
     }
 
     checkSubscription()
-  }, [user?.id, role, myTrialStatus?.isExpired])
+  }, [user?.id, role, myTrialStatus?.isExpired, isAdminExempt])
 
   // UI State
   const [isEditing, setIsEditing] = useState(false)
@@ -374,6 +384,45 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       return
     }
 
+    // For admin, show users from their organization only
+    if (role === 'admin') {
+      // Get organizer_code from admins table
+      const { data: adminData } = await supabase.from('admins').select('organizer_code').eq('profile_id', user?.id).single()
+      console.log('[Settings] Admin fetchUsers - organizer_code from admins table:', adminData?.organizer_code)
+      if (adminData?.organizer_code) {
+        let query = supabase
+          .from('profiles')
+          .select('*')
+          .eq('organizer_code', adminData.organizer_code)
+          .neq('role', 'superadmin')
+          .order('created_at', { ascending: false })
+        
+        // Also exclude hidden demo users for cleaner view
+        if (user?.email === 'admin@kumim.my') {
+          const hiddenEmails = [
+            'admin@permit.com',
+            'organizer@permit.com',
+            'staff@permit.com',
+            'rafisha92@gmail.com',
+            'nurshafiranoh@gmail.com',
+            'hai@shafiranoh.com',
+            'nshfnoh@proton.me'
+          ]
+          query = query.not('email', 'in', `(${hiddenEmails.map(e => `"${e}"`).join(',')})`)
+        }
+        
+        const { data } = await query
+        console.log('[Settings] Admin users fetched:', data?.length || 0)
+        if (data) setUsersList(data)
+      } else {
+        console.warn('[Settings] Admin has no organizer_code in admins table - showing empty list')
+        setUsersList([])
+      }
+      setLoadingUsers(false)
+      return
+    }
+
+    // For superadmin, show all users
     let query = supabase.from('profiles').select('*').neq('role', 'superadmin').order('created_at', { ascending: false })
 
     // SPECIAL RULE for Hazman (admin@kumim.my):
@@ -815,22 +864,22 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
             <Shield className="w-4 h-4 mr-2" /> Profil Saya
           </TabsTrigger>
-          {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
+          {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
             <TabsTrigger value="backup" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Database className="w-4 h-4 mr-2" /> Backup & Sistem
             </TabsTrigger>
           )}
-          {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
+          {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
             </TabsTrigger>
           )}
-          {(role === 'admin' || role === 'superadmin') && (
+          {(role === 'admin' || role === 'superadmin' || isAdminExempt) && (
             <TabsTrigger value="subscriptions" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <CreditCard className="w-4 h-4 mr-2" /> Langganan
             </TabsTrigger>
           )}
-          {(role === 'organizer' || role === 'tenant') && (
+          {(role === 'organizer' || role === 'tenant') && !isAdminExempt && (
             <TabsTrigger value="subscription" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
               <CreditCard className="w-4 h-4 mr-2" /> Langganan
             </TabsTrigger>
@@ -884,6 +933,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                           <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold border border-purple-200">
                             Full System Access
                           </span>
+                        ) : isAdminExempt ? (
+                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200">
+                            Admin Access - No Subscription Required
+                          </span>
                         ) : accountStatus === 'active' ? (
                           <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
                             Akaun Aktif (Langganan)
@@ -899,7 +952,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                         )}
                       </div>
                     </div>
-                    {(role === 'tenant' || role === 'organizer') && (
+                    {(role === 'tenant' || role === 'organizer') && !isAdminExempt && (
                       <div className="md:ml-auto">
                         <div className="text-right">
                           {accountStatus === 'active' ? (
@@ -1167,10 +1220,10 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </div>
         </TabsContent>
 
-        {(role === 'admin' || role === 'superadmin' || role === 'staff') && (
+        {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
           <TabsContent value="backup" className="space-y-6">
-            {/* Payment Settings (Admin/Superadmin Only) */}
-            {(role === 'admin' || role === 'superadmin') && (
+            {/* Payment Settings (Admin/Superadmin/AdminExempt Only) */}
+            {(role === 'admin' || role === 'superadmin' || isAdminExempt) && (
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-serif font-semibold">Tetapan Pembayaran & Percubaan</h2>
@@ -1340,7 +1393,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {(role === 'admin' || role === 'superadmin') && (
+        {(role === 'admin' || role === 'superadmin' || isAdminExempt) && (
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
@@ -1388,7 +1441,8 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {(role === 'superadmin' || role === 'admin' || role === 'staff') && (
+        {/* Show detailed user management for staff and superadmin (not admin/isAdminExempt which have their own simpler view above) */}
+        {(role === 'superadmin' || role === 'staff') && !isAdminExempt && (
           <TabsContent value="users" className="space-y-6">
             <Card className="bg-white border-border/50 shadow-sm rounded-[1.5rem] overflow-hidden">
               <CardHeader className="bg-secondary/10 border-b border-border/30">
@@ -1641,15 +1695,15 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           </TabsContent>
         )}
 
-        {/* Subscription Tab for Organizers and Tenants */}
-        {(role === 'organizer' || role === 'tenant') && (
+        {/* Subscription Tab for Organizers and Tenants (not admin exempt) */}
+        {(role === 'organizer' || role === 'tenant') && !isAdminExempt && (
           <TabsContent value="subscription" className="space-y-6">
             <SubscriptionTab />
           </TabsContent>
         )}
 
-        {/* Admin Subscriptions Tab */}
-        {(role === 'admin' || role === 'superadmin') && (
+        {/* Admin Subscriptions Tab - show for admin, superadmin, and admin exempt users */}
+        {(role === 'admin' || role === 'superadmin' || isAdminExempt) && (
           <TabsContent value="subscriptions" className="space-y-6">
             <AdminSubscriptionsTab />
           </TabsContent>

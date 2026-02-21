@@ -126,32 +126,43 @@ async function fetchDashboardDataInternal(
 
             // Fetch Transactions with timeout
             try {
+                // admin@kumim.my and developer admin see ALL transactions across ALL organizers
+                // This gives them full visibility into all financial data
                 let txQuery = supabase
                     .from('organizer_transactions')
                     .select('*, tenants(full_name, business_name, organizer_code)')
                     .order('date', { ascending: false })
-                    .limit(50) // Limit to prevent timeouts
+                    .limit(100) // Increased limit for admin view
 
-                // admin@kumim.my sees ALL transactions (no filter)
-                // Other admins see transactions except ORG001 (seed data)
+                // Only filter out seed data for non-privileged admins
                 if (!adminOrgCode && !isDeveloperAdmin) {
-                    const { data: seedOrg } = await supabase
-                        .from('organizers')
-                        .select('id')
-                        .eq('organizer_code', 'ORG001')
-                        .maybeSingle()
-                    if (seedOrg) {
-                        txQuery = txQuery.neq('organizer_id', seedOrg.id)
+                    try {
+                        const { data: seedOrg } = await supabase
+                            .from('organizers')
+                            .select('id')
+                            .eq('organizer_code', 'ORG001')
+                            .maybeSingle()
+                        if (seedOrg) {
+                            txQuery = txQuery.neq('organizer_id', seedOrg.id)
+                        }
+                    } catch (filterErr) {
+                        console.warn('[Dashboard] Could not filter seed data:', filterErr)
+                        // Continue without filter if it fails
                     }
                 }
 
                 const { data: tx, error } = await withTimeout(() => txQuery, 5000, 'organizer transactions query')
-                if (error) throw error
+                if (error) {
+                    console.error('[Dashboard] Transaction query error:', error)
+                    throw error
+                }
 
                 transactions = (tx || []).map(t => ({
                     ...t,
                     table_source: 'organizer_transactions'
                 }))
+                
+                console.log(`[Dashboard] Loaded ${transactions.length} transactions for admin`)
             } catch (e: any) {
                 console.error('[Dashboard] Error fetching transactions:', e.message || e)
                 transactions = []
@@ -169,7 +180,10 @@ async function fetchDashboardDataInternal(
                     'admin transactions query'
                 )
 
-                if (adminError) throw adminError
+                if (adminError) {
+                    console.error('[Dashboard] Admin transactions error:', adminError)
+                    throw adminError
+                }
 
                 // Add admin transactions (Langganan) to the transactions list
                 const formattedAdminTx = (adminTx || []).map(t => ({
@@ -180,9 +194,12 @@ async function fetchDashboardDataInternal(
                 }))
 
                 // Combine and sort by date (newest first)
+                const combinedCount = transactions.length + formattedAdminTx.length
                 transactions = [...transactions, ...formattedAdminTx]
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                    .slice(0, 50) // Keep only top 50 after combining
+                    .slice(0, 100) // Keep top 100 after combining
+                
+                console.log(`[Dashboard] Combined ${combinedCount} total transactions (organizer: ${transactions.length - formattedAdminTx.length}, admin: ${formattedAdminTx.length})`)
             } catch (e) {
                 console.error('[Dashboard] Error fetching admin transactions:', e)
                 // Don't overwrite organizer transactions if admin fetch fails

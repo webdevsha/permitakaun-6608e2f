@@ -1840,3 +1840,410 @@ This will:
 
 All 3 organizers exist in the database!
 
+
+---
+
+## 2026-02-21
+
+### 23:00 - Receipt Management Enhancement (Pengurusan Resit)
+
+**Feature Implemented:** Enhanced receipt upload in Add/Edit Transaction with proper file management.
+
+**Changes in `components/accounting-module.tsx`:**
+
+1. **New State Variables:**
+   - `existingReceiptUrl` - Stores current receipt URL when editing
+   - `removeExistingReceipt` - Flag to track if user wants to remove existing receipt
+
+2. **Updated `handleEdit()`:**
+   - Loads existing receipt URL from transaction
+   - Resets removal flag and new file state
+
+3. **Updated `resetForm()`:**
+   - Clears all receipt-related states
+
+4. **Updated `handleSaveTransaction()`:**
+   - If new file uploaded → use new file
+   - If editing with existing receipt and NOT removed → keep existing
+   - If removed or no receipt → set to null
+
+5. **Enhanced UI:**
+   - Shows existing receipt with clickable link and 'X' button to remove
+   - Shows "Resit akan dibuang" (Receipt will be removed) message with cancel option
+   - New file upload shows filename with size and 'X' to clear
+   - Old receipt is preserved during edit unless explicitly removed
+
+**User Flow:**
+1. Edit transaction with existing receipt → See current receipt with 'X' button
+2. Click 'X' → Receipt marked for removal (can cancel)
+3. Upload new file → Automatically clears removal flag
+4. Save → System keeps old receipt if no changes, uses new if uploaded, removes if X clicked
+
+**Status:** ✅ Completed
+
+
+---
+
+## 2026-02-21
+
+### 23:30 - Fix Admin Akaun Data Empty Issue
+
+**Issue:** Admin (admin@kumim.my) shows RM 0.00 for all Akaun (Accounting) data.
+
+**Diagnosis:**
+1. Data fetching logic was correct but lacked proper error handling
+2. Transactions might not exist in the database
+3. RLS policies might be blocking access
+
+**Changes Made:**
+
+**`utils/data/dashboard.ts`:**
+- Enhanced error logging for transaction queries
+- Increased limit from 50 to 100 transactions for admin view
+- Added try-catch around seed data filtering to prevent silent failures
+- Added debug logging to track transaction counts
+
+**`sql/fix_admin_accounting_data.sql`:**
+- Created diagnostic queries to check current data state
+- Added sample transaction creation for Kumim (ORG002) if none exist
+- Added sample admin_transactions if none exist
+- Fixed RLS policies for organizer_transactions:
+  - Admin/superadmin: Full access to ALL transactions
+  - Organizer: Only their own transactions
+
+**SQL Files:**
+1. `sql/fix_admin_accounting_data.sql` - Run this to:
+   - Check current transaction counts
+   - Create sample data if empty
+   - Fix RLS policies
+
+2. `sql/diagnose_admin_accounting.sql` - Run this to:
+   - Diagnose the current state
+   - See all relevant data
+
+**Status:** ⚠️ Needs SQL execution + verification
+
+
+---
+
+## 2026-02-21
+
+### 23:45 - Enhanced Transaction List UI
+
+**Features Added to Senarai Transaksi:**
+
+**1. Search Functionality:**
+- Added search input with Search icon
+- Searches in: description, category, and amount
+- Clear button (X) appears when search has text
+- Resets display limit when searching
+- Shows "Tiada transaksi dijumpai untuk carian" when no results
+
+**2. Enhanced "Lihat Lagi" (See More):**
+- Changed from loading 5 to 10 items per click (more efficient)
+- Added "Lihat Semua" button to show all filtered transactions at once
+- Shows count in button: "Lihat Semua (X)"
+- Shows summary message when all items displayed
+
+**Changes in `components/accounting-module.tsx`:**
+
+**Header Section:**
+```tsx
+{/* Search Input */}
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 ..." />
+  <Input
+    type="text"
+    placeholder="Cari transaksi..."
+    value={searchQuery}
+    onChange={(e) => {
+      setSearchQuery(e.target.value)
+      setDisplayLimit(5)
+    }}
+    ...
+  />
+  {searchQuery && <button onClick={() => setSearchQuery('')}><X /></button>}
+</div>
+```
+
+**Load More Section:**
+```tsx
+{hasMore && (
+  <div className="flex justify-center items-center gap-3">
+    <Button onClick={() => setDisplayLimit(prev => prev + 10)}>
+      Lihat Lagi <ChevronDown />
+    </Button>
+    <Button onClick={() => setDisplayLimit(filteredTransactions.length)}>
+      Lihat Semua ({filteredTransactions.length})
+    </Button>
+  </div>
+)}
+```
+
+**Status:** ✅ Completed
+
+
+---
+
+## 2026-02-21
+
+### 23:55 - Fix Tenant Sewa Saya Empty Issue
+
+**Issue:** Tenant's "Sewa Saya" (My Rentals) shows empty for all tabs, and /bayar page shows no data.
+
+**Root Causes Identified:**
+1. **RLS Policies** - Tenant couldn't view their own locations due to missing/incorrect RLS
+2. **Missing tenant_locations records** - No active rental records in database
+3. **Missing tenant_organizer links** - No approved organizer links
+
+**Fixes Applied:**
+
+**`sql/fix_tenant_sewa_saya.sql`:**
+
+1. **RLS Policy Fixes:**
+   - `tenant_locations`: Tenants can view their own locations
+   - `tenant_organizers`: Tenants can view their own requests
+   - `locations`: Public can view active locations
+
+2. **New Policies Created:**
+   ```sql
+   -- Tenants view own locations
+   CREATE POLICY "Tenants can view own locations"
+       ON public.tenant_locations FOR SELECT
+       USING (tenants.profile_id = auth.uid());
+   
+   -- Organizers view their tenant locations
+   CREATE POLICY "Organizers can view tenant locations"
+       ON public.tenant_locations FOR SELECT
+       USING (organizers.profile_id = auth.uid());
+   ```
+
+3. **Grants:**
+   - `GRANT SELECT ON locations TO anon` (for /bayar public page)
+   - `GRANT SELECT ON organizers TO anon` (for /bayar public page)
+
+**`sql/diagnose_tenant_sewa_saya.sql`:**
+- Diagnostic queries to check tenant state
+- Shows tenant_organizer links
+- Shows tenant_locations (Sewa Saya)
+- Shows available locations
+- Includes automatic fix for missing data
+
+**Run to fix:**
+```sql
+\i sql/fix_tenant_sewa_saya.sql
+\i sql/diagnose_tenant_sewa_saya.sql
+```
+
+**Status:** ⚠️ Needs SQL execution
+
+
+### 00:05 - Fixed SQL Error for Tenant Sewa Saya
+
+**Error:** `42710: policy "Tenants can insert own locations" for table "tenant_locations" already exists`
+
+**Fix:** Created `sql/fix_tenant_sewa_saya_v2.sql` that:
+- Drops ALL existing policies first with `DROP POLICY IF EXISTS`
+- Then creates fresh policies
+- This handles the case where policies already exist
+
+**Run this instead:**
+```sql
+\i sql/fix_tenant_sewa_saya_v2.sql
+```
+
+
+---
+
+## 2026-02-22
+
+### 00:15 - Recover Admin Akaun Transactions
+
+**Issue:** Admin transactions disappeared after X button edit feature was added.
+
+**Diagnosis:**
+The X button changes only affected the UI state management - they did NOT delete any data. The issue is likely:
+1. Transactions were never in the database
+2. RLS policies blocking admin from viewing
+3. Data fetching issue
+
+**Recovery SQL:** `sql/recover_admin_transactions.sql`
+
+**This script will:**
+
+1. **Check all transaction tables:**
+   - `organizer_transactions` count
+   - `admin_transactions` count
+   - Transactions for Kumim (admin@kumim.my)
+
+2. **Create sample transactions if missing:**
+   - 9 sample transactions for Kumim (ORG002):
+     - Income: Sewa tapak (RM 5,500, 3,200, 4,800, 2,800)
+     - Expense: Utiliti (RM 1,200), Penyelenggaraan (RM 800), Gaji (RM 1,500), Pembersihan (RM 600)
+     - Pending: Sewa tertunggak (RM 4,200)
+
+3. **Create admin_transactions if empty:**
+   - Subscription payments tracking
+
+4. **Fix RLS policies:**
+   - Admin can view ALL organizer_transactions
+   - Admin can view ALL admin_transactions
+
+**Run to recover:**
+```sql
+\i sql/recover_admin_transactions.sql
+```
+
+**Verify after running:**
+```sql
+-- Check Kumim's transactions
+SELECT COUNT(*) FROM organizer_transactions ot
+JOIN organizers o ON o.id = ot.organizer_id
+WHERE o.email = 'admin@kumim.my';
+```
+
+**Note:** The X button code changes are UI-only and don't affect database data. The data was likely empty before or RLS was blocking access.
+
+
+---
+
+## 2026-02-22
+
+### 00:30 - Recover Accidentally Deleted Akaun Transactions
+
+**Recovery SQL:** `sql/recover_deleted_transactions.sql`
+
+**This script will:**
+
+1. **Check action_logs** - Finds all DELETE actions on transactions
+2. **Show deletion history** - When and what was deleted
+3. **Auto-restore** - Attempts to restore from action_logs details
+4. **Generate INSERT statements** - Creates SQL to manually restore
+
+**Run this:**
+```sql
+\i sql/recover_deleted_transactions.sql
+```
+
+**If auto-restore fails, the script generates INSERT statements like:**
+```sql
+INSERT INTO public.organizer_transactions (id, organizer_id, amount, ...)
+VALUES (123, 'uuid-here', 5500.00, 'income', ...)
+ON CONFLICT (id) DO NOTHING;
+```
+
+**Alternative: Check action_logs manually:**
+```sql
+SELECT * FROM action_logs 
+WHERE action = 'DELETE' 
+AND entity_type = 'transaction'
+ORDER BY created_at DESC;
+```
+
+**Status:** ⚠️ Run recovery SQL to check and restore
+
+
+---
+
+## 2026-02-22
+
+### 00:45 - Fix admin@kumim.my Akaun & Tetapan Access
+
+**Issue:** admin@kumim.my was being treated as an organizer requiring subscription/Langganan for Akaun module.
+
+**Root Cause:** 
+- The code checked role to determine subscription requirements
+- admin@kumim.my might have 'organizer' role in database
+- Settings page was showing subscription tabs for organizer role
+
+**Changes Made:**
+
+**`components/accounting-module.tsx`:**
+```tsx
+// Added email check for admin exemption
+const isAdminEmail = user?.email === 'admin@kumim.my' || user?.email === 'admin@permit.com'
+if (role === 'superadmin' || role === 'admin' || role === 'staff' || isAdminEmail) {
+  // Instant access without subscription check
+}
+```
+
+**`components/settings-module.tsx`:**
+1. Added `isAdminExempt` check based on email and role
+2. Skip subscription check for admin exempt users
+3. Show "Admin Access - No Subscription Required" badge
+4. Show Admin Subscriptions tab (to manage others)
+5. Hide organizer/tenant subscription tab for admin exempt users
+
+**Status Badge:**
+- Admin exempt users see: "Admin Access - No Subscription Required"
+- Or: "Full System Access" (for admin/superadmin roles)
+
+**Tabs:**
+- Admin exempt sees: "Langganan" tab with AdminSubscriptionsTab (to manage other users)
+- Does NOT see: Organizer/tenant subscription tab
+
+**Status:** ✅ Completed
+
+
+---
+
+## 2026-02-22
+
+### 01:00 - Restore All Admin Tabs for admin@kumim.my
+
+**Issue:** Admin tabs (Pengurusan Pengguna, Backup & Sistem, Langganan) were not showing for admin@kumim.my.
+
+**Fix:** Updated all tab conditions to include `isAdminExempt` check.
+
+**Changes in `components/settings-module.tsx`:**
+
+**TabsList (Tab Buttons):**
+- Backup & Sistem: Added `|| isAdminExempt`
+- Pengurusan Pengguna: Added `|| isAdminExempt`  
+- Langganan (Admin): Added `|| isAdminExempt`
+
+**TabsContent (Tab Content):**
+- Backup & Sistem: Added `|| isAdminExempt`
+- Pengurusan Pengguna: Added `|| isAdminExempt`
+- Langganan (Admin): Already had `isAdminExempt`
+
+**Admin@kumim.my will now see:**
+1. ✅ Profil Saya
+2. ✅ Backup & Sistem
+3. ✅ Pengurusan Pengguna
+4. ✅ Langganan (Admin view - to manage others)
+
+**Status:** ✅ Completed
+
+
+---
+
+## 2026-02-22
+
+### 01:30 - Switch BREVO API Key to BREVO_HAZMAN (Hazman) as Main Key
+
+**Changes Made:**
+
+**`lib/email.ts`:**
+- Default API key now uses `BREVO_HAZMAN` instead of `BREVO_API_KEY`
+- Default sender email changed to `admin@kumim.my` (Hazman's email)
+- Updated `getApiKeyInfo()` to reflect BREVO_HAZMAN as default
+
+**`app/testemail/page.tsx`:**
+- Updated API_KEY_CONFIG:
+  - `default`: Now shows BREVO_HAZMAN as the main active key (green)
+  - `hazman`: Updated to show as active (green instead of red)
+  - `shafira`: Now marked as backup (blue)
+- Updated all descriptions and status messages
+- Changed tips section to reflect Hazman as primary, Shafira as backup
+
+**API Key Priority:**
+1. **BREVO_HAZMAN** (Default/Main) - admin@kumim.my
+2. **BREVO_SHAFIRA** (Backup) - hai@shafiranoh.com
+
+**Sender Emails:**
+- Default/Hazman: admin@kumim.my
+- Shafira: hai@shafiranoh.com
+
+**Status:** ✅ Completed - System now uses Hazman's Brevo API key as default
+

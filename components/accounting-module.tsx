@@ -79,6 +79,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<any>(null)
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null)
+  const [removeExistingReceipt, setRemoveExistingReceipt] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   // Filtering & Pagination State
@@ -198,8 +200,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setUserRole(role)
 
         // FAST-PATH: Admin/Staff/Superadmin - no eligibility check needed
-        if (role === 'superadmin' || role === 'admin' || role === 'staff') {
-          console.log('[Accounting] Privileged role - instant access')
+        // Also check email for admin@kumim.my which should always have admin access
+        const isAdminEmail = user?.email === 'admin@kumim.my' || user?.email === 'admin@permit.com'
+        if (role === 'superadmin' || role === 'admin' || role === 'staff' || isAdminEmail) {
+          console.log('[Accounting] Privileged role or admin email - instant access')
           setAccessDeniedStatus(null)
           setIsModuleVerified(true)
           setIsLoading(false)
@@ -691,8 +695,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     try {
       let receiptUrl = null
 
-      // Upload Receipt
+      // Handle Receipt Logic
       if (receiptFile) {
+        // New file uploaded - use new file
         const fileExt = receiptFile.name.split('.').pop()
         const fileName = `tx-${Date.now()}.${fileExt}`
 
@@ -706,7 +711,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             .getPublicUrl(fileName)
           receiptUrl = publicUrl
         }
+      } else if (editingTransaction && existingReceiptUrl && !removeExistingReceipt) {
+        // Editing, has existing receipt, and NOT removed - keep existing
+        receiptUrl = existingReceiptUrl
       }
+      // If removeExistingReceipt is true or no existing receipt, receiptUrl stays null
 
       if (!user) {
         toast.error("Ralat: Sesi pengguna tidak sah")
@@ -942,12 +951,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       tenant_id: transaction.tenant_id?.toString() || "",
       date: transaction.date
     })
+    // Load existing receipt if any
+    setExistingReceiptUrl(transaction.receipt_url || null)
+    setRemoveExistingReceipt(false)
+    setReceiptFile(null)
     setIsDialogOpen(true)
   }
 
   const resetForm = () => {
     setEditingTransaction(null)
     setReceiptFile(null)
+    setExistingReceiptUrl(null)
+    setRemoveExistingReceipt(false)
     setNewTransaction({
       description: "",
       category: "",
@@ -1122,18 +1137,85 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <Label className="flex items-center gap-2">
                     <Upload className="w-4 h-4" /> Muat Naik Resit
                   </Label>
+                  
+                  {/* Show existing receipt with X button to remove */}
+                  {existingReceiptUrl && !removeExistingReceipt && !receiptFile && (
+                    <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl border border-border/50">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                        <a 
+                          href={existingReceiptUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline truncate"
+                        >
+                          Resit Sedia Ada
+                        </a>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                        onClick={() => setRemoveExistingReceipt(true)}
+                        title="Buang resit"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Show message if receipt was removed */}
+                  {removeExistingReceipt && !receiptFile && (
+                    <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200">
+                      <span className="text-sm text-red-600">Resit akan dibuang</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-primary hover:text-primary/80"
+                        onClick={() => setRemoveExistingReceipt(false)}
+                      >
+                        Batalkan
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* File input for new upload */}
                   <Input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,application/pdf"
-                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      setReceiptFile(e.target.files?.[0] || null)
+                      if (e.target.files?.[0]) {
+                        setRemoveExistingReceipt(false) // Clear remove flag if new file selected
+                      }
+                    }}
                     className="h-10 pt-1.5 rounded-xl bg-secondary/20 cursor-pointer text-xs"
                   />
+                  
+                  {/* Show new file info */}
                   {receiptFile && (
-                    <div className="flex items-center justify-between text-[10px] mt-1">
-                      <span className={receiptFile.size > 10 * 1024 * 1024 ? "text-red-500 font-bold" : "text-muted-foreground"}>
-                        Saiz: {(receiptFile.size / (1024 * 1024)).toFixed(2)} MB
-                        {receiptFile.size > 10 * 1024 * 1024 && " (Fail besar, mungkin mengambil masa)"}
-                      </span>
+                    <div className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/20">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                        <span className="text-sm text-foreground truncate">{receiptFile.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={receiptFile.size > 10 * 1024 * 1024 ? "text-red-500 font-bold text-xs" : "text-muted-foreground text-xs"}>
+                          {(receiptFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => setReceiptFile(null)}
+                          title="Buang fail"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1392,7 +1474,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   </CardDescription>
                 </div>
 
-                {/* Filters */}
+                {/* Filters & Search */}
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Bulk Delete Button */}
                   {selectedIds.length > 0 && (
@@ -1407,6 +1489,32 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       Padam ({selectedIds.length})
                     </Button>
                   )}
+
+                  {/* Search Input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Cari transaksi..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value)
+                        setDisplayLimit(5) // Reset limit when searching
+                      }}
+                      className="pl-9 pr-4 h-9 w-[200px] bg-white border border-border/30 rounded-xl text-sm focus-visible:ring-primary"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery('')
+                          setDisplayLimit(5)
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 bg-secondary/30 p-1.5 rounded-xl border border-border/30">
                     <Filter className="w-4 h-4 text-muted-foreground ml-2 hidden sm:block" />
@@ -1649,8 +1757,17 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       {(!displayedTransactions || displayedTransactions.length === 0) && (
                         <TableRow>
                           <TableCell colSpan={role === 'tenant' ? 5 : 6} className="text-center py-12 text-muted-foreground">
-                            <p>Tiada transaksi direkodkan.</p>
-                            <p className="text-xs opacity-50 mt-2">Sila tambah transaksi baru atau semak filter anda.</p>
+                            {searchQuery ? (
+                              <>
+                                <p>Tiada transaksi dijumpai untuk carian &quot;{searchQuery}&quot;.</p>
+                                <p className="text-xs opacity-50 mt-2">Sila cuba kata kunci lain atau kosongkan carian.</p>
+                              </>
+                            ) : (
+                              <>
+                                <p>Tiada transaksi direkodkan.</p>
+                                <p className="text-xs opacity-50 mt-2">Sila tambah transaksi baru atau semak filter anda.</p>
+                              </>
+                            )}
                           </TableCell>
                         </TableRow>
                       )}
@@ -1658,14 +1775,29 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   </Table>
 
                   {hasMore && (
-                    <div className="p-4 border-t border-border/10 flex justify-center bg-slate-50/30">
+                    <div className="p-4 border-t border-border/10 flex justify-center items-center gap-3 bg-slate-50/30">
+                      <Button
+                        variant="outline"
+                        onClick={() => setDisplayLimit(prev => prev + 10)}
+                        className="rounded-xl text-sm h-10 px-6 font-medium border-primary/20 hover:bg-primary/5 hover:text-primary"
+                      >
+                        Lihat Lagi <ChevronDown className="w-4 h-4 ml-1" />
+                      </Button>
                       <Button
                         variant="ghost"
-                        onClick={() => setDisplayLimit(prev => prev + 5)}
-                        className="rounded-xl text-xs text-muted-foreground hover:text-primary h-10 px-6 font-medium"
+                        onClick={() => setDisplayLimit(filteredTransactions.length)}
+                        className="rounded-xl text-sm text-muted-foreground hover:text-primary h-10 px-4"
                       >
-                        Lihat Lagi ({filteredTransactions.length - displayLimit} lagi) <ChevronDown className="w-3 h-3 ml-1" />
+                        Lihat Semua ({filteredTransactions.length})
                       </Button>
+                    </div>
+                  )}
+                  
+                  {/* Show summary when all items are displayed */}
+                  {!hasMore && filteredTransactions.length > 5 && (
+                    <div className="p-3 border-t border-border/10 text-center text-xs text-muted-foreground bg-slate-50/30">
+                      Menunjukkan kesemua {filteredTransactions.length} transaksi
+                      {searchQuery && ` untuk carian "${searchQuery}"`}
                     </div>
                   )}
                 </div>

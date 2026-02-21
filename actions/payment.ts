@@ -50,31 +50,53 @@ export async function initiatePayment(params: {
     })
 
     // Determine Base URL dynamically
-    // 1. Explicit override via env var
-    // 2. Request headers (works for custom domains)
+    // 1. Request headers (works for custom domains & localhost detection)
+    // 2. Explicit override via env var (fallback for server-side)
     // 3. Vercel System URL (fallback)
     // 4. Localhost (dev fallback)
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    if (!baseUrl) {
-        try {
-            const headersList = await headers()
-            const host = headersList.get('host')
+    
+    let baseUrl: string | null = null
+    let detectedHost: string | null = null
+    
+    // First, try to detect from request headers (this correctly handles localhost)
+    try {
+        const headersList = await headers()
+        const host = headersList.get('host')
+        detectedHost = host
+        if (host) {
             // Default to https for non-localhost unless protocol is explicitly http
             const protocol = headersList.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https')
-            if (host) {
-                baseUrl = `${protocol}://${host}`
-            }
-        } catch (e) {
-            console.warn("[Payment] Could not get headers for baseUrl resolution:", e)
+            baseUrl = `${protocol}://${host}`
+            console.log(`[Payment] Detected base URL from headers: ${baseUrl}`)
         }
+    } catch (e) {
+        console.warn("[Payment] Could not get headers for baseUrl resolution:", e)
+    }
+    
+    // If we detected localhost, use it (ignore NEXT_PUBLIC_APP_URL)
+    // This ensures localhost development always uses localhost URLs
+    if (!baseUrl || detectedHost?.includes('localhost')) {
+        if (detectedHost?.includes('localhost')) {
+            const protocol = 'http'
+            baseUrl = `${protocol}://${detectedHost}`
+            console.log(`[Payment] Using localhost from headers: ${baseUrl}`)
+        }
+    }
+    
+    // Only use env var if we couldn't detect from headers and it's not localhost
+    if (!baseUrl && process.env.NEXT_PUBLIC_APP_URL) {
+        baseUrl = process.env.NEXT_PUBLIC_APP_URL
+        console.log(`[Payment] Using NEXT_PUBLIC_APP_URL fallback: ${baseUrl}`)
     }
 
     if (!baseUrl && process.env.VERCEL_URL) {
         baseUrl = `https://${process.env.VERCEL_URL}`
+        console.log(`[Payment] Using VERCEL_URL fallback: ${baseUrl}`)
     }
 
     if (!baseUrl) {
         baseUrl = 'http://localhost:3000'
+        console.log(`[Payment] Using default localhost: ${baseUrl}`)
     }
 
     console.log(`[Payment] Resolved Base URL: ${baseUrl}`)
