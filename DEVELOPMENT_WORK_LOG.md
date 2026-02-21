@@ -563,3 +563,283 @@ if (!adminOrgCode && !isDeveloperAdmin) {
 ---
 
 *Last Updated: 2026-02-21 18:00:00+08:00*
+
+---
+
+## 2026-02-21 (Evening Session - Langganan Management)
+
+### 17:55 - Dashboard Styling & Langganan Management Setup
+
+**Issues:**
+1. Admin/Organizer dashboard styling different from Tenant
+2. Need Langganan (Subscription) management features
+3. Payment email not sending to both parties
+4. Subscription status not updating after payment
+
+**Changes Made:**
+
+1. **`app/admin/page.tsx` & `app/dashboard/organizer/page.tsx`**
+   - Updated to match Tenant's card design (`rounded-[2rem]`)
+   - Added welcome header with personalized greeting
+   - Added recent transactions section (last 5)
+   - Added total income card showing kutipan
+   - Added quick action cards with icons
+
+2. **`components/settings-module.tsx`**
+   - Added "Langganan" tab for tenant/organizer
+   - Shows subscription history and next payment date
+   - Payment instructions to Hazman (admin@kumim.my)
+
+3. **`components/subscription-tab.tsx`** (new)
+   - New component for subscription history
+   - Shows payment to: Hazman (admin@kumim.my)
+   - Calculates next payment date (30 days after last payment)
+   - Shows payment history table
+
+4. **`components/subscription-notification.tsx`** (new)
+   - Banner notification for Akaun page
+   - Shows subscription payment reminders
+   - Urgency levels: Red (≤3 days), Yellow (≤7), Blue (>7)
+   - Auto-dismissible with X button
+
+5. **`app/api/payment/callback/route.ts`**
+   - Fixed payment email delivery to both organizer and tenant
+   - Sends receipt email to payer
+   - Sends notification email to admin@kumim.my
+   - Added `updateUserSubscription()` helper function
+
+6. **`actions/email.ts`**
+   - Added `sendPaymentNotificationToAdminAction()` function
+   - New email template `adminPaymentNotificationEmail()`
+   - Admin gets notified with full payment details
+
+7. **`lib/email-templates.ts`**
+   - Fixed email template (was using React Image component)
+   - Changed to regular HTML img tag
+   - Added `adminPaymentNotificationEmail()` template
+
+**Status:** ✅ Completed
+
+---
+
+### 18:15 - Manual Payment for Langganan
+
+**Issue:** Need manual payment option (upload receipt + transaction ID) as FPX is hidden
+
+**Changes Made:**
+
+1. **`components/manual-subscription-payment.tsx`** (new)
+   - Upload receipt (image/PDF, max 5MB)
+   - Key in Transaction ID (bank transfer reference)
+   - Select bank from list (Maybank, CIMB, etc.)
+   - Shows bank account details for transfer (Hazman's Maybank)
+   - Creates expense record in tenant/organizer transactions (Cash Out)
+   - Creates income record in admin_transactions (Cash In for Hazman)
+
+2. **`components/subscription-plans.tsx`**
+   - Shows Transfer Bank Manual option prominently
+   - FPX option hidden (shown as "Akan Datang" / Coming Soon)
+   - Flow: Select Plan → Choose Payment Method → Pay
+
+3. **`actions/payment.ts`**
+   - Improved error handling with fallback inserts
+   - Uses `createAdminClient()` to bypass RLS for admin_transactions
+
+4. **`components/ui/textarea.tsx`** (new)
+   - Added missing UI component for notes input
+
+**Payment Flow:**
+| Step | Tenant/Organizer | Admin (Hazman) |
+|------|------------------|----------------|
+| 1 | Select plan & choose "Transfer Bank Manual" | - |
+| 2 | Transfer to Maybank account | - |
+| 3 | Upload receipt & enter Transaction ID | - |
+| 4 | **Cash Out**: tenant/organizer_transactions (expense) | **Cash In**: admin_transactions (income) |
+| 5 | Status: Pending | Status: Pending |
+| 6 | Wait for verification | Verify and approve |
+| 7 | Subscription activated | Income confirmed |
+
+**Status:** ✅ Completed
+
+---
+
+### 18:30 - Database Schema Fixes
+
+**Issue:** admin_transactions missing columns for subscription payments
+
+**Changes Made:**
+
+1. **`sql/fix_admin_transactions_columns.sql`** (new)
+   - Added missing columns to `admin_transactions`:
+     - `payment_method` (VARCHAR 50)
+     - `payment_reference` (VARCHAR 255)
+     - `metadata` (JSONB)
+     - `created_by` (UUID)
+     - `notes` (TEXT)
+   - Also added to `organizer_transactions` and `tenant_transactions`:
+     - `payment_method`
+     - `notes`
+   - Updated RLS policies for admin access
+   - Migration script to move existing subscription data
+
+**Status:** ✅ Completed
+
+---
+
+### 19:00 - Admin Langganan Approval Tab
+
+**Issue:** Admin needs to approve manual Langganan payments
+
+**Changes Made:**
+
+1. **`components/admin-subscriptions-tab.tsx`** (new)
+   - Shows all subscription payments in `admin_transactions`
+   - **Stats cards:** Total, Pending, Approved, Total collection
+   - **Search:** By email, name, transaction ID
+   - **Filter:** By status (All, Pending, Completed, Rejected)
+   - **Actions:**
+     - Approve → Activates user subscription
+     - Reject → Marks payment as rejected
+   - **View receipt:** Opens receipt in new tab
+
+2. **`components/settings-module.tsx`**
+   - Added "Langganan" tab for Admin/Superadmin
+   - Uses `serverRole` prop for reliable role detection
+   - Shows approval interface for pending payments
+
+3. **`app/dashboard/settings/page.tsx`**
+   - Passes `serverRole` from `fetchSettingsData()` to SettingsModule
+
+**Data Flow for Manual Payment:**
+1. Tenant pays manually → Creates expense + income records (status: pending)
+2. Admin sees payment in new Langganan tab
+3. Admin clicks ✅ Approve → User subscription activated automatically
+
+**Status:** ✅ Completed
+
+---
+
+### 19:30 - SUPABASE_SERVICE_ROLE_KEY Error Fix
+
+**Issue:** `SUPABASE_SERVICE_ROLE_KEY is not defined` when tenant clicks "Hantar"
+
+**Root Cause:** Client component trying to use `createAdminClient()` which reads server env vars
+
+**Changes Made:**
+
+1. **`actions/subscription.ts`**
+   - Added `submitManualSubscriptionPayment()` server action
+   - Server action uses `createAdminClient()` (has access to env vars)
+   - Handles both tenant and organizer payment submissions
+   - Creates expense record in user table
+   - Creates income record in admin_transactions
+
+2. **`components/manual-subscription-payment.tsx`**
+   - Now calls server action instead of direct DB operations
+   - Removed `createAdminClient()` import (not needed in client)
+   - Cleaner separation: client handles UI, server handles DB writes
+
+**Status:** ✅ Completed
+
+---
+
+### 20:00 - Status Constraint Fix
+
+**Error:** `new row for relation "admin_transactions" violates check constraint "admin_transactions_status_check"`
+
+**Root Cause:** Code using `'completed'` but constraint only allows `'pending'`, `'approved'`, `'rejected'`
+
+**Changes Made:**
+
+1. **`app/api/payment/callback/route.ts`**
+   - Changed `'completed'` → `'approved'` for admin_transactions
+   - Changed `'completed'` → `'approved'` for organizer_transactions
+
+2. **`components/admin-subscriptions-tab.tsx`**
+   - Updated status checks to use `'approved'` instead of `'completed'`
+   - Stats calculation uses `'approved'`
+
+3. **`components/subscription-tab.tsx`**
+   - Updated subscription status check to `'approved'`
+
+**Status:** ✅ Completed
+
+---
+
+### 20:15 - Account Status Display Fixes
+
+**Issues:**
+1. "Tempoh Percubaan Tamat" showing even after payment
+2. "Status Semasa" not showing correct account status
+3. "Memuatkan rekod langganan..." taking too long
+
+**Changes Made:**
+
+1. **`components/subscription-notification.tsx`**
+   - Added 3-second timeout to prevent infinite loading
+   - Changed query to check user's own expense transactions first (faster)
+   - Added `accountStatus` state ('trial' | 'active' | 'expired')
+   - **Won't show "Tempoh Percubaan Tamat" when subscription is active**
+   - Shows appropriate message based on account status
+
+2. **`components/settings-module.tsx`**
+   - Added `accountStatus` and `subscriptionEndDate` state
+   - Added useEffect to check subscription status from database
+   - **Status now shows:**
+     - `Akaun Aktif (Langganan)` - when paid and approved
+     - `Tamat Tempoh` - when trial expired and not paid
+     - `Percubaan Percuma (X hari lagi)` - during trial
+   - Shows subscription end date when active
+   - Shows days remaining during trial or 0 when expired
+
+**Status:** ✅ Completed and pushed to `Antigravity` branch
+
+---
+
+## Git History (Today's Session)
+
+```
+8f1d343b - fix: Account status shows correctly after Langganan approval
+246c4072 - fix: Change 'completed' to 'approved' for admin_transactions status
+fbd91fbb - fix: Move manual payment to server action
+765abc77 - fix: Tenant role display and add Admin Langganan approval tab
+343ae480 - fix: Manual Langganan payment - use admin client and show Cash Out
+a547cb7b - feat: Langganan subscription management with manual payment option
+```
+
+---
+
+## Summary of All Changes (2026-02-21)
+
+### New Files Created:
+- `components/manual-subscription-payment.tsx`
+- `components/subscription-notification.tsx`
+- `components/subscription-tab.tsx`
+- `components/admin-subscriptions-tab.tsx`
+- `components/ui/textarea.tsx`
+- `sql/fix_admin_transactions_columns.sql`
+
+### Files Modified:
+- `app/admin/page.tsx`
+- `app/dashboard/organizer/page.tsx`
+- `app/dashboard/settings/page.tsx`
+- `app/api/payment/callback/route.ts`
+- `components/settings-module.tsx`
+- `components/subscription-plans.tsx`
+- `actions/payment.ts`
+- `actions/subscription.ts`
+- `actions/email.ts`
+- `lib/email-templates.ts`
+- `lib/email.ts`
+
+### Features Implemented:
+1. ✅ Dashboard styling standardized (Admin/Organizer/Tenant)
+2. ✅ Langganan subscription management
+3. ✅ Manual payment option (bank transfer + receipt upload)
+4. ✅ Admin approval workflow for manual payments
+5. ✅ Email notifications to both payer and admin
+6. ✅ Account status shows correctly after approval
+7. ✅ Loading performance improved (3s timeout)
+
+---
+
