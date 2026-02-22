@@ -19,8 +19,8 @@ export function SubscriptionPlans() {
     {
       id: "enterprise",
       name: "Enterprise",
-      price: "19",
-      originalPrice: "39",
+      price: "39",
+      originalPrice: "49",
       remark: "(Percuma Dua Minggu)",
       description: "Untuk peniaga kecil yang baru bermula",
       features: [
@@ -44,7 +44,7 @@ export function SubscriptionPlans() {
     {
       id: "sdn-bhd",
       name: "Sdn Bhd",
-      price: "39",
+      price: "49",
       originalPrice: "59",
       remark: "(Percuma Dua Minggu)",
       description: "Pilihan terbaik untuk perniagaan berkembang",
@@ -72,7 +72,7 @@ export function SubscriptionPlans() {
       id: "sdn-bhd-berhad",
       name: "SdnBhd/ Berhad",
       price: "99",
-      originalPrice: "150",
+      originalPrice: "120",
       description: "Untuk syarikat atau francais",
       features: [
         "Semua pakej Sdn bhd",
