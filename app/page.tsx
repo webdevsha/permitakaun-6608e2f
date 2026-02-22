@@ -247,7 +247,7 @@ export default function LandingPage() {
                 <div className="text-center">
                   <p className="text-xs font-bold mb-2 text-emerald-600">(Percuma Dua Minggu)</p>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-5xl font-bold tracking-tight">RM19</span>
+                    <span className="text-5xl font-bold tracking-tight">RM39</span>
                     <span className="text-xl line-through text-muted-foreground">RM49</span>
                   </div>
                   <span className="text-sm font-medium text-muted-foreground">/bulan</span>
@@ -294,7 +294,7 @@ export default function LandingPage() {
                 <div className="text-center">
                   <p className="text-xs font-bold mb-2 text-primary-foreground/80">(Percuma Dua Minggu)</p>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-5xl font-bold tracking-tight">RM39</span>
+                    <span className="text-5xl font-bold tracking-tight">RM49</span>
                     <span className="text-xl line-through text-primary-foreground/60">RM59</span>
                   </div>
                   <span className="text-sm font-medium text-primary-foreground/60">/bulan</span>
