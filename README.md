@@ -163,26 +163,20 @@ permitakaun-6608e2f/
 
 ## 🤝 Penyumbang
 
-Projek ini dibangunkan oleh:
+Projek ini dibangunkan untuk Kumim Sdn Bhd oleh:
 
 **[webdevsha](https://github.com/webdevsha)** - Pembangun Utama
 
----
-
-## 📄 Lesen
-
-Projek ini dilesenkan di bawah [MIT License](LICENSE).
 
 ---
 
 ## 📞 Hubungi Kami
 
 - 🌐 **Website:** [permitakaun.kumim.my](https://permitakaun.kumim.my/)
-- 📧 **Email:** hai@shafiranoh.com
-- 💬 **WhatsApp:** [Hubungi Kami](https://wa.me/60123456789)
+- 📧 **Email:** admin@kumim.my
 
 ---
 
 <p align="center">
-  Dibuat dengan ❤️ untuk komuniti peniaga Malaysia
+  Sistem Pengurusan Akaun & Acara Untuk Peniaga Kecil ❤️ 
 </p>
