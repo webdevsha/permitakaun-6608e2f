@@ -176,8 +176,8 @@ export async function POST(req: NextRequest) {
                 console.log("[Payment Callback] No payer email found in metadata")
             }
 
-            // If this is a subscription payment, also activate the organizer's subscription
-            if (orgTx.category === 'Langganan') {
+            // If this is a subscription payment, also activate the organizer/tenant subscription
+            if (orgTx.category === 'Langganan' || orgTx.category === 'Subscription') {
                 const adminTxRecord = await supabase
                     .from('admin_transactions')
                     .select('id, metadata')
@@ -188,11 +188,16 @@ export async function POST(req: NextRequest) {
                 const orgMeta = adminTxRecord.data?.metadata || {}
                 const userId = orgMeta.user_id
                 const planType = orgMeta.plan_type || 'basic'
+
                 if (userId) {
                     // Mark admin_transaction approved too
                     await supabase
                         .from('admin_transactions')
-                        .update({ status: 'approved', receipt_url: receipt_url?.toString(), updated_at: new Date().toISOString() })
+                        .update({
+                            status: 'approved',
+                            receipt_url: receipt_url?.toString(),
+                            updated_at: new Date().toISOString()
+                        })
                         .eq('payment_reference', billplzId)
                         .eq('category', 'Langganan')
 
@@ -201,27 +206,21 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            return NextResponse.json({ success: true, type: 'organizer_transaction' })
+            return NextResponse.json({ success: true, type: 'payment_processed' })
         }
 
-        // For subscription payments - check admin_transactions
-        console.log("[Payment Callback] Checking admin_transactions for subscription payment...")
+        // For direct subscription payments (if only admin_transaction exists)
+        console.log("[Payment Callback] Checking admin_transactions for direct subscription payment...")
 
         const { data: adminTx } = await supabase
             .from('admin_transactions')
             .select('*')
             .eq('payment_reference', billplzId)
-            .eq('category', 'Langganan')
+            .eq('status', 'pending')
             .maybeSingle()
 
         if (adminTx) {
-            // Skip if already approved (idempotency - callback may fire multiple times)
-            if (adminTx.status === 'approved') {
-                console.log("[Payment Callback] admin_transaction already approved, skipping:", adminTx.id)
-                return NextResponse.json({ success: true, type: 'subscription_payment', note: 'already_processed' })
-            }
-
-            console.log("[Payment Callback] Found admin_transaction subscription record:", adminTx.id)
+            console.log("[Payment Callback] Found pending admin_transaction:", adminTx.id)
 
             // Mark admin_transaction as approved
             await supabase
@@ -233,24 +232,28 @@ export async function POST(req: NextRequest) {
                 })
                 .eq('id', adminTx.id)
 
-            // Also update the matching organizer_transactions record (if exists)
-            await supabase
-                .from('organizer_transactions')
-                .update({
-                    status: 'approved',
-                    receipt_url: receipt_url?.toString(),
-                    updated_at: new Date().toISOString()
-                })
-                .eq('payment_reference', billplzId)
-                .eq('category', 'Langganan')
-
-            // Auto-activate the subscription since payment is confirmed by gateway
+            // Auto-activate the subscription
             const metadata = adminTx.metadata || {}
             const userId = metadata.user_id
             const planType = metadata.plan_type || 'basic'
+
             if (userId) {
                 const formattedAmount = (parseInt(paid_amount as string) / 100).toFixed(2)
                 await updateUserSubscription(supabase, userId, formattedAmount, billplzId, planType)
+
+                // Also update any matching pending expense in tenant/organizer_transactions
+                const role = metadata.user_role
+                if (role === 'tenant') {
+                    await supabase.from('tenant_transactions')
+                        .update({ status: 'approved', receipt_url: receipt_url?.toString() })
+                        .eq('payment_reference', billplzId)
+                        .eq('status', 'pending')
+                } else if (role === 'organizer') {
+                    await supabase.from('organizer_transactions')
+                        .update({ status: 'approved', receipt_url: receipt_url?.toString() })
+                        .eq('payment_reference', billplzId)
+                        .eq('status', 'pending')
+                }
             }
 
             return NextResponse.json({ success: true, type: 'subscription_payment' })

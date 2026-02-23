@@ -223,7 +223,7 @@ async function fetchDashboardDataInternal(
                         .from('tenant_organizers')
                         .select('tenant_id')
                         .eq('organizer_id', adminOrgId)
-                    ;(links || []).forEach((l: any) => ownTenantIds.add(l.tenant_id))
+                        ; (links || []).forEach((l: any) => ownTenantIds.add(l.tenant_id))
                 }
 
                 // Get organizer profile_ids to exclude from tenants list
@@ -551,6 +551,67 @@ async function fetchDashboardDataInternal(
                 } catch (e) {
                     console.error('[Dashboard] Error fetching tenant transactions:', e)
                     transactions = []
+                }
+
+                // Fallback for Tenants: include tenant_payments that have NO matching tenant_transaction
+                try {
+                    const { data: rentPayments } = await withTimeout(
+                        () => supabase
+                            .from('tenant_payments')
+                            .select(`*, locations(name), organizers(name)`)
+                            .eq('tenant_id', tenantData.id)
+                            .eq('status', 'approved')
+                            .order('payment_date', { ascending: false })
+                            .limit(100),
+                        5000,
+                        'tenant rent payments query'
+                    )
+
+                    // Build sets of already-covered references from tenant_transactions
+                    const coveredRefs = new Set(
+                        transactions
+                            .filter((t: any) => t.payment_reference)
+                            .map((t: any) => String(t.payment_reference))
+                    )
+                    const coveredManual = new Set(
+                        transactions
+                            .filter((t: any) => !t.payment_reference)
+                            .map((t: any) => `${t.amount}_${String(t.date).slice(0, 10)}`)
+                    )
+
+                    const fallbackTransactions = (rentPayments || [])
+                        .filter(payment => {
+                            if (payment.billplz_id && coveredRefs.has(payment.billplz_id)) return false
+                            if (!payment.billplz_id) {
+                                const key = `${payment.amount}_${String(payment.payment_date || '').slice(0, 10)}`
+                                if (coveredManual.has(key)) return false
+                            }
+                            return true
+                        })
+                        .map(payment => ({
+                            id: `rent_${payment.id}`,
+                            date: payment.payment_date || payment.created_at,
+                            description: `Bayaran Sewa - ${payment.locations?.name || 'Sewa'}`,
+                            category: 'Sewa',
+                            amount: payment.amount,
+                            type: 'expense',
+                            status: 'approved',
+                            receipt_url: payment.receipt_url,
+                            tenant_id: payment.tenant_id,
+                            table_source: 'tenant_payments',
+                            is_rent_payment: true,
+                            location_name: payment.locations?.name,
+                            organizer_name: payment.organizers?.name,
+                            payment_reference: payment.billplz_id || null
+                        }))
+
+                    transactions = [...transactions, ...fallbackTransactions]
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .slice(0, 100)
+
+                    console.log(`[Dashboard] Tenant ${tenantData.id}: ${transactions.length} total (${fallbackTransactions.length} fallback from tenant_payments)`)
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching tenant rent payments:', e)
                 }
 
                 // Fetch Linked Organizers (Many-to-Many)
