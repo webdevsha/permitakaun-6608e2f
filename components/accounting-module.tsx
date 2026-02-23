@@ -102,7 +102,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     amount: "",
     type: "income" as "income" | "expense",
     tenant_id: "",
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    modal_type: "" as "" | "operasi" | "investment" | "savings" | "emergency"
   })
 
   // 7-Tabung Config State
@@ -189,7 +190,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         setIsTrial(false)
         return
       }
-      
+
       try {
         // Check if tenant has active subscription
         const { data: tenant } = await supabase
@@ -215,7 +216,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           const createdDate = new Date(profile.created_at)
           const trialEndDate = new Date(createdDate)
           trialEndDate.setDate(trialEndDate.getDate() + 14)
-          
+
           const daysLeft = Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
           setIsTrial(daysLeft > 0)
         }
@@ -432,7 +433,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     console.log('[AutoAdjust] Debug:', { activePlan, isEnterprise, isSdnBhd, allowedTabungs })
 
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
-    
+
     console.log('[AutoAdjust] currentTotal:', currentTotal, 'percentages:', percentages)
 
     if (currentTotal === 0) {
@@ -442,7 +443,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
     // Calculate the factor to multiply each percentage to reach 100%
     const factor = 100 / currentTotal
-    
+
     const newPercentages = { ...percentages }
     allowedTabungs.forEach((key) => {
       const currentValue = percentages[key as keyof typeof percentages] || 0
@@ -551,11 +552,28 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const statusFilter = ['approved', 'pending']
 
   // 1. Paid Up Capital (Modal)
-  // Updated to include new capital terms
+  // Updated to include new capital terms and sub-category distribution
   const capitalCategories = ['Modal', 'Modal Pinjaman']
-  const totalCapital = perspectiveTransactions
-    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && capitalCategories.includes(t.category))
-    .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+  const modalTransactions = perspectiveTransactions
+    ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && capitalCategories.includes(t.category)) || []
+
+  const totalCapital = modalTransactions.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+
+  // Calculate modal amount per tabung based on metadata
+  const modalByTabung = modalTransactions.reduce((acc: any, t: any) => {
+    // Default to 'operasi' if no specific modal_type is set
+    const type = t.metadata?.modal_type || 'operasi'
+    acc[type] = (acc[type] || 0) + Number(t.amount)
+    return acc
+  }, {
+    operasi: 0,
+    tax: 0,
+    zakat: 0,
+    investment: 0,
+    dividend: 0,
+    savings: 0,
+    emergency: 0
+  })
 
   // 2. Operating Revenue (Income excluding Modal, including negative amounts/cash out)
   const operatingRevenue = perspectiveTransactions
@@ -604,26 +622,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const totalLiabilities = taxPayable + zakatPayable
 
   // Assets Detailed
-  // Current Assets = Cash Balance
-  // Fixed Assets = 0 (for now, unless we add a specific category/tracking for this later)
   const currentAssets = cashBalance
   const fixedAssets = 0
   const totalAssets = currentAssets + fixedAssets
-
-  // Equity Detailed
-  // Owner's Equity (Capital) + Retained Earnings (Net Profit)
-  // Note: Accounting Equation: Assets = Liabilities + Equity
-  // cashBalance = (Capital + Revenue - Expense)
-  // Equity = Assets - Liabilities
-  // Equity = (Capital + Revenue - Expense) - (Tax + Zakat) ?? 
-  // Simplified for Small Business: Equity = Capital + Net Profit
-  // However, if we treat Tax/Zakat as liability, it reduces Equity (Retained Earnings)
-
-  // Let's stick to the basic equation for the report to balance:
-  // Assets (Cash) = Liabilities (Tax/Zakat) + Equity (Capital + Retained Earnings Adjusted)
-  // Start with: Total Assets = Cash Balance
-  // Total Liabilities = Tax + Zakat (Allocated)
-  // Total Equity = Total Assets - Total Liabilities
 
   const calculatedEquity = totalAssets - totalLiabilities
 
@@ -649,23 +650,43 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
 
   // 7-Tabung allocation: distribute operating revenue across all tabungs by percentage
-  // Each tabung receives (operatingRevenue × percentage / 100) as its allocated share
-  // Operating tabung is the usable balance: capital + allocation - actual expenses
+  // Each tabung receives: (operatingRevenue × percentage / 100) AS AGIHAN 
+  // PLUS direct modal allocations AS MODAL
 
-  // Tax tabung: allocated % of revenue (set aside for future tax payments)
-  const taxAmount = operatingRevenue * (percentages.tax / 100)
-  // Zakat tabung: allocated % of revenue minus actual zakat payments made
-  const zakatAmount = operatingRevenue * (percentages.zakat / 100) - zakatExpenses
-  // Investment tabung: allocated % of revenue minus actual investment purchases
-  const investmentAmount = operatingRevenue * (percentages.investment / 100) - investmentExpenses
-  // Dividend tabung: allocated % of revenue
-  const dividendAmount = operatingRevenue * (percentages.dividend / 100)
-  // Savings tabung: allocated % of revenue
-  const savingsAmount = operatingRevenue * (percentages.savings / 100)
-  // Emergency tabung: allocated % of revenue
-  const emergencyAmount = operatingRevenue * (percentages.emergency / 100)
-  // Operating tabung: capital + allocated operating % - all operating expenses (remainder after other allocations)
-  const operatingAmount = totalCapital + operatingRevenue * (percentages.operating / 100) - operatingExpenses
+  // Tax tabung
+  const taxAgihan = operatingRevenue * (percentages.tax / 100)
+  const taxModal = modalByTabung.tax || 0
+  const taxAmount = taxAgihan + taxModal
+
+  // Zakat tabung
+  const zakatAgihan = operatingRevenue * (percentages.zakat / 100)
+  const zakatModal = modalByTabung.zakat || 0
+  const zakatAmount = zakatAgihan + zakatModal - zakatExpenses
+
+  // Investment tabung
+  const investmentAgihan = operatingRevenue * (percentages.investment / 100)
+  const investmentModal = modalByTabung.investment || 0
+  const investmentAmount = investmentAgihan + investmentModal - investmentExpenses
+
+  // Dividend tabung
+  const dividendAgihan = operatingRevenue * (percentages.dividend / 100)
+  const dividendModal = modalByTabung.dividend || 0
+  const dividendAmount = dividendAgihan + dividendModal
+
+  // Savings tabung
+  const savingsAgihan = operatingRevenue * (percentages.savings / 100)
+  const savingsModal = modalByTabung.savings || 0
+  const savingsAmount = savingsAgihan + savingsModal
+
+  // Emergency tabung
+  const emergencyAgihan = operatingRevenue * (percentages.emergency / 100)
+  const emergencyModal = modalByTabung.emergency || 0
+  const emergencyAmount = emergencyAgihan + emergencyModal
+
+  // Operating tabung (Perbelanjaan)
+  const operatingAgihan = operatingRevenue * (percentages.operating / 100)
+  const operatingModal = modalByTabung.operasi || 0
+  const operatingAmount = operatingAgihan + operatingModal - operatingExpenses
 
   const accounts = [
     {
@@ -673,6 +694,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.operating}%`,
       // Actual amount based on operating transactions + capital
       amount: operatingAmount,
+      agihan: operatingAgihan,
+      modal: operatingModal,
       color: "bg-brand-blue/10 text-brand-blue border-brand-blue/20",
       icon: Wallet,
       tag: "Actionable",
@@ -684,6 +707,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.tax}%`,
       // Actual amount based on tax-related transactions
       amount: taxAmount,
+      agihan: taxAgihan,
+      modal: taxModal,
       color: "bg-orange-50 text-orange-600 border-orange-100",
       icon: Building,
       tag: "Liability",
@@ -695,6 +720,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.zakat}%`,
       // Actual amount based on zakat transactions
       amount: zakatAmount,
+      agihan: zakatAgihan,
+      modal: zakatModal,
       color: "bg-brand-green/10 text-brand-green border-brand-green/20",
       icon: Heart,
       tag: "Do Not Touch",
@@ -706,6 +733,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.investment}%`,
       // Actual amount based on investment transactions
       amount: investmentAmount,
+      agihan: investmentAgihan,
+      modal: investmentModal,
       color: "bg-blue-50 text-blue-600 border-blue-100",
       icon: TrendingUp,
       tag: "(Aset / Property)",
@@ -717,6 +746,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.dividend}%`,
       // Actual amount based on dividend transactions
       amount: dividendAmount,
+      agihan: dividendAgihan,
+      modal: dividendModal,
       color: "bg-indigo-50 text-indigo-600 border-indigo-100",
       icon: Landmark,
       tag: "(For Share Holder Company)",
@@ -728,6 +759,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.savings}%`,
       // Actual amount based on savings transactions
       amount: savingsAmount,
+      agihan: savingsAgihan,
+      modal: savingsModal,
       color: "bg-purple-50 text-purple-600 border-purple-100",
       icon: PiggyBank,
       tag: "(Duplicate your Bisnes)",
@@ -739,6 +772,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       percent: `${percentages.emergency}%`,
       // Actual amount based on emergency fund transactions
       amount: emergencyAmount,
+      agihan: emergencyAgihan,
+      modal: emergencyModal,
       color: "bg-yellow-50 text-yellow-600 border-yellow-100",
       icon: ShieldAlert,
       tag: "Safety Net",
@@ -958,7 +993,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       // Determine which table to use based on role
       const isTenant = (userRole === 'tenant' || role === 'tenant')
       const isAdmin = (userRole === 'admin' || userRole === 'superadmin' || role === 'admin' || role === 'superadmin')
-      
+
       let tableName: string
       if (isTenant) {
         tableName = 'tenant_transactions'
@@ -971,7 +1006,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       // Get entity IDs based on role
       let organizerId = null
       let adminId = null
-      
+
       if (!isTenant && !isAdmin && user) {
         // Organizer/Staff - get organizer_id
         const { data: orgData } = await supabase
@@ -1013,7 +1048,11 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         type: newTransaction.type,
         status: defaultStatus,
         date: newTransaction.date,
-        receipt_url: receiptUrl
+        receipt_url: receiptUrl,
+        metadata: {
+          ...(editingTransaction?.metadata || {}),
+          modal_type: newTransaction.category.includes('Modal') ? newTransaction.modal_type : null
+        }
       }
 
       // Add role-specific foreign keys
@@ -1142,7 +1181,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: transaction.amount.toString(),
       type: transaction.type,
       tenant_id: transaction.tenant_id?.toString() || "",
-      date: transaction.date
+      date: transaction.date,
+      modal_type: transaction.metadata?.modal_type || ""
     })
     // Load existing receipt if any
     setExistingReceiptUrl(transaction.receipt_url || null)
@@ -1162,7 +1202,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       amount: "",
       type: "income",
       tenant_id: "",
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      modal_type: ""
     })
 
     // Re-fetch tenant ID if user is tenant
@@ -1185,15 +1226,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
 
   // Debug logging
-  console.log('[TieredAccess] Debug:', { 
-    activePlan, 
-    isEnterprise, 
-    isSdnBhd, 
-    isSdnBhdBerhad, 
-    isTrialMode, 
-    isTrial, 
-    isAdminOrStaff, 
-    role 
+  console.log('[TieredAccess] Debug:', {
+    activePlan,
+    isEnterprise,
+    isSdnBhd,
+    isSdnBhdBerhad,
+    isTrialMode,
+    isTrial,
+    isAdminOrStaff,
+    role
   })
 
   // Enterprise = 3 tabungs. Sdn Bhd = 4 tabungs. 
@@ -1346,6 +1387,50 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Modal Sub-category Dropdown */}
+                {newTransaction.type === 'income' && (newTransaction.category === 'Modal' || newTransaction.category === 'Modal Pinjaman') && (
+                  <div className="grid gap-2 animate-in slide-in-from-top-2 duration-300">
+                    <Label htmlFor="modal_type" className="text-primary font-bold flex items-center gap-2">
+                      <PiggyBank className="w-4 h-4" /> Agihan Tabung Modal
+                    </Label>
+                    <Select
+                      value={newTransaction.modal_type || "operasi"}
+                      onValueChange={(v: any) => setNewTransaction({ ...newTransaction, modal_type: v })}
+                    >
+                      <SelectTrigger className="border-primary/30 rounded-xl h-11 bg-primary/5">
+                        <SelectValue placeholder="Pilih Tabung Agihan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="operasi">Perbelanjaan (Operating)</SelectItem>
+
+                        <SelectItem
+                          value="investment"
+                          disabled={isEnterprise}
+                        >
+                          Investment {isEnterprise && "(🔒 Perlu SdnBhd)"}
+                        </SelectItem>
+
+                        <SelectItem
+                          value="savings"
+                          disabled={isEnterprise || isSdnBhd}
+                        >
+                          Savings {(isEnterprise || isSdnBhd) && "(🔒 Perlu Berhad)"}
+                        </SelectItem>
+
+                        <SelectItem
+                          value="emergency"
+                          disabled={isEnterprise || isSdnBhd}
+                        >
+                          Emergency {(isEnterprise || isSdnBhd) && "(🔒 Perlu Berhad)"}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground italic px-1">
+                      * Modal ini akan dimasukkan terus ke baki tabung yang dipilih.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label htmlFor="description">Keterangan</Label>
@@ -1622,25 +1707,25 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               </p>
                               {Math.abs(currentTotalPercent - 100) > 0.1 && (
                                 <p className="text-xs text-muted-foreground">
-                                  {getRemainingPercentage() > 0 
-                                    ? `Baki diperlukan: +${getRemainingPercentage().toFixed(1)}% untuk genap 100%` 
+                                  {getRemainingPercentage() > 0
+                                    ? `Baki diperlukan: +${getRemainingPercentage().toFixed(1)}% untuk genap 100%`
                                     : `Lebihan: ${Math.abs(getRemainingPercentage()).toFixed(1)}% melebihi 100%`}
                                 </p>
                               )}
                             </div>
                             <div className="flex items-center gap-2">
                               {Math.abs(currentTotalPercent - 100) > 0.1 && (
-                                <Button 
-                                  onClick={handleAutoAdjustPercentages} 
-                                  size="sm" 
+                                <Button
+                                  onClick={handleAutoAdjustPercentages}
+                                  size="sm"
                                   variant="outline"
                                   className="text-xs bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
                                 >
                                   ✨ Genapkan 100%
                                 </Button>
                               )}
-                              <Button 
-                                onClick={handleSaveConfig} 
+                              <Button
+                                onClick={handleSaveConfig}
                                 size="sm"
                                 disabled={Math.abs(currentTotalPercent - 100) > 0.1}
                               >
@@ -1648,15 +1733,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               </Button>
                             </div>
                           </div>
-                          
+
                           {/* Warning Message */}
                           {Math.abs(currentTotalPercent - 100) > 0.1 && (
                             <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                               <span className="mt-0.5">⚠️</span>
                               <p>
-                                Jumlah peratus mestilah tepat 100% untuk simpan. 
-                                {getRemainingPercentage() > 0 
-                                  ? ` Sila tambah ${getRemainingPercentage().toFixed(1)}% lagi.` 
+                                Jumlah peratus mestilah tepat 100% untuk simpan.
+                                {getRemainingPercentage() > 0
+                                  ? ` Sila tambah ${getRemainingPercentage().toFixed(1)}% lagi.`
                                   : ` Sila kurangkan ${Math.abs(getRemainingPercentage()).toFixed(1)}%.`}
                               </p>
                             </div>
@@ -1702,8 +1787,25 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                             {acc.name}
                           </p>
                           <p className={cn("text-xl font-bold mt-0.5", isAllowed ? "text-foreground" : "text-gray-500")}>
-                            RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            {isAllowed ? `RM ${acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "-"}
                           </p>
+                          {/* Portion Breakdown */}
+                          {isAllowed && (Number(acc.agihan || 0) !== 0 || Number(acc.modal || 0) !== 0) && (
+                            <div className="flex flex-col gap-0.5 mt-1 border-t border-dashed border-border/20 pt-1">
+                              {Number(acc.agihan || 0) !== 0 && (
+                                <p className="text-[9px] text-muted-foreground flex justify-between">
+                                  <span>Agihan:</span>
+                                  <span className="font-semibold text-primary">RM {Number(acc.agihan).toLocaleString()}</span>
+                                </p>
+                              )}
+                              {Number(acc.modal || 0) !== 0 && (
+                                <p className="text-[9px] text-muted-foreground flex justify-between">
+                                  <span>Modal:</span>
+                                  <span className="font-semibold text-orange-600">RM {Number(acc.modal).toLocaleString()}</span>
+                                </p>
+                              )}
+                            </div>
+                          )}
                           {/* Show bank name if set */}
                           {bankName && isAllowed && (
                             <p className="text-xs text-primary font-medium mt-0.5 break-words max-w-[120px]" title={bankName}>
@@ -1892,11 +1994,15 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                 ) : null}
                                 <Badge variant="outline" className={cn(
                                   "w-fit text-[10px] py-0 h-5 border",
-                                  transaction.table_source === 'tenant_payments' 
-                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
-                                    : "bg-slate-50 text-slate-500 border-slate-200"
+                                  transaction.table_source === 'tenant_payments'
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                                    : "bg-slate-50 text-slate-500 border-slate-200",
+                                  transaction.category.includes('Modal') && "bg-orange-50 text-orange-600 border-orange-200"
                                 )}>
                                   {transaction.category}
+                                  {transaction.metadata?.modal_type && (
+                                    <span className="capitalize ml-1 italic opacity-80">({transaction.metadata.modal_type})</span>
+                                  )}
                                   {transaction.table_source === 'tenant_payments' && " 💰"}
                                 </Badge>
                               </div>
@@ -2094,7 +2200,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         variant="outline"
                         className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
                         onClick={() => {
-                          const businessName = user?.user_metadata?.full_name || profile?.full_name || user?.email || 'Perniagaan'
+                          const businessName = user?.user_metadata?.full_name || user?.email || 'Perniagaan'
                           const period = filterMonth !== 'all'
                             ? new Date(2024, parseInt(filterMonth) - 1).toLocaleDateString('ms-MY', { month: 'long', year: 'numeric' })
                             : new Date().toLocaleDateString('ms-MY', { month: 'long', year: 'numeric' })
