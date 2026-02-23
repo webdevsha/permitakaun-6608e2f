@@ -57,6 +57,7 @@ import { SubscriptionPlans } from "@/components/subscription-plans"
 import { SubscriptionNotification } from "@/components/subscription-notification"
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
+import { generateFinancialReport } from "@/utils/pdf/generate-report"
 
 
 export function AccountingModule({ initialTransactions, tenants }: { initialTransactions?: any[], tenants?: any[] }) {
@@ -1968,10 +1969,33 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <Button
                         variant="outline"
                         className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
-                        onClick={() => window.print()}
+                        onClick={() => {
+                          const businessName = user?.user_metadata?.full_name || profile?.full_name || user?.email || 'Perniagaan'
+                          const period = filterMonth !== 'all'
+                            ? new Date(2024, parseInt(filterMonth) - 1).toLocaleDateString('ms-MY', { month: 'long', year: 'numeric' })
+                            : new Date().toLocaleDateString('ms-MY', { month: 'long', year: 'numeric' })
+                          generateFinancialReport({
+                            businessName,
+                            reportPeriod: period,
+                            operatingRevenue,
+                            totalCapital,
+                            totalExpenses,
+                            cashBalance,
+                            cashInByCategory,
+                            cashOutByCategory,
+                            currentAssets,
+                            fixedAssets,
+                            totalAssets,
+                            taxPayable,
+                            zakatPayable,
+                            totalLiabilities,
+                            calculatedEquity,
+                            netProfit,
+                          })
+                        }}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        Cetak / Simpan PDF
+                        Muat Turun PDF
                       </Button>
                     ) : (
                       <Button
