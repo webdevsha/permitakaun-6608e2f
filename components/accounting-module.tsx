@@ -86,7 +86,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Filtering & Pagination State
   const [filterMonth, setFilterMonth] = useState<string>("all")
   const [filterType, setFilterType] = useState<string>("all")
-  const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("approved")
   const [displayLimit, setDisplayLimit] = useState<number>(5)
 
   // Bulk Delete State
@@ -225,13 +225,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         return
       }
 
-      // Safety timeout - force loading to false after 8 seconds
+      // Safety timeout - force loading to false after 3 seconds
       timeoutId = setTimeout(() => {
         if (isMounted) {
           console.error('[Accounting] TIMEOUT - forcing loading to false')
+          setIsModuleVerified(true)
           setIsLoading(false)
         }
-      }, 8000)
+      }, 3000)
 
       try {
         setIsLoading(true)
@@ -261,55 +262,34 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         // For organizers/tenants - simple check
         if (role === 'organizer') {
           try {
-            const { data: organizer } = await supabase
-              .from('organizers')
-              .select('accounting_status')
-              .eq('profile_id', user.id)
-              .maybeSingle()
+            // Run all checks in parallel for speed
+            const [orgResult, tenantResult, profileResult] = await Promise.all([
+              supabase.from('organizers').select('accounting_status').eq('profile_id', user.id).maybeSingle(),
+              supabase.from('tenants').select('id').eq('profile_id', user.id).maybeSingle(),
+              supabase.from('profiles').select('created_at').eq('id', user.id).maybeSingle()
+            ])
 
             // Grant access if accounting is active
-            if (organizer?.accounting_status === 'active') {
+            if (orgResult.data?.accounting_status === 'active') {
               console.log('[Accounting] Organizer with active accounting')
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
               setIsLoading(false)
               return
             }
-          } catch (e) {
-            console.error('[Accounting] Error checking organizer:', e)
-          }
 
-          // FALLBACK: If they are also a TENANT, allow access (don't block on organizer trial)
-          // This fixes the issue where hybrid users (Organizer + Tenant) get blocked by trial logic
-          try {
-            // We can check if they have a tenant record
-            const { data: tenantProfile } = await supabase
-              .from('tenants')
-              .select('id')
-              .eq('profile_id', user.id)
-              .maybeSingle()
-
-            if (tenantProfile) {
+            // FALLBACK: If they are also a TENANT, allow access
+            if (tenantResult.data) {
               console.log('[Accounting] User is also a Tenant - bypassing organizer trial check')
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
               setIsLoading(false)
               return
             }
-          } catch (e) {
-            console.error('[Accounting] Error checking tenant status:', e)
-          }
 
-          // Check trial as fallback
-          try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('created_at')
-              .eq('id', user.id)
-              .maybeSingle()
-
-            if (profile) {
-              const daysRemaining = 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
+            // Check trial as fallback
+            if (profileResult.data) {
+              const daysRemaining = 14 - Math.floor((Date.now() - new Date(profileResult.data.created_at).getTime()) / (1000 * 60 * 60 * 24))
               console.log('[Accounting] Days remaining:', daysRemaining)
 
               if (daysRemaining > 0) {
@@ -324,7 +304,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             setAccessDeniedStatus('trial_expired')
             setIsModuleVerified(false)
           } catch (e) {
-            console.error('[Accounting] Error checking trial:', e)
+            console.error('[Accounting] Error checking organizer:', e)
             // Allow access on error
             setIsModuleVerified(true)
             setIsLoading(false)
@@ -470,15 +450,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   console.log('[Accounting] RENDER - isLoading:', isLoading, 'accessDeniedStatus:', accessDeniedStatus, 'isModuleVerified:', isModuleVerified)
 
-  // Loading states - role specific messages
-  const isPrivilegedRole = role === 'admin' || role === 'superadmin' || role === 'staff'
 
   if (isLoading || !user || (user && !role)) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
         <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-primary" />
         <p className="font-semibold text-sm">
-          {isPrivilegedRole ? 'Memuatkan modul...' : 'Menyemak kelayakan pelan dan memuatkan modul...'}
+          Memuatkan Akaun...
         </p>
       </div>
     )
@@ -489,7 +467,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     return (
       <div className="flex flex-col items-center justify-center p-24 text-center text-muted-foreground animate-pulse">
         <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-primary" />
-        <p className="font-semibold text-sm">Menyemak kelayakan pelan dan memuatkan modul...</p>
+        <p className="font-semibold text-sm">Memuatkan Akaun...</p>
       </div>
     )
   }
@@ -759,17 +737,24 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
     setIsDeleting(true)
     try {
-      // Determine which table to delete from based on role
-      const tableName = (userRole === 'tenant' || role === 'tenant')
-        ? 'tenant_transactions'
-        : 'organizer_transactions'
+      // Group selected transactions by their source table
+      const allTx = transactions || []
+      const grouped: Record<string, number[]> = {}
+      for (const id of selectedIds) {
+        const tx = allTx.find((t: any) => t.id === id)
+        const table = tx?.table_source || ((userRole === 'tenant' || role === 'tenant') ? 'tenant_transactions' : 'organizer_transactions')
+        if (!grouped[table]) grouped[table] = []
+        grouped[table].push(id)
+      }
 
-      const { error } = await supabase
-        .from(tableName)
-        .delete()
-        .in('id', selectedIds)
-
-      if (error) throw error
+      // Delete from each table
+      for (const [tableName, ids] of Object.entries(grouped)) {
+        const { error } = await supabase
+          .from(tableName)
+          .delete()
+          .in('id', ids)
+        if (error) throw error
+      }
 
       toast.success(`${selectedIds.length} transaksi telah dipadam`)
       setSelectedIds([])
@@ -994,11 +979,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
   }
 
-  const handleDelete = async (id: number) => {
-    // Allow admin, superadmin, or tenant to delete
+  const handleDelete = async (id: number, tableSource?: string) => {
+    // Allow admin, superadmin, organizer, or tenant to delete
     const isAuthorized = userRole === "admin" || userRole === "superadmin" ||
       role === "admin" || role === "superadmin" ||
-      role === "tenant" || userRole === "tenant"
+      role === "tenant" || userRole === "tenant" ||
+      role === "organizer" || userRole === "organizer"
 
     if (!isAuthorized) {
       toast.error("Tidak dibenarkan memadam transaksi")
@@ -1006,10 +992,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
 
     try {
-      // Determine which table to delete from based on role
-      const tableName = (userRole === 'tenant' || role === 'tenant')
-        ? 'tenant_transactions'
-        : 'organizer_transactions'
+      // Use table_source from the transaction if available, otherwise fall back to role-based
+      const tableName = tableSource || (
+        (userRole === 'tenant' || role === 'tenant')
+          ? 'tenant_transactions'
+          : 'organizer_transactions'
+      )
 
       const { error } = await supabase.from(tableName).delete().eq('id', id)
       if (error) throw error
@@ -1022,12 +1010,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
   }
 
-  const handleApproveTransaction = async (id: number) => {
+  const handleApproveTransaction = async (id: number, tableSource?: string) => {
     try {
-      // Determine which table to update based on role
-      const tableName = (userRole === 'tenant' || role === 'tenant')
-        ? 'tenant_transactions'
-        : 'organizer_transactions'
+      // Use table_source from the transaction if available, otherwise fall back to role-based
+      const tableName = tableSource || (
+        (userRole === 'tenant' || role === 'tenant')
+          ? 'tenant_transactions'
+          : 'organizer_transactions'
+      )
 
       const { error } = await supabase.from(tableName).update({ status: 'approved' }).eq('id', id)
       if (error) throw error
@@ -1710,7 +1700,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
             <CardContent className="p-0">
               {isLoading ? (
                 <div className="p-12 flex justify-center text-muted-foreground">
-                  <Loader2 className="animate-spin mr-2" /> Memuatkan data...
+                  <Loader2 className="animate-spin mr-2" /> Memuatkan Akaun...
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1820,7 +1810,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                               <div className="flex items-center justify-end gap-2">
                                 {/* Admin/Superadmin/Organizer: Approve */}
                                 {(userRole === "admin" || userRole === "superadmin" || role === "admin" || role === "superadmin" || userRole === "organizer" || role === "organizer") && transaction.status === 'pending' && (
-                                  <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id)} title="Luluskan">
+                                  <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-sm" onClick={() => handleApproveTransaction(transaction.id, transaction.table_source)} title="Luluskan">
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
                                 )}
@@ -1840,7 +1830,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                       size="icon"
                                       variant="ghost"
                                       className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
-                                      onClick={() => handleDelete(transaction.id)}
+                                      onClick={() => handleDelete(transaction.id, transaction.table_source)}
                                       title="Padam"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1873,7 +1863,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                       size="icon"
                                       variant="ghost"
                                       className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
-                                      onClick={() => handleDelete(transaction.id)}
+                                      onClick={() => handleDelete(transaction.id, transaction.table_source)}
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
@@ -1895,7 +1885,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                       size="icon"
                                       variant="ghost"
                                       className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-all"
-                                      onClick={() => handleDelete(transaction.id)}
+                                      onClick={() => handleDelete(transaction.id, transaction.table_source)}
                                       title="Padam"
                                     >
                                       <Trash2 className="h-4 w-4" />
