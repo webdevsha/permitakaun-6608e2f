@@ -628,10 +628,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const calculatedEquity = totalAssets - totalLiabilities
 
-  // 7-TABUNG ALLOCATION (Based on Operating Revenue)
+  // 7-TABUNG ALLOCATION (Based on Net Operating Profit)
 
   // Calculate expenses by tabung linkage
-  // Default: Operating
   const zakaatCategories = ['Zakat']
   const investmentCategories = ['Kelengkapan Pejabat', 'Aset / Investment', 'Aset / Propaty', 'Bangunan', 'Kenderaan', 'Alatan Mesin', 'Hartanah', 'Saham']
 
@@ -645,48 +644,54 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && zakaatCategories.includes(t.category))
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
-  // All other expenses go to Operating (Perbelanjaan)
-  // Total Expenses - Investment Expenses - Zakat Expenses
-  const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
+  // All other expenses are standard Operating Expenses
+  const operatingExpensesOnly = totalExpenses - investmentExpenses - zakatExpenses
 
-  // 7-Tabung allocation: distribute operating revenue across all tabungs by percentage
-  // Each tabung receives: (operatingRevenue × percentage / 100) AS AGIHAN 
+  // DISTRIBUTION BASE: Non-modal revenue minus operating expenses
+  // This represents the 100% "Profit" to be shared
+  const profitToShare = operatingRevenue - operatingExpensesOnly
+  const distributionBase = Math.max(0, profitToShare)
+  const operatingShortfall = Math.max(0, operatingExpensesOnly - operatingRevenue)
+
+  // 7-Tabung allocation: distribute distributionBase across all tabungs by percentage
+  // Each tabung receives: (distributionBase × percentage / 100) AS AGIHAN 
   // PLUS direct modal allocations AS MODAL
 
   // Tax tabung
-  const taxAgihan = operatingRevenue * (percentages.tax / 100)
+  const taxAgihan = distributionBase * (percentages.tax / 100)
   const taxModal = modalByTabung.tax || 0
   const taxAmount = taxAgihan + taxModal
 
   // Zakat tabung
-  const zakatAgihan = operatingRevenue * (percentages.zakat / 100)
+  const zakatAgihan = distributionBase * (percentages.zakat / 100)
   const zakatModal = modalByTabung.zakat || 0
   const zakatAmount = zakatAgihan + zakatModal - zakatExpenses
 
   // Investment tabung
-  const investmentAgihan = operatingRevenue * (percentages.investment / 100)
+  const investmentAgihan = distributionBase * (percentages.investment / 100)
   const investmentModal = modalByTabung.investment || 0
   const investmentAmount = investmentAgihan + investmentModal - investmentExpenses
 
   // Dividend tabung
-  const dividendAgihan = operatingRevenue * (percentages.dividend / 100)
+  const dividendAgihan = distributionBase * (percentages.dividend / 100)
   const dividendModal = modalByTabung.dividend || 0
   const dividendAmount = dividendAgihan + dividendModal
 
   // Savings tabung
-  const savingsAgihan = operatingRevenue * (percentages.savings / 100)
+  const savingsAgihan = distributionBase * (percentages.savings / 100)
   const savingsModal = modalByTabung.savings || 0
   const savingsAmount = savingsAgihan + savingsModal
 
   // Emergency tabung
-  const emergencyAgihan = operatingRevenue * (percentages.emergency / 100)
+  const emergencyAgihan = distributionBase * (percentages.emergency / 100)
   const emergencyModal = modalByTabung.emergency || 0
   const emergencyAmount = emergencyAgihan + emergencyModal
 
   // Operating tabung (Perbelanjaan)
-  const operatingAgihan = operatingRevenue * (percentages.operating / 100)
+  const operatingAgihan = distributionBase * (percentages.operating / 100)
   const operatingModal = modalByTabung.operasi || 0
-  const operatingAmount = operatingAgihan + operatingModal - operatingExpenses
+  // Total = share of profit + direct modal - any expenses that exceeded revenue
+  const operatingAmount = operatingAgihan + operatingModal - operatingShortfall
 
   const accounts = [
     {
@@ -916,80 +921,6 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         return
       }
 
-      // Get or create tenant record for transaction
-      let entityId: number | null = null
-
-      // Check for existing tenant
-      const { data: existingTenant } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('profile_id', user.id)
-        .maybeSingle()
-
-      if (existingTenant?.id) {
-        entityId = existingTenant.id
-      } else {
-        // Need to create tenant record - get user details based on role
-        let fullName = user.email?.split('@')[0] || 'User'
-        let orgCode = null
-
-        if (userRole === 'organizer') {
-          const { data: org } = await supabase
-            .from('organizers')
-            .select('name, organizer_code')
-            .eq('profile_id', user.id)
-            .maybeSingle()
-          if (org) {
-            fullName = org.name
-            orgCode = org.organizer_code
-          }
-        } else if (userRole === 'admin') {
-          const { data: admin } = await supabase
-            .from('admins')
-            .select('full_name, organizer_code')
-            .eq('profile_id', user.id)
-            .maybeSingle()
-          if (admin) {
-            fullName = admin.full_name
-            orgCode = admin.organizer_code
-          }
-        } else if (userRole === 'staff') {
-          const { data: staff } = await supabase
-            .from('staff')
-            .select('full_name, organizer_code')
-            .eq('profile_id', user.id)
-            .maybeSingle()
-          if (staff) {
-            fullName = staff.full_name
-            orgCode = staff.organizer_code
-          }
-        }
-
-        // Create tenant record
-        const { data: newTenant, error: createError } = await supabase
-          .from('tenants')
-          .insert({
-            profile_id: user.id,
-            full_name: fullName,
-            business_name: fullName,
-            email: user.email,
-            organizer_code: orgCode,
-            status: 'active',
-            accounting_status: 'active'
-          })
-          .select('id')
-          .single()
-
-        if (createError) {
-          console.error('[Accounting] Error creating tenant:', createError)
-          toast.error("Ralat: Gagal mencipta rekod peniaga")
-          setIsSaving(false)
-          return
-        }
-
-        entityId = newTenant?.id || null
-      }
-
       // Determine which table to use based on role
       const isTenant = (userRole === 'tenant' || role === 'tenant')
       const isAdmin = (userRole === 'admin' || userRole === 'superadmin' || role === 'admin' || role === 'superadmin')
@@ -1001,6 +932,71 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         tableName = 'admin_transactions'
       } else {
         tableName = 'organizer_transactions'
+      }
+
+      // 1. Get or create tenant record ONLY if this is a tenant transaction
+      // or if the user is a tenant role (their personal account)
+      let entityId: number | null = null
+
+      if (isTenant || tableName === 'tenant_transactions') {
+        const { data: existingTenant } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+
+        if (existingTenant?.id) {
+          entityId = existingTenant.id
+        } else if (isTenant) {
+          // Only force CREATE if the user is actually a TENANT role
+          // Organizers/Admins should NOT be forced to have a tenant record
+          let fullName = user.email?.split('@')[0] || 'User'
+          let orgCode = null
+
+          if (userRole === 'organizer') {
+            const { data: org } = await supabase
+              .from('organizers')
+              .select('name, organizer_code')
+              .eq('profile_id', user.id)
+              .maybeSingle()
+            if (org) {
+              fullName = org.name
+              orgCode = org.organizer_code
+            }
+          } else if (userRole === 'admin') {
+            const { data: admin } = await supabase
+              .from('admins')
+              .select('full_name, organizer_code')
+              .eq('profile_id', user.id)
+              .maybeSingle()
+            if (admin) {
+              fullName = admin.full_name
+              orgCode = admin.organizer_code
+            }
+          }
+
+          const { data: newTenant, error: createError } = await supabase
+            .from('tenants')
+            .insert({
+              profile_id: user.id,
+              full_name: fullName,
+              business_name: fullName,
+              email: user.email,
+              organizer_code: orgCode,
+              status: 'active',
+              accounting_status: 'active'
+            })
+            .select('id')
+            .single()
+
+          if (createError) {
+            console.error('[Accounting] Error creating tenant:', createError)
+            toast.error("Ralat: Gagal mencipta rekod peniaga")
+            setIsSaving(false)
+            return
+          }
+          entityId = newTenant?.id || null
+        }
       }
 
       // Get entity IDs based on role

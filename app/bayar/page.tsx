@@ -208,7 +208,7 @@ export default function PublicPaymentPage() {
 
             // Create pending transaction via server action (bypasses RLS)
             const txResult = await createPublicPaymentTransaction({
-                description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType})`,
+                description: `Bayaran Sewa - ${selectedLocation.name} (${selectedRateType}) oleh ${fullName} (${phoneNumber})`,
                 amount: amount,
                 organizer_id: selectedLocation.organizer_id,
                 location_id: selectedLocation.id,
