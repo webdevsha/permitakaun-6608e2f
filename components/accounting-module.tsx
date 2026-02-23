@@ -86,7 +86,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Filtering & Pagination State
   const [filterMonth, setFilterMonth] = useState<string>("all")
   const [filterType, setFilterType] = useState<string>("all")
-  const [filterStatus, setFilterStatus] = useState<string>("approved")
+  // Default to showing ALL transactions so users don't miss any data
+  // They can filter to 'approved' or 'pending' if needed
+  const [filterStatus, setFilterStatus] = useState<string>("all")
   const [displayLimit, setDisplayLimit] = useState<number>(5)
 
   // Bulk Delete State
@@ -210,6 +212,19 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
     checkTrialStatus()
   }, [user, role, supabase])
+
+  // Refresh data when window gains focus (user returns to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Accounting] Window visible, refreshing data...')
+        mutate() // Refresh server data
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   // Simplified init with timeout protection
   useEffect(() => {
@@ -614,12 +629,48 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Total Expenses - Investment Expenses - Zakat Expenses
   const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
 
+  // Calculate actual tabung amounts based on transaction categories
+  // This ensures the tabung cards tally with the transaction list (Senarai Transaksi)
+  
+  // Helper function to calculate net amount for a tabung
+  const calculateTabungAmount = (incomeCategories: string[], expenseCategories: string[]) => {
+    const income = perspectiveTransactions
+      ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && incomeCategories.includes(t.category))
+      .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+    
+    const expense = perspectiveTransactions
+      ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && expenseCategories.includes(t.category))
+      .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
+    
+    return income - expense
+  }
+
+  // Define categories for each tabung
+  // Operating: All income except capital/modal + all expenses except zakat/investment categories
+  const operatingIncomeCategories = ['Sewa', 'Jualan', 'Perkhidmatan', 'Lain-lain', 'Deposit', 'Booking', 'Upfront']
+  const operatingExpenseCategories = [
+    'Elektrik & Air', 'Gaji & Upah', 'Maintenance', 'Belian Stok', 'Lain-lain', 
+    'Perniagaan', 'Perbelanjaan', 'Operating', 'Utiliti', 'Pembaikan'
+  ]
+  
+  // Calculate actual amounts from transactions
+  const operatingAmount = calculateTabungAmount(operatingIncomeCategories, operatingExpenseCategories) + totalCapital
+  const taxAmount = calculateTabungAmount(['Cukai', 'Tax', 'Income Tax'], ['Bayaran Cukai', 'Tax Payment'])
+  const zakatAmount = calculateTabungAmount(['Zakat'], ['Bayaran Zakat', 'Zakat Payment'])
+  const investmentAmount = calculateTabungAmount(
+    ['Pelaburan', 'Investment', 'Dividen'], 
+    ['Kelengkapan Pejabat', 'Aset / Investment', 'Aset / Propaty', 'Bangunan', 'Kenderaan', 'Alatan Mesin', 'Hartanah', 'Saham']
+  )
+  const dividendAmount = calculateTabungAmount(['Dividend', 'Dividen'], ['Dividend Payment', 'Bayaran Dividen'])
+  const savingsAmount = calculateTabungAmount(['Simpanan', 'Savings'], ['Pengeluaran Simpanan', 'Savings Withdrawal'])
+  const emergencyAmount = calculateTabungAmount(['Kecemasan', 'Emergency'], ['Perbelanjaan Kecemasan', 'Emergency Expense'])
+
   const accounts = [
     {
       name: "Perbelanjaan",
       percent: `${percentages.operating}%`,
-      // Logic: (Revenue * %) + Capital - Operating Expenses
-      amount: (operatingRevenue * (percentages.operating / 100)) + totalCapital - operatingExpenses,
+      // Actual amount based on operating transactions + capital
+      amount: operatingAmount,
       color: "bg-brand-blue/10 text-brand-blue border-brand-blue/20",
       icon: Wallet,
       tag: "Actionable",
@@ -629,7 +680,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Tax",
       percent: `${percentages.tax}%`,
-      amount: operatingRevenue * (percentages.tax / 100),
+      // Actual amount based on tax-related transactions
+      amount: taxAmount,
       color: "bg-orange-50 text-orange-600 border-orange-100",
       icon: Building,
       tag: "Liability",
@@ -639,8 +691,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Zakat",
       percent: `${percentages.zakat}%`,
-      // Logic: (Revenue * %) - Zakat Expenses
-      amount: (operatingRevenue * (percentages.zakat / 100)) - zakatExpenses,
+      // Actual amount based on zakat transactions
+      amount: zakatAmount,
       color: "bg-brand-green/10 text-brand-green border-brand-green/20",
       icon: Heart,
       tag: "Do Not Touch",
@@ -650,8 +702,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Investment",
       percent: `${percentages.investment}%`,
-      // Logic: (Revenue * %) - Investment Expenses
-      amount: (operatingRevenue * (percentages.investment / 100)) - investmentExpenses,
+      // Actual amount based on investment transactions
+      amount: investmentAmount,
       color: "bg-blue-50 text-blue-600 border-blue-100",
       icon: TrendingUp,
       tag: "(Aset / Property)",
@@ -661,7 +713,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Dividend",
       percent: `${percentages.dividend}%`,
-      amount: operatingRevenue * (percentages.dividend / 100),
+      // Actual amount based on dividend transactions
+      amount: dividendAmount,
       color: "bg-indigo-50 text-indigo-600 border-indigo-100",
       icon: Landmark,
       tag: "(For Share Holder Company)",
@@ -671,7 +724,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Savings",
       percent: `${percentages.savings}%`,
-      amount: operatingRevenue * (percentages.savings / 100),
+      // Actual amount based on savings transactions
+      amount: savingsAmount,
       color: "bg-purple-50 text-purple-600 border-purple-100",
       icon: PiggyBank,
       tag: "(Duplicate your Bisnes)",
@@ -681,7 +735,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     {
       name: "Emergency",
       percent: `${percentages.emergency}%`,
-      amount: operatingRevenue * (percentages.emergency / 100),
+      // Actual amount based on emergency fund transactions
+      amount: emergencyAmount,
       color: "bg-yellow-50 text-yellow-600 border-yellow-100",
       icon: ShieldAlert,
       tag: "Safety Net",
@@ -1588,12 +1643,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     const bankName = bankNames[acc.bankKey as keyof typeof bankNames];
                     const isAllowed = allowedTabungs.includes(acc.bankKey);
                     return (
-                      <div key={acc.name} className={cn("space-y-3 group", !isAllowed && "opacity-50 grayscale")}>
+                      <div key={acc.name} className={cn("space-y-3 group", !isAllowed && "opacity-40 grayscale")}>
                         <div
                           className={cn(
                             "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm border",
                             isAllowed ? "group-hover:scale-110" : "cursor-not-allowed",
-                            isAllowed ? acc.color : "bg-gray-100 text-gray-400 border-gray-200",
+                            isAllowed ? acc.color : "bg-gray-200 text-gray-500 border-gray-300",
                           )}
                           title={isAllowed ? acc.name : "Tidak termasuk dalam pelan ini - Naik taraf untuk akses"}
                         >
@@ -1603,20 +1658,20 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           <div className="flex items-center gap-1 mb-1">
                             <span className={cn(
                               "text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase",
-                              isAllowed ? acc.color.replace('bg-', 'bg-white/50 ') : "bg-gray-100 text-gray-400 border-gray-200"
+                              isAllowed ? acc.color.replace('bg-', 'bg-white/50 ') : "bg-gray-200 text-gray-500 border-gray-300"
                             )}>
-                              {isAllowed ? acc.percent : "0%"}
+                              {isAllowed ? acc.percent : "-"}
                             </span>
                             {!isAllowed && (
-                              <span className="text-[8px] text-gray-400 font-medium">
+                              <span className="text-[8px] text-gray-500 font-medium">
                                 <Lock className="w-3 h-3 inline" />
                               </span>
                             )}
                           </div>
-                          <p className={cn("text-xs font-bold uppercase tracking-wide", isAllowed ? "text-muted-foreground" : "text-gray-400")}>
+                          <p className={cn("text-xs font-bold uppercase tracking-wide", isAllowed ? "text-muted-foreground" : "text-gray-500")}>
                             {acc.name}
                           </p>
-                          <p className={cn("text-xl font-bold mt-0.5", isAllowed ? "text-foreground" : "text-gray-400")}>
+                          <p className={cn("text-xl font-bold mt-0.5", isAllowed ? "text-foreground" : "text-gray-500")}>
                             RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                           {/* Show bank name if set */}
@@ -1629,7 +1684,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           {acc.bankKey === 'operating' && (
                             <p className="text-[10px] text-muted-foreground/80 mt-0.5 font-medium">(Operating Account)</p>
                           )}
-                          <p className={cn("text-[10px] italic mt-0.5", isAllowed ? "text-muted-foreground/60" : "text-gray-400")}>
+                          <p className={cn("text-[10px] italic mt-0.5", isAllowed ? "text-muted-foreground/60" : "text-gray-500")}>
                             {isAllowed ? acc.tag : "Naik taraf untuk akses"}
                           </p>
                         </div>

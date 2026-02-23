@@ -1,6 +1,5 @@
 import { createClient } from "@/utils/supabase/server"
 import { determineUserRole } from "@/utils/roles"
-import { unstable_cache } from 'next/cache'
 
 // Timeout wrapper to prevent infinite hangs
 async function withTimeout<T>(
@@ -15,15 +14,6 @@ async function withTimeout<T>(
         )
     ])
 }
-
-// Cache the dashboard data for 30 seconds to reduce database load
-const getCachedDashboardData = unstable_cache(
-    async (userId: string, role: string, email: string, organizerCode: string | null) => {
-        return await fetchDashboardDataInternal(userId, role, email, organizerCode)
-    },
-    ['dashboard-data'],
-    { revalidate: 30, tags: ['dashboard'] }
-)
 
 async function fetchDashboardDataInternal(
     userId: string,
@@ -470,6 +460,10 @@ async function fetchDashboardDataInternal(
 export async function fetchDashboardData() {
     const supabase = await createClient()
 
+    // Add cache-busting timestamp to ensure fresh data
+    const timestamp = Date.now()
+    console.log(`[fetchDashboardData] Fetching fresh data at ${timestamp}`)
+
     // Get User with timeout
     let user: any;
     try {
@@ -503,8 +497,7 @@ export async function fetchDashboardData() {
 
     const role = determineUserRole(profile, user.email)
 
-    // For now, skip caching to avoid stale data issues
-    // Return fresh data
+    // Always return fresh data - no caching
     return await fetchDashboardDataInternal(user.id, role, user.email, profile?.organizer_code)
 }
 
