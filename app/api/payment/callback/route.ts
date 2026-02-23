@@ -33,21 +33,32 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No billplz ID" }, { status: 400 })
         }
 
-        // Try to update tenant_payments first (for logged-in tenant payments)
+        // Try to find tenant_payments first (for logged-in tenant payments)
         console.log("[Payment Callback] Checking tenant_payments...")
-        const { data: payment, error: tpError } = await supabase
+        const { data: payment } = await supabase
             .from('tenant_payments')
-            .update({
-                status: 'approved',
-                billplz_id: billplzId,
-                receipt_url: receipt_url?.toString(),
-                updated_at: new Date().toISOString()
-            })
-            .eq('billplz_id', billplzId)
             .select('*, tenants(full_name, email)')
+            .eq('billplz_id', billplzId)
             .maybeSingle()
 
         if (payment) {
+            // Skip if already approved (idempotency - callback may fire multiple times)
+            if (payment.status === 'approved') {
+                console.log("[Payment Callback] tenant_payment already approved, skipping:", payment.id)
+                return NextResponse.json({ success: true, type: 'tenant_payment', note: 'already_processed' })
+            }
+
+            // Update to approved
+            await supabase
+                .from('tenant_payments')
+                .update({
+                    status: 'approved',
+                    billplz_id: billplzId,
+                    receipt_url: receipt_url?.toString(),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', payment.id)
+
             console.log("[Payment Callback] Found and updated tenant_payments record:", payment.id)
 
             // Send receipt email
@@ -99,6 +110,12 @@ export async function POST(req: NextRequest) {
         }
 
         if (orgTx) {
+            // Skip if already approved (idempotency - callback may fire multiple times)
+            if (orgTx.status === 'approved') {
+                console.log("[Payment Callback] organizer_transaction already approved, skipping:", orgTx.id)
+                return NextResponse.json({ success: true, type: 'organizer_transaction', note: 'already_processed' })
+            }
+
             console.log("[Payment Callback] Updating organizer_transaction:", orgTx.id)
 
             // Update the transaction
@@ -176,6 +193,12 @@ export async function POST(req: NextRequest) {
             .maybeSingle()
 
         if (adminTx) {
+            // Skip if already approved (idempotency - callback may fire multiple times)
+            if (adminTx.status === 'approved') {
+                console.log("[Payment Callback] admin_transaction already approved, skipping:", adminTx.id)
+                return NextResponse.json({ success: true, type: 'subscription_payment', note: 'already_processed' })
+            }
+
             console.log("[Payment Callback] Found admin_transaction subscription record:", adminTx.id)
 
             // Mark admin_transaction as approved

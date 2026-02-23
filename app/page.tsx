@@ -11,8 +11,7 @@ export default function LandingPage() {
       <nav className="border-b border-border/40 fixed w-full bg-background/80 backdrop-blur-md z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Permit Akaun Logo" className="w-12 h-12 object-contain" />
-            <span className="font-serif font-bold text-xl tracking-tight text-foreground">Permit Akaun</span>
+            <img src="/logo.png" alt="Permit Akaun Logo" className="h-20 object-contain" />
           </a>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
@@ -123,17 +122,6 @@ export default function LandingPage() {
               alt="Permit Akaun Banner"
               className="w-full h-[300px] md:h-[400px] lg:h-[500px] object-cover transform group-hover:scale-105 transition-transform duration-700"
             />
-            <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12 z-20 text-white">
-              <div className="max-w-3xl">
-                <Badge className="bg-brand-blue text-white hover:bg-brand-blue/90 mb-4 border-none text-sm px-3 py-1">
-                  Revolusi Digital
-                </Badge>
-                <h3 className="text-2xl md:text-4xl font-serif font-bold mb-4 leading-tight">
-                  Tinggalkan cara lama. <br />
-                  <span className="text-brand-green">Mulakan era digital perniagaan anda.</span>
-                </h3>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -396,8 +384,7 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-border">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
           <a href="https://permitakaun.kumim.my/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Permit Akaun Logo" className="w-10 h-10 object-contain" />
-            <span className="font-serif font-bold text-lg text-foreground">Permit Akaun</span>
+            <img src="/logo.png" alt="Permit Akaun Logo" className="h-20 object-contain" />
           </a>
 
           <div className="flex items-center gap-6">

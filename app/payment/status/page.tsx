@@ -9,12 +9,6 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 
-// Lazy load activateSubscription - only import when needed
-const activateSubscription = async (params: any) => {
-    const { activateSubscription: fn } = await import("@/actions/subscription")
-    return fn(params)
-}
-
 function PaymentStatusContent() {
     const searchParams = useSearchParams()
     const router = useRouter()
@@ -59,21 +53,8 @@ function PaymentStatusContent() {
                 if (gateway === 'chip-in') {
                     const result = searchParams.get('status')
                     if (result === 'success') {
-                        if (isSubscription && planType) {
-                            try {
-                                await activateSubscription({
-                                    transactionId: searchParams.get('id') || 'chip-in-txn',
-                                    planType: planType,
-                                    amount: 39,
-                                    paymentRef: searchParams.get('id') || 'chip-in-ref'
-                                })
-                                toast.success("Langganan diaktifkan!")
-                            } catch (e: any) {
-                                console.error("Subscription error:", e)
-                                // Don't fail the whole payment for subscription activation error
-                                toast.error("Pembayaran berjaya tetapi gagal mengaktifkan langganan. Sila hubungi sokongan.")
-                            }
-                        }
+                        // Subscription activation is handled by the payment callback server-side
+                        // No need to call activateSubscription() here to avoid duplicate records
 
                         setStatus('success')
                         setDetails({
@@ -92,20 +73,8 @@ function PaymentStatusContent() {
                     const statusParam = searchParams.get('billplz[state]')
 
                     if (paid === 'true' || statusParam === 'paid') {
-                        if (isSubscription && planType) {
-                            try {
-                                await activateSubscription({
-                                    transactionId: id || 'billplz-txn',
-                                    planType: planType,
-                                    amount: 39,
-                                    paymentRef: id || 'billplz-ref'
-                                })
-                                toast.success("Langganan diaktifkan!")
-                            } catch (e: any) {
-                                console.error("Subscription error:", e)
-                                toast.error("Pembayaran berjaya tetapi gagal mengaktifkan langganan. Sila hubungi sokongan.")
-                            }
-                        }
+                        // Subscription activation is handled by the payment callback server-side
+                        // No need to call activateSubscription() here to avoid duplicate records
 
                         setStatus('success')
                         setDetails({
