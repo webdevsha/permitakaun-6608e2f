@@ -1030,12 +1030,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       // - Admin/Superadmin: approved (they have authority)
       // - Tenant: approved (it's their own personal Akaun)
       // - Organizer/Staff: pending (may need review)
-      let defaultStatus: 'approved' | 'pending' = 'pending'
-      if (isAdmin) {
-        defaultStatus = 'approved'
-      } else if (isTenant) {
-        defaultStatus = 'approved' // Tenant's own transactions are auto-approved
-      }
+      let defaultStatus: 'approved' | 'pending' = 'approved'
 
       let txData: any = {
         description: newTransaction.description,
@@ -2194,7 +2189,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                     {canDownloadReports ? (
                       <Button
                         variant="outline"
-                        className="hidden md:flex bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
+                        className="flex w-full md:w-auto bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
                         onClick={() => {
                           const businessName = user?.user_metadata?.full_name || user?.email || 'Perniagaan'
                           const period = filterMonth !== 'all'
@@ -2227,7 +2222,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                       <Button
                         variant="outline"
                         disabled
-                        className="hidden md:flex bg-slate-50 text-slate-400 border-slate-200"
+                        className="flex w-full md:w-auto bg-slate-50 text-slate-400 border-slate-200"
                         title="Naik taraf ke pelan Sdn Bhd untuk Laporan Penuh"
                       >
                         <Lock className="w-4 h-4 mr-2" />

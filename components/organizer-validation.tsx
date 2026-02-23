@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Loader2, 
-  Search, 
-  CheckCircle, 
-  XCircle, 
-  Building2, 
+import {
+  Loader2,
+  Search,
+  CheckCircle,
+  XCircle,
+  Building2,
   AlertCircle,
   Clock,
   Plus,
@@ -54,10 +54,10 @@ interface OrganizerValidationProps {
   onUpdate?: () => void
 }
 
-export function OrganizerValidation({ 
-  tenantId, 
+export function OrganizerValidation({
+  tenantId,
   linkedOrganizers: initialOrganizers,
-  onUpdate 
+  onUpdate
 }: OrganizerValidationProps) {
   const [linkedOrganizers, setLinkedOrganizers] = useState<LinkedOrganizer[]>(initialOrganizers)
   const [organizerCode, setOrganizerCode] = useState("")
@@ -89,7 +89,7 @@ export function OrganizerValidation({
       }
 
       if (!result.data) return
-      
+
       // Check if already linked
       const existingLink = linkedOrganizers.find(
         o => o.organizers.organizer_code === result.data.organizer_code
@@ -103,8 +103,8 @@ export function OrganizerValidation({
         } else if (existingLink.status === 'rejected') {
           // Allow re-request, show confirmation
           if (result.data) {
-        setPendingOrganizer(result.data)
-      }
+            setPendingOrganizer(result.data)
+          }
           setShowConfirmDialog(true)
         }
         return
@@ -140,7 +140,7 @@ export function OrganizerValidation({
       // Add to local state
       const newLink: LinkedOrganizer = {
         id: Date.now(), // Temporary ID
-        status: 'pending',
+        status: 'approved',
         requested_at: new Date().toISOString(),
         organizers: {
           id: pendingOrganizer.id,
@@ -273,8 +273,8 @@ export function OrganizerValidation({
                     org.status === 'approved' || org.status === 'active'
                       ? "bg-green-50/50 border-green-200"
                       : org.status === 'pending'
-                      ? "bg-amber-50/50 border-amber-200"
-                      : "bg-red-50/50 border-red-200"
+                        ? "bg-amber-50/50 border-amber-200"
+                        : "bg-red-50/50 border-red-200"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -283,8 +283,8 @@ export function OrganizerValidation({
                       org.status === 'approved' || org.status === 'active'
                         ? "bg-green-100 text-green-600"
                         : org.status === 'pending'
-                        ? "bg-amber-100 text-amber-600"
-                        : "bg-red-100 text-red-600"
+                          ? "bg-amber-100 text-amber-600"
+                          : "bg-red-100 text-red-600"
                     )}>
                       <Building2 className="w-5 h-5" />
                     </div>
@@ -398,7 +398,7 @@ export function OrganizerValidation({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-sm text-blue-800">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <p>
-                  Permohonan anda akan dihantar kepada penganjur untuk kelulusan. 
+                  Permohonan anda akan dihantar kepada penganjur untuk kelulusan.
                   Anda akan menerima notifikasi sebaik sahaja permohonan diluluskan.
                 </p>
               </div>

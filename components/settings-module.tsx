@@ -860,21 +860,21 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
-          <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
+          <h2 className="text-2xl md:text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
+          <p className="text-muted-foreground text-sm md:text-lg">Urus profil dan konfigurasi sistem</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
-            <Link href="/dashboard/security">
-              <Button variant="outline" className="rounded-xl">
+            <Link href="/dashboard/security" className="flex-1 sm:flex-none">
+              <Button variant="outline" className="rounded-xl w-full">
                 <ShieldAlert className="w-4 h-4 mr-2" /> Keselamatan
               </Button>
             </Link>
           )}
-          <Link href="/dashboard/help">
-            <Button variant="outline" className="rounded-xl">
+          <Link href="/dashboard/help" className="flex-1 sm:flex-none">
+            <Button variant="outline" className="rounded-xl w-full">
               <BookOpen className="w-4 h-4 mr-2" /> Panduan
             </Button>
           </Link>
@@ -882,28 +882,28 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6 flex-wrap">
-          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Shield className="w-4 h-4 mr-2" /> Profil Saya
+        <TabsList className="bg-white border border-border/50 p-1 rounded-xl mb-6 flex-wrap h-auto">
+          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 sm:flex-none">
+            <Shield className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Profil Saya</span><span className="xs:hidden">Profil</span>
           </TabsTrigger>
           {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
-            <TabsTrigger value="backup" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Database className="w-4 h-4 mr-2" /> Backup & Sistem
+            <TabsTrigger value="backup" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 sm:flex-none">
+              <Database className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Backup</span>
             </TabsTrigger>
           )}
           {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Users className="w-4 h-4 mr-2" /> Pengurusan Pengguna
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 sm:flex-none">
+              <Users className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Pengguna</span>
             </TabsTrigger>
           )}
           {(role === 'admin' || role === 'superadmin' || isAdminExempt) && (
-            <TabsTrigger value="subscriptions" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <CreditCard className="w-4 h-4 mr-2" /> Langganan
+            <TabsTrigger value="subscriptions" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 sm:flex-none">
+              <CreditCard className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Langganan</span>
             </TabsTrigger>
           )}
           {(role === 'organizer' || role === 'tenant') && !isAdminExempt && (
-            <TabsTrigger value="subscription" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-              <CreditCard className="w-4 h-4 mr-2" /> Langganan
+            <TabsTrigger value="subscription" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 sm:flex-none">
+              <CreditCard className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Langganan</span>
             </TabsTrigger>
           )}
         </TabsList>

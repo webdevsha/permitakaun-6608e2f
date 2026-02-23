@@ -35,7 +35,7 @@ export async function saveLocationAction(payload: any, locationId?: number) {
   }
 
   if (role === 'staff') {
-    payload.status = 'pending'
+    payload.status = 'active'
   }
 
   const admin = createAdminClient()

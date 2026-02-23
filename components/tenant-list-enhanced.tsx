@@ -10,10 +10,10 @@ import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText, 
-  Download, Building, MapPin, CheckCircle, XCircle, Store, Save, 
-  Utensils, FolderOpen, Plus, Trash2, Clock, User, Ban
+import {
+   MessageSquare, Eye, Phone, Loader2, AlertCircle, Calendar, FileText,
+   Download, Building, MapPin, CheckCircle, XCircle, Store, Save,
+   Utensils, FolderOpen, Plus, Trash2, Clock, User, Ban
 } from "lucide-react"
 import {
    Dialog,
@@ -45,7 +45,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    const { role, user } = useAuth()
    const router = useRouter()
    const supabase = createClient()
-   
+
    const [activeTab, setActiveTab] = useState("active")
    const [filterStatus, setFilterStatus] = useState("all")
    const [searchQuery, setSearchQuery] = useState("")
@@ -61,7 +61,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    const [loadingDetails, setLoadingDetails] = useState(false)
    const [isUpdating, setIsUpdating] = useState(false)
    const [isApprovingLocation, setIsApprovingLocation] = useState(false)
-   
+
    // Add tenant states
    const [isAddOpen, setIsAddOpen] = useState(false)
    const [newTenant, setNewTenant] = useState({
@@ -189,18 +189,14 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
             email: newTenant.email,
          }
 
-         if (role === 'staff') {
-            payload.status = 'pending'
-         } else {
-            payload.status = 'active'
-         }
+         payload.status = 'active'
 
          const { data: newVal, error } = await supabase.from('tenants').insert(payload).select().single()
 
          if (error) throw error
 
          await logAction('CREATE', 'tenant', newVal.id, payload)
-         toast.success(role === 'staff' ? "Peniaga didaftarkan. Menunggu kelulusan." : "Peniaga berjaya didaftarkan")
+         toast.success("Peniaga berjaya didaftarkan")
 
          setNewTenant({ name: '', business: '', phone: '', email: '' })
          setIsAddOpen(false)
@@ -307,7 +303,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
          if (error) throw error
 
          toast.success("Tapak berjaya diluluskan dan diaktifkan.")
-         
+
          // Refresh the rentals list
          if (selectedTenant) {
             const { data: rentalData } = await supabase
@@ -317,7 +313,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                .order('created_at', { ascending: false })
             setTenantRentals(rentalData || [])
          }
-         
+
          mutate()
       } catch (e: any) {
          toast.error("Gagal meluluskan: " + e.message)
@@ -328,18 +324,18 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
 
    const handleRejectLocation = async (rentalId: number) => {
       if (!confirm("Adakah anda pasti mahu menolak permohonan tapak ini?")) return
-      
+
       setIsApprovingLocation(true)
       try {
          const { error } = await supabase
             .from('tenant_locations')
             .update({ status: 'rejected', is_active: false })
             .eq('id', rentalId)
-         
+
          if (error) throw error
-         
+
          toast.success("Permohonan tapak ditolak.")
-         
+
          // Refresh the rentals list
          if (selectedTenant) {
             const { data: rentalData } = await supabase
@@ -349,7 +345,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                .order('created_at', { ascending: false })
             setTenantRentals(rentalData || [])
          }
-         
+
          mutate()
       } catch (e: any) {
          toast.error("Gagal menolak: " + e.message)
@@ -450,7 +446,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
 
    // Filter tenants for each tab
    const activeTenants = tenants.filter((t: any) => isActive(t))
-   
+
    const inactiveTenants = tenants.filter((t: any) => {
       const status = t.link_status || t.status
       return status === 'inactive' || status === 'rejected'
@@ -466,8 +462,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                      <CardDescription>Senarai peniaga aktif dan status pembayaran sewa terkini</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                     <Button 
-                        variant="outline" 
+                     <Button
+                        variant="outline"
                         size="icon"
                         onClick={handleRefresh}
                         disabled={isRefreshing}
@@ -572,8 +568,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                         )}
                      </div>
 
-                     {/* Tenants Table */}
-                     <div className="overflow-x-auto">
+                     {/* Tenants Table (Desktop) */}
+                     <div className="hidden lg:block overflow-x-auto">
                         <Table>
                            <TableHeader className="bg-secondary/20">
                               <TableRow className="border-border/50">
@@ -701,11 +697,94 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                            </TableBody>
                         </Table>
                      </div>
+
+                     {/* Tenants Mobile Cards (Active) */}
+                     <div className="lg:hidden grid gap-4">
+                        {activeTenants.map((tenant: any) => (
+                           <Card key={tenant.id} className="p-4 border-border/50 bg-white shadow-sm rounded-2xl">
+                              <div className="flex justify-between items-start mb-4">
+                                 <div className="flex items-center gap-3">
+                                    {tenant.profile_image_url ? (
+                                       <div className="relative w-10 h-10 rounded-full overflow-hidden border border-border">
+                                          <Image src={tenant.profile_image_url} alt="Profile" fill className="object-cover" />
+                                       </div>
+                                    ) : (
+                                       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold text-muted-foreground">
+                                          {tenant.full_name?.charAt(0)}
+                                       </div>
+                                    )}
+                                    <div>
+                                       <div className="font-bold text-brand-green flex items-center">
+                                          {tenant.full_name}
+                                          <CheckCircle className="inline-block w-3 h-3 ml-1" />
+                                       </div>
+                                       <div className="text-xs text-muted-foreground">{tenant.business_name}</div>
+                                    </div>
+                                 </div>
+                                 <div className="flex gap-1">
+                                    {(!isAdmin || tenant.is_own || (!adminOrganizerCode && tenant.organizer_code === undefined)) ? (
+                                       <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleViewTenant(tenant)}>
+                                          <Eye size={16} />
+                                       </Button>
+                                    ) : null}
+                                    {role !== 'staff' && !isAdmin && (
+                                       <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive"
+                                          onClick={() => handleDeleteTenant(tenant.id, tenant.full_name)}
+                                       >
+                                          <Trash2 size={16} />
+                                       </Button>
+                                    )}
+                                 </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3 mb-4 text-xs font-medium">
+                                 <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold mb-1">Penganjur</span>
+                                    <span className="truncate block">{tenant.organizerName || tenant.organizer_code || '-'}</span>
+                                 </div>
+                                 <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold mb-1">Tapak</span>
+                                    <span className="truncate block">{tenant.locations?.length || 0} Tapak</span>
+                                 </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-3 border-t border-border/30">
+                                 <div className="flex items-center gap-2">
+                                    <Switch
+                                       checked={true}
+                                       onCheckedChange={() => handleTenantStatusChange(tenant, 'inactive')}
+                                       disabled={isUpdating}
+                                    />
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Aktif</span>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                    <Switch
+                                       checked={tenant.accounting_status === 'active'}
+                                       onCheckedChange={() => handleAccountingStatusChange(tenant.id, tenant.accounting_status)}
+                                       disabled={isUpdating}
+                                       className="data-[state=checked]:bg-blue-600"
+                                    />
+                                    <span className={cn("text-[10px] uppercase font-bold", tenant.accounting_status === 'active' ? "text-blue-600" : "text-slate-400")}>
+                                       Akaun {tenant.accounting_status === 'active' ? 'ON' : 'OFF'}
+                                    </span>
+                                 </div>
+                              </div>
+                           </Card>
+                        ))}
+                        {activeTenants.length === 0 && (
+                           <div className="text-center py-12 text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
+                              Tiada peniaga aktif dijumpai.
+                           </div>
+                        )}
+                     </div>
                   </TabsContent>
 
                   {/* Pending Approval Tab */}
                   <TabsContent value="pending" className="mt-4">
-                     <PendingApprovalsCombined 
+                     <PendingApprovalsCombined
                         organizerId={organizerId}
                         isAdmin={isAdmin}
                         onRefresh={handleRefresh}
@@ -725,7 +804,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                            </CardDescription>
                         </CardHeader>
                         <CardContent>
-                           <div className="overflow-x-auto">
+                           {/* Tenants Table (Desktop) */}
+                           <div className="hidden lg:block overflow-x-auto">
                               <Table>
                                  <TableHeader className="bg-secondary/20">
                                     <TableRow className="border-border/50">
@@ -770,8 +850,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                                           </TableCell>
                                           <TableCell className="text-right">
                                              <div className="flex justify-end gap-2">
-                                                <Button 
-                                                   size="sm" 
+                                                <Button
+                                                   size="sm"
                                                    variant="outline"
                                                    className="h-8 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
                                                    onClick={() => handleApproveTenant(tenant)}
@@ -882,8 +962,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                                              <TableCell className="text-right">
                                                 {rental.status === 'pending' && (
                                                    <div className="flex justify-end gap-2">
-                                                      <Button 
-                                                         size="sm" 
+                                                      <Button
+                                                         size="sm"
                                                          className="h-7 bg-green-600 hover:bg-green-700 text-white text-[10px]"
                                                          onClick={() => handleApproveLocation(rental.id)}
                                                          disabled={isApprovingLocation}
@@ -891,8 +971,8 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                                                          <CheckCircle className="w-3 h-3 mr-1" />
                                                          Lulus
                                                       </Button>
-                                                      <Button 
-                                                         size="sm" 
+                                                      <Button
+                                                         size="sm"
                                                          variant="outline"
                                                          className="h-7 border-red-200 text-red-600 hover:bg-red-50 text-[10px]"
                                                          onClick={() => handleRejectLocation(rental.id)}

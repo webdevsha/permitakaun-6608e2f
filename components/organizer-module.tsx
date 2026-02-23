@@ -158,17 +158,13 @@ export function OrganizerModule({ initialOrganizers, userRole: propRole }: { ini
           accounting_status: 'inactive'
         }
 
-        if (role === 'staff') {
-          payload.status = 'pending'
-        } else {
-          payload.status = 'active'
-        }
+        payload.status = 'active'
 
         const { data: newVal, error } = await supabase.from('organizers').insert(payload).select().single()
         if (error) throw error
 
         await logAction('CREATE', 'organizer', newVal.id, payload)
-        toast.success(role === 'staff' ? "Penganjur ditambah. Menunggu kelulusan." : "Penganjur berjaya ditambah")
+        toast.success("Penganjur berjaya ditambah")
       }
 
       setIsOpen(false)
@@ -266,18 +262,14 @@ export function OrganizerModule({ initialOrganizers, userRole: propRole }: { ini
         rate_monthly: 0
       }
 
-      if (role === 'staff') {
-        payload.status = 'pending'
-      } else {
-        payload.status = 'active'
-      }
+      payload.status = 'active'
 
       const { data: newL, error } = await supabase.from('locations').insert(payload).select().single()
 
       if (error) throw error
 
       await logAction('CREATE', 'location', newL.id, payload)
-      toast.success(role === 'staff' ? "Lokasi ditambah. Menunggu kelulusan." : `Lokasi ditambah ke ${selectedOrgForLoc.name}`)
+      toast.success(`Lokasi ditambah ke ${selectedOrgForLoc.name}`)
       setIsLocDialogOpen(false)
       mutate()
     } catch (e: any) {

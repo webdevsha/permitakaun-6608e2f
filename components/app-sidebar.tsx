@@ -578,6 +578,7 @@ export function MobileNav({ initialUser, initialRole }: MobileNavProps) {
           </SheetTrigger>
           <SheetContent side="left" className="w-[300px] sm:w-[350px] p-0">
             <SheetHeader className="p-6 border-b border-border/50 bg-secondary/10">
+              <SheetTitle className="sr-only">Menu Navigasi</SheetTitle>
               <div className="relative w-40 h-12 mb-2">
                 <Image
                   src="https://permitakaun.kumim.my/logo.png"

@@ -206,7 +206,7 @@ export function EnhancedRentalModule({
           rate_monthly_cbs: item.locations?.rate_monthly_cbs
         }))
         setMyLocations(updatedLocs)
-        
+
         // Initialize selectedRentals for active locations
         const initialSelections: Record<number, { selected: boolean, amount: string }> = {}
         updatedLocs.filter((l: any) => l.status === 'active').forEach((loc: any) => {
@@ -271,9 +271,9 @@ export function EnhancedRentalModule({
     const activeLocs = myLocations.filter((l: any) => l.status === 'active')
     const initialSelections: Record<number, { selected: boolean, amount: string }> = {}
     activeLocs.forEach((loc: any) => {
-      initialSelections[loc.id] = { 
-        selected: selectedRentals[loc.id]?.selected || false, 
-        amount: loc.display_price?.toString() || "0" 
+      initialSelections[loc.id] = {
+        selected: selectedRentals[loc.id]?.selected || false,
+        amount: loc.display_price?.toString() || "0"
       }
     })
     setSelectedRentals(initialSelections)
@@ -373,7 +373,7 @@ export function EnhancedRentalModule({
 
       if (paymentMethod === 'manual') {
         let receiptUrl = null
-        
+
         if (receiptFile) {
           const fileExt = receiptFile.name.split('.').pop()
           const fileName = `${tenant.id}-${Date.now()}.${fileExt}`
@@ -511,22 +511,22 @@ export function EnhancedRentalModule({
 
       {/* Main Tabs - 4 tabs as requested */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-muted p-1 rounded-xl w-full grid grid-cols-4">
-          <TabsTrigger value="status" className="rounded-lg">
-            <Store className="w-4 h-4 mr-2 hidden md:inline" />
-            Status Tapak
+        <TabsList className="bg-muted p-1 rounded-xl w-full flex flex-wrap h-auto">
+          <TabsTrigger value="status" className="rounded-lg flex-1 min-w-[120px]">
+            <Store className="w-4 h-4 mr-2" />
+            <span className="hidden xs:inline">Status</span><span className="xs:hidden">Status</span>
           </TabsTrigger>
-          <TabsTrigger value="payment" className="rounded-lg">
-            <CreditCard className="w-4 h-4 mr-2 hidden md:inline" />
-            Bayar Sewa
+          <TabsTrigger value="payment" className="rounded-lg flex-1 min-w-[120px]">
+            <CreditCard className="w-4 h-4 mr-2" />
+            <span className="hidden xs:inline">Bayar Sewa</span><span className="xs:hidden">Bayar</span>
           </TabsTrigger>
-          <TabsTrigger value="history" className="rounded-lg">
-            <FileText className="w-4 h-4 mr-2 hidden md:inline" />
-            Sejarah Bayaran
+          <TabsTrigger value="history" className="rounded-lg flex-1 min-w-[120px]">
+            <FileText className="w-4 h-4 mr-2" />
+            <span className="hidden xs:inline">Sejarah</span><span className="xs:hidden">Sejarah</span>
           </TabsTrigger>
-          <TabsTrigger value="organizers" className="rounded-lg">
-            <Building2 className="w-4 h-4 mr-2 hidden md:inline" />
-            Penganjur Saya
+          <TabsTrigger value="organizers" className="rounded-lg flex-1 min-w-[120px]">
+            <Building2 className="w-4 h-4 mr-2" />
+            <span className="hidden xs:inline">Penganjur</span><span className="xs:hidden">Org</span>
           </TabsTrigger>
         </TabsList>
 
@@ -545,7 +545,7 @@ export function EnhancedRentalModule({
                       Menunggu Kelulusan Penganjur
                     </h3>
                     <p className="text-muted-foreground max-w-md">
-                      Permohonan anda sedang dalam semakan. Anda akan dapat mengakses 
+                      Permohonan anda sedang dalam semakan. Anda akan dapat mengakses
                       semua ciri sebaik sahaja diluluskan oleh penganjur.
                     </p>
                   </>
@@ -558,11 +558,11 @@ export function EnhancedRentalModule({
                       Pautkan Penganjur
                     </h3>
                     <p className="text-muted-foreground max-w-md">
-                      Sila pautkan dengan sekurang-kurangnya satu penganjur untuk 
+                      Sila pautkan dengan sekurang-kurangnya satu penganjur untuk
                       mengakses semua ciri pengurusan sewa.
                     </p>
-                    <Button 
-                      className="mt-4" 
+                    <Button
+                      className="mt-4"
                       onClick={() => setActiveTab('organizers')}
                     >
                       Pergi ke Penganjur Saya
@@ -597,7 +597,7 @@ export function EnhancedRentalModule({
                     Tiada tapak sewaan
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {hasApprovedOrganizer 
+                    {hasApprovedOrganizer
                       ? "Pilih lokasi dari bahagian bawah untuk memohon"
                       : "Pautkan penganjur terlebih dahulu untuk melihat lokasi"
                     }
@@ -606,8 +606,8 @@ export function EnhancedRentalModule({
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {myLocations.map((rental: any) => (
-                    <RentalCard 
-                      key={rental.id} 
+                    <RentalCard
+                      key={rental.id}
                       rental={rental}
                       selectedCategory={selectedCategory}
                       setSelectedCategory={setSelectedCategory}
@@ -650,7 +650,7 @@ export function EnhancedRentalModule({
               {activeLocations.length > 0 ? (
                 <form onSubmit={handlePayment} className="space-y-6">
                   {/* Payment Method Selection */}
-                  <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                     <div
                       onClick={() => setPaymentMethod('billplz')}
                       className={`cursor-pointer border rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition-all ${paymentMethod === 'billplz' ? 'bg-primary/5 border-primary ring-1 ring-primary' : 'bg-white hover:bg-secondary/50'}`}
@@ -658,8 +658,8 @@ export function EnhancedRentalModule({
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                         <CreditCard size={18} />
                       </div>
-                      <span className="font-bold text-sm">FPX / Online</span>
-                      <span className="text-xs text-muted-foreground">+RM2.00 Caj</span>
+                      <span className="font-bold text-sm text-center">FPX / Online</span>
+                      <span className="text-xs text-muted-foreground text-center">+RM2.00 Caj</span>
                     </div>
                     <div
                       onClick={() => setPaymentMethod('manual')}
@@ -668,49 +668,54 @@ export function EnhancedRentalModule({
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                         <Upload size={18} />
                       </div>
-                      <span className="font-bold text-sm">Resit Manual</span>
-                      <span className="text-xs text-muted-foreground">Tiada Caj</span>
+                      <span className="font-bold text-sm text-center">Resit Manual</span>
+                      <span className="text-xs text-muted-foreground text-center">Tiada Caj</span>
                     </div>
                   </div>
 
                   {/* Multi-Location Selection */}
                   <div className="space-y-4">
                     <Label className="text-sm font-medium">Pilih Lokasi untuk Dibayar</Label>
-                    
+
                     <div className="space-y-3">
                       {activeLocations.map((rental: any) => (
-                        <div 
+                        <div
                           key={rental.id}
                           className={cn(
-                            "flex items-center gap-4 p-4 rounded-xl border transition-all",
-                            selectedRentals[rental.id]?.selected 
-                              ? "border-primary bg-primary/5" 
+                            "flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-xl border transition-all",
+                            selectedRentals[rental.id]?.selected
+                              ? "border-primary bg-primary/5"
                               : "border-border hover:border-primary/50"
                           )}
                         >
-                          <input
-                            type="checkbox"
-                            checked={selectedRentals[rental.id]?.selected || false}
-                            onChange={(e) => handleRentalSelection(rental.id, e.target.checked)}
-                            className="w-5 h-5 accent-primary"
-                          />
-                          
-                          <div className="flex-1">
-                            <p className="font-medium text-foreground">{rental.location_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              No. Petak: {rental.stall_number || "-"} • {rental.rate_type === 'monthly' ? 'Bulanan' : `Mingguan (${rental.rate_type})`}
-                            </p>
-                          </div>
-                          
-                          <div className="text-right">
-                            <Label className="text-xs text-muted-foreground block mb-1">Jumlah (RM)</Label>
-                            <Input
-                              type="number"
-                              value={selectedRentals[rental.id]?.amount || rental.display_price}
-                              onChange={(e) => handleAmountChange(rental.id, e.target.value)}
-                              disabled={!selectedRentals[rental.id]?.selected}
-                              className="w-28 h-9 text-right font-bold"
+                          <div className="flex items-center gap-4 w-full sm:w-auto">
+                            <input
+                              type="checkbox"
+                              checked={selectedRentals[rental.id]?.selected || false}
+                              onChange={(e) => handleRentalSelection(rental.id, e.target.checked)}
+                              className="w-5 h-5 accent-primary"
                             />
+
+                            <div className="flex-1">
+                              <p className="font-medium text-foreground">{rental.location_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                No. Petak: {rental.stall_number || "-"} • {rental.rate_type === 'monthly' ? 'Bulanan' : `Mingguan (${rental.rate_type})`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between w-full sm:w-auto sm:ml-auto gap-3 pt-3 sm:pt-0 border-t sm:border-0 border-border/50">
+                            <Label className="text-xs text-muted-foreground sm:hidden">Jumlah (RM)</Label>
+                            <div>
+                              <Label className="text-xs text-muted-foreground hidden sm:block mb-1 text-right">Jumlah (RM)</Label>
+                              <Input
+                                type="number"
+                                value={selectedRentals[rental.id]?.amount || rental.display_price}
+                                onChange={(e) => handleAmountChange(rental.id, e.target.value)}
+                                disabled={!selectedRentals[rental.id]?.selected}
+                                className="w-28 h-9 text-right font-bold"
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -740,16 +745,16 @@ export function EnhancedRentalModule({
                   {paymentMethod === 'manual' && (
                     <div className="space-y-2">
                       <Label>Muat Naik Resit</Label>
-                      <Input 
-                        type="file" 
-                        onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} 
-                        className="h-12 pt-2 rounded-xl bg-secondary/20" 
+                      <Input
+                        type="file"
+                        onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                        className="h-12 pt-2 rounded-xl bg-secondary/20"
                       />
                     </div>
                   )}
 
-                  <Button 
-                    disabled={isProcessing || selectedCount === 0} 
+                  <Button
+                    disabled={isProcessing || selectedCount === 0}
                     className="w-full h-12 rounded-xl text-md font-bold shadow-lg shadow-primary/20"
                   >
                     {isProcessing ? (
@@ -765,8 +770,8 @@ export function EnhancedRentalModule({
                   <AlertCircle className="w-10 h-10 mx-auto mb-4 opacity-20" />
                   <p className="text-lg font-medium">Tiada lokasi aktif untuk dibayar</p>
                   <p className="text-sm mt-1">Sila mohon tapak dahulu dalam tab Status Tapak</p>
-                  <Button 
-                    className="mt-4" 
+                  <Button
+                    className="mt-4"
                     variant="outline"
                     onClick={() => setActiveTab('status')}
                   >
@@ -786,97 +791,168 @@ export function EnhancedRentalModule({
               <CardDescription>Sejarah bayaran sewa kepada organizer</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-secondary/30">
-                  <TableRow>
-                    <TableHead className="pl-6">Tarikh</TableHead>
-                    <TableHead>Lokasi</TableHead>
-                    <TableHead>Organizer</TableHead>
-                    <TableHead>Keterangan</TableHead>
-                    <TableHead className="text-right">Jumlah</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-center">Resit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.map((pay: any) => (
-                    <TableRow key={pay.id}>
-                      <TableCell className="pl-6 font-mono text-xs text-muted-foreground">
+              <div className="hidden lg:block overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-secondary/30">
+                    <TableRow>
+                      <TableHead className="pl-6">Tarikh</TableHead>
+                      <TableHead>Lokasi</TableHead>
+                      <TableHead>Organizer</TableHead>
+                      <TableHead>Keterangan</TableHead>
+                      <TableHead className="text-right">Jumlah</TableHead>
+                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className="text-center">Resit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((pay: any) => (
+                      <TableRow key={pay.id}>
+                        <TableCell className="pl-6 font-mono text-xs text-muted-foreground">
+                          {(() => {
+                            const dateStr = pay.payment_date || pay.date
+                            if (!dateStr) return '-'
+                            const date = new Date(dateStr)
+                            if (isNaN(date.getTime())) return '-'
+                            return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                          })()}
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {pay.location_name ? (
+                            <div className="flex items-center gap-1">
+                              <Store className="w-3 h-3 text-muted-foreground" />
+                              {pay.location_name}
+                              {pay.program_name && (
+                                <span className="text-xs text-muted-foreground">({pay.program_name})</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {pay.organizer_name ? (
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">{pay.organizer_name}</span>
+                              {pay.organizer_code && (
+                                <span className="text-xs text-muted-foreground">{pay.organizer_code}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
+                          {pay.source === 'tenant_transactions' && (
+                            <Badge variant="outline" className="text-[10px] mt-1 bg-blue-50 text-blue-600 border-blue-200">
+                              Dari Akaun
+                            </Badge>
+                          )}
+                        </TableCell>
                         {(() => {
-                          const dateStr = pay.payment_date || pay.date
-                          if (!dateStr) return '-'
-                          const date = new Date(dateStr)
-                          if (isNaN(date.getTime())) return '-'
-                          return date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                          const display = getTransactionDisplay(pay)
+                          return (
+                            <TableCell className={cn("text-right font-bold", display.amountClass)}>
+                              {display.amountPrefix} RM {Number(pay.amount).toFixed(2)}
+                            </TableCell>
+                          )
                         })()}
-                      </TableCell>
-                      <TableCell className="font-medium text-sm">
-                        {pay.location_name ? (
-                          <div className="flex items-center gap-1">
-                            <Store className="w-3 h-3 text-muted-foreground" />
-                            {pay.location_name}
-                            {pay.program_name && (
-                              <span className="text-xs text-muted-foreground">({pay.program_name})</span>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              pay.status === "approved" || pay.status === "pending"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : "bg-red-50 text-red-600 border-red-100",
                             )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {pay.organizer_name ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium text-foreground">{pay.organizer_name}</span>
-                            {pay.organizer_code && (
-                              <span className="text-xs text-muted-foreground">{pay.organizer_code}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
-                        {pay.source === 'tenant_transactions' && (
-                          <Badge variant="outline" className="text-[10px] mt-1 bg-blue-50 text-blue-600 border-blue-200">
-                            Dari Akaun
+                          >
+                            {pay.status === 'approved' || pay.status === 'pending' ? 'Berjaya' : 'Ditolak'}
                           </Badge>
-                        )}
-                      </TableCell>
-                      {(() => {
-                        const display = getTransactionDisplay(pay)
-                        return (
-                          <TableCell className={cn("text-right font-bold", display.amountClass)}>
-                            {display.amountPrefix} RM {Number(pay.amount).toFixed(2)}
-                          </TableCell>
-                        )
-                      })()}
-                      <TableCell className="text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {pay.receipt_url ? (
+                            <a href={pay.receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-primary">
+                              <FileText size={16} />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {history.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-6">Tiada rekod.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="lg:hidden divide-y divide-border">
+                {history.map((pay: any) => (
+                  <div key={pay.id} className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <div className="text-xs font-mono text-muted-foreground">
+                          {(() => {
+                            const dateStr = pay.payment_date || pay.date
+                            if (!dateStr) return '-'
+                            const date = new Date(dateStr)
+                            return isNaN(date.getTime()) ? '-' : date.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
+                          })()}
+                        </div>
+                        <div className="font-bold text-foreground">
+                          {pay.location_name || "Tanpa Lokasi"}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Building2 className="w-3 h-3" />
+                          {pay.organizer_name || "Tanpa Organizer"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {(() => {
+                          const display = getTransactionDisplay(pay)
+                          return (
+                            <div className={cn("font-bold text-base", display.amountClass)}>
+                              {display.amountPrefix} RM {Number(pay.amount).toFixed(2)}
+                            </div>
+                          )
+                        })()}
                         <Badge
                           variant="outline"
                           className={cn(
-                            pay.status === "approved"
+                            "mt-1 text-[10px] uppercase font-bold",
+                            pay.status === "approved" || pay.status === "pending"
                               ? "bg-green-100 text-green-700 border-green-200"
-                              : "bg-amber-50 text-amber-600 border-amber-100",
+                              : "bg-red-50 text-red-600 border-red-100",
                           )}
                         >
-                          {pay.status === 'approved' ? 'Berjaya' : 'Menunggu'}
+                          {pay.status === 'approved' || pay.status === 'pending' ? 'Berjaya' : 'Ditolak'}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {pay.receipt_url ? (
-                          <a href={pay.receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-primary">
-                            <FileText size={16} />
-                          </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-secondary/20 p-2 rounded-xl">
+                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        {pay.remarks || "Bayaran Sewa"}
+                        {pay.source === 'tenant_transactions' && (
+                          <span className="ml-2 text-blue-600 font-bold">(Akaun)</span>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {history.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-6">Tiada rekod.</TableCell></TableRow>}
-                </TableBody>
-              </Table>
+                      </div>
+                      {pay.receipt_url ? (
+                        <a href={pay.receipt_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-bold text-primary">
+                          <FileText size={14} /> Resit
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold">Tiada Resit</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {history.length === 0 && (
+                  <div className="py-12 text-center text-muted-foreground">
+                    Tiada rekod pembayaran ditemui.
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -961,9 +1037,9 @@ function RentalCard({
             <div className="flex items-center gap-2">
               <Badge className={cn("capitalize border-none",
                 rental.status === 'active' ? "bg-green-100 text-green-700" :
-                rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
-                rental.status === 'pending' ? "bg-amber-100 text-amber-700" :
-                "bg-gray-100 text-gray-600"
+                  rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
+                    rental.status === 'pending' ? "bg-amber-100 text-amber-700" :
+                      "bg-gray-100 text-gray-600"
               )}>
                 {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
               </Badge>
@@ -1211,18 +1287,18 @@ const JENIS_OPERASI = [
   { value: "bazar_raya", label: "Bazar Raya", types: ["bazar_raya"] },
 ]
 
-function LocationSelector({ 
-  tenantId, 
+function LocationSelector({
+  tenantId,
   availableLocations,
   allLocations,
   hasApprovedOrganizer,
-  onUpdate 
-}: { 
+  onUpdate
+}: {
   tenantId: number
   availableLocations: any[]
   allLocations: any[]
   hasApprovedOrganizer: boolean
-  onUpdate: () => void 
+  onUpdate: () => void
 }) {
   const [selectedLocationIds, setSelectedLocationIds] = useState<number[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -1234,7 +1310,7 @@ function LocationSelector({
   const [selectedJenisOperasi, setSelectedJenisOperasi] = useState<string>("")
 
   const handleToggleLocation = (locationId: number) => {
-    setSelectedLocationIds(prev => 
+    setSelectedLocationIds(prev =>
       prev.includes(locationId)
         ? prev.filter(id => id !== locationId)
         : [...prev, locationId]
@@ -1271,7 +1347,7 @@ function LocationSelector({
 
   // Use allLocations to show all programs (even if tenant has some locations in them)
   const uniquePrograms = [...new Set(allLocations.map((loc: any) => loc.program_name).filter(Boolean))]
-  
+
   // Filter locations based on selected program and jenis operasi
   // Use allLocations to show all, but mark assigned ones
   const filteredLocations = allLocations.filter((loc: any) => {
@@ -1367,8 +1443,8 @@ function LocationSelector({
                   {JENIS_OPERASI.map((jenis) => {
                     // Check if this jenis operasi has any locations for selected program
                     // Use allLocations to show option even if all locations are assigned
-                    const hasLocations = allLocations.some((loc: any) => 
-                      loc.program_name === selectedProgram && 
+                    const hasLocations = allLocations.some((loc: any) =>
+                      loc.program_name === selectedProgram &&
                       jenis.types.includes(loc.type)
                     )
                     return (
@@ -1420,7 +1496,7 @@ function LocationSelector({
                   <span className="bg-primary text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">3</span>
                   Pilih Lokasi
                 </Label>
-                
+
                 {filteredLocations.length > 0 ? (
                   <>
                     <div className="grid gap-2 md:grid-cols-2">
@@ -1539,7 +1615,7 @@ function LocationSelector({
                         )
                       })}
                     </div>
-                    
+
                     {/* Show selection count */}
                     {selectedLocationIds.length > 0 && (
                       <div className="flex items-center justify-between pt-4 border-t">

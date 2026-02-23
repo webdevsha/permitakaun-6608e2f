@@ -4,12 +4,12 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Shield, 
-  Lock, 
-  Database, 
-  CreditCard, 
-  Server, 
+import {
+  Shield,
+  Lock,
+  Database,
+  CreditCard,
+  Server,
   Eye,
   CheckCircle,
   AlertTriangle,
@@ -26,7 +26,7 @@ import {
 // FAQ Item Component
 function FAQItem({ question, answer, icon: Icon }: { question: string, answer: React.ReactNode, icon: any }) {
   const [isOpen, setIsOpen] = useState(false)
-  
+
   return (
     <div className="border border-border/50 rounded-xl overflow-hidden bg-white">
       <button
@@ -57,15 +57,15 @@ function FAQItem({ question, answer, icon: Icon }: { question: string, answer: R
 }
 
 // Security Feature Card
-function SecurityFeature({ 
-  icon: Icon, 
-  title, 
-  description, 
-  status 
-}: { 
-  icon: any, 
-  title: string, 
-  description: string, 
+function SecurityFeature({
+  icon: Icon,
+  title,
+  description,
+  status
+}: {
+  icon: any,
+  title: string,
+  description: string,
   status: "aktif" | "pasif" | "info"
 }) {
   const statusColors = {
@@ -73,7 +73,7 @@ function SecurityFeature({
     pasif: "bg-amber-100 text-amber-700 border-amber-200",
     info: "bg-blue-100 text-blue-700 border-blue-200"
   }
-  
+
   return (
     <div className="flex items-start gap-4 p-4 bg-white border border-border/50 rounded-xl">
       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -93,16 +93,16 @@ function SecurityFeature({
 }
 
 // Layer Card Component
-function LayerCard({ 
-  number, 
-  title, 
-  items, 
-  color 
-}: { 
-  number: string, 
-  title: string, 
-  items: string[], 
-  color: string 
+function LayerCard({
+  number,
+  title,
+  items,
+  color
+}: {
+  number: string,
+  title: string,
+  items: string[],
+  color: string
 }) {
   const colors: Record<string, string> = {
     blue: "bg-blue-50 border-blue-200",
@@ -110,7 +110,7 @@ function LayerCard({
     purple: "bg-purple-50 border-purple-200",
     orange: "bg-orange-50 border-orange-200"
   }
-  
+
   return (
     <Card className={`${colors[color]} border`}>
       <CardHeader className="pb-3">
@@ -152,20 +152,20 @@ export default function SecurityPage() {
       </header>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="bg-white border border-border/50 p-1 rounded-xl flex-wrap h-auto">
-          <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Shield className="w-4 h-4 mr-2" /> Overview
+        <TabsList className="bg-white border border-border/50 p-1 rounded-xl flex-wrap h-auto w-full md:w-auto">
+          <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 md:flex-none">
+            <Shield className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Overview</span><span className="xs:hidden">Info</span>
           </TabsTrigger>
-          <TabsTrigger value="layers" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Server className="w-4 h-4 mr-2" /> Lapisan Keselamatan
+          <TabsTrigger value="layers" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 md:flex-none">
+            <Server className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Lapisan</span><span className="xs:hidden">Aras</span>
           </TabsTrigger>
-          <TabsTrigger value="rls" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+          <TabsTrigger value="rls" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 md:flex-none">
             <Database className="w-4 h-4 mr-2" /> RLS
           </TabsTrigger>
-          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <CreditCard className="w-4 h-4 mr-2" /> Pembayaran
+          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 md:flex-none">
+            <CreditCard className="w-4 h-4 mr-2" /> <span className="hidden xs:inline">Bayaran</span><span className="xs:hidden">Bayar</span>
           </TabsTrigger>
-          <TabsTrigger value="faq" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+          <TabsTrigger value="faq" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white flex-1 md:flex-none">
             <HelpCircle className="w-4 h-4 mr-2" /> FAQ
           </TabsTrigger>
         </TabsList>
@@ -187,7 +187,7 @@ export default function SecurityPage() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3">
@@ -201,7 +201,7 @@ export default function SecurityPage() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-purple-50 border-purple-200">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3">
@@ -227,37 +227,37 @@ export default function SecurityPage() {
               <CardDescription>Sistem dilindungi oleh pelbagai lapisan keselamatan</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <SecurityFeature 
+              <SecurityFeature
                 icon={Lock}
                 title="Row Level Security (RLS)"
                 description="Kawalan akses di peringkat database - pengguna hanya lihat data sendiri"
                 status="aktif"
               />
-              <SecurityFeature 
+              <SecurityFeature
                 icon={UserCheck}
                 title="Role-Based Access Control"
                 description="Hierarki akses: Superadmin → Admin → Staff → Organizer → Tenant"
                 status="aktif"
               />
-              <SecurityFeature 
+              <SecurityFeature
                 icon={Globe}
                 title="SSL/TLS Encryption"
                 description="Semua data dihantar menggunakan HTTPS/TLS 1.3"
                 status="aktif"
               />
-              <SecurityFeature 
+              <SecurityFeature
                 icon={Database}
                 title="Encryption at Rest"
                 description="Data dalam pangkalan data dienkripsi dengan AES-256"
                 status="aktif"
               />
-              <SecurityFeature 
+              <SecurityFeature
                 icon={Eye}
                 title="Protection Against Crawling"
                 description="Tiada public API, semua akses memerlukan pengesahan"
                 status="aktif"
               />
-              <SecurityFeature 
+              <SecurityFeature
                 icon={Activity}
                 title="Audit Logging"
                 description="Semua aktiviti direkod untuk tujuan audit"
@@ -301,7 +301,7 @@ export default function SecurityPage() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
-                <LayerCard 
+                <LayerCard
                   number="1"
                   title="Lapisan Aplikasi (Next.js)"
                   color="blue"
@@ -312,7 +312,7 @@ export default function SecurityPage() {
                     "XSS Protection (React auto-escape)"
                   ]}
                 />
-                <LayerCard 
+                <LayerCard
                   number="2"
                   title="Lapisan Pengesahan (Supabase Auth)"
                   color="green"
@@ -323,7 +323,7 @@ export default function SecurityPage() {
                     "Automatic Token Rotation"
                   ]}
                 />
-                <LayerCard 
+                <LayerCard
                   number="3"
                   title="Lapisan Data Access (RLS)"
                   color="purple"
@@ -334,7 +334,7 @@ export default function SecurityPage() {
                     "Policy-based permissions"
                   ]}
                 />
-                <LayerCard 
+                <LayerCard
                   number="4"
                   title="Lapisan Pangkalan Data"
                   color="orange"
@@ -397,7 +397,7 @@ export default function SecurityPage() {
             <CardContent className="space-y-4">
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
                 <p className="text-sm text-blue-800">
-                  <strong>Definisi:</strong> Row Level Security (RLS) memastikan pengguna HANYA dapat melihat 
+                  <strong>Definisi:</strong> Row Level Security (RLS) memastikan pengguna HANYA dapat melihat
                   dan mengubah data yang mereka ada hak akses - walaupun mereka cuba akses secara terus ke database.
                 </p>
               </div>
@@ -572,7 +572,7 @@ export default function SecurityPage() {
               <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
                 <h4 className="font-semibold text-green-800 mb-2">X-Signature Verification (Billplz)</h4>
                 <p className="text-sm text-green-700">
-                  Setiap callback dari Billplz disahkan menggunakan X-Signature untuk memastikan 
+                  Setiap callback dari Billplz disahkan menggunakan X-Signature untuk memastikan
                   datanya sah dan bukan dari pihak ketiga yang tidak dibenarkan.
                 </p>
               </div>
@@ -594,7 +594,7 @@ export default function SecurityPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <FAQItem 
+                <FAQItem
                   icon={AlertTriangle}
                   question="Bolehkah sistem ini di-hack?"
                   answer={
@@ -613,7 +613,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Eye}
                   question="Bolehkah data kami dicuri oleh pihak ketiga?"
                   answer={
@@ -632,7 +632,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Globe}
                   question="Bolehkah data kami di-crawl atau di-scrape oleh bot?"
                   answer={
@@ -651,7 +651,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Database}
                   question="Bagaimana dengan backup dan disaster recovery?"
                   answer={
@@ -671,7 +671,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Lock}
                   question="Adakah data pembayaran selamat?"
                   answer={
@@ -690,7 +690,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={UserCheck}
                   question="Siapa yang boleh akses data kami?"
                   answer={
@@ -710,7 +710,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Key}
                   question="Bagaimana dengan pengesahan pengguna (authentication)?"
                   answer={
@@ -727,7 +727,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Server}
                   question="Di mana data kami disimpan?"
                   answer={
@@ -739,14 +739,14 @@ export default function SecurityPage() {
                         <li><strong>Storage:</strong> Supabase Storage - AES-256 encryption</li>
                       </ul>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Semua platform mempunyai sijil keselamatan antarabangsa dan 
+                        Semua platform mempunyai sijil keselamatan antarabangsa dan
                         pasukan keselamatan khusus (dedicated security teams).
                       </p>
                     </div>
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Activity}
                   question="Adakah aktiviti pengguna direkod (audit trail)?"
                   answer={
@@ -766,7 +766,7 @@ export default function SecurityPage() {
                   }
                 />
 
-                <FAQItem 
+                <FAQItem
                   icon={Shield}
                   question="Apakah cadangan untuk meningkatkan keselamatan lagi?"
                   answer={
@@ -795,7 +795,7 @@ export default function SecurityPage() {
                 <div>
                   <h4 className="font-semibold text-foreground mb-2">Perlu Bantuan Lanjut?</h4>
                   <p className="text-muted-foreground text-sm">
-                    Jika anda mempunyai soalan keselamatan yang tidak tersenarai di atas, 
+                    Jika anda mempunyai soalan keselamatan yang tidak tersenarai di atas,
                     sila hubungi pembangun applikasi web anda.
                   </p>
                 </div>
