@@ -208,7 +208,9 @@ export function SubscriptionNotification() {
                     ? 'Langganan Aktif'
                     : accountStatus === 'expired'
                       ? 'Tempoh Percubaan Tamat'
-                      : 'Bayaran Langganan Seterusnya'
+                      : role === 'admin' || role === 'superadmin'
+                        ? 'Akses Penuh Admin'
+                        : 'Bayaran Langganan Seterusnya'
                   }
                 </h4>
                 {accountStatus === 'active' ? (
@@ -226,7 +228,9 @@ export function SubscriptionNotification() {
                   ? `Langganan anda aktif. Pembayaran seterusnya dalam ${daysUntilPayment} hari (${formatDate(nextPaymentDate!)})`
                   : accountStatus === 'expired'
                     ? 'Tempoh percubaan anda telah tamat. Sila langgan untuk terus menggunakan ciri Akaun.'
-                    : `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
+                    : role === 'admin' || role === 'superadmin'
+                      ? 'Anda mempunyai akses penuh sebagai Admin. Tiada langganan diperlukan.'
+                      : `Langganan Akaun anda perlu diperbaharui dalam ${daysUntilPayment} hari`
                 }
               </p>
               <div className="flex items-center gap-2 pt-1">

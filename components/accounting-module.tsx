@@ -1110,13 +1110,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Enterprise cannot download reports, but Sdn Bhd and SdnBhd/Berhad can
   const canDownloadReports = !isEnterprise || isAdminOrStaff
 
-  // Filter accounts for rendering
-  const activeAccounts = accounts.filter(acc => allowedTabungs.includes(acc.bankKey))
+  // All accounts are shown, but some may be disabled based on subscription tier
 
   const currentTotalPercent = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
 
   // Determine plan display name for consistency with Subscription page
   const getPlanDisplayName = () => {
+    // Admin always has full access - don't show trial label
+    if (role === 'admin' || role === 'superadmin') return 'Admin'
     if (isSdnBhdBerhad) return 'SdnBhd/Berhad'
     if (isSdnBhd) return 'Sdn Bhd'
     if (isEnterprise) return 'Enterprise'
@@ -1583,32 +1584,43 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-                  {activeAccounts.map((acc) => {
+                  {accounts.map((acc) => {
                     const bankName = bankNames[acc.bankKey as keyof typeof bankNames];
+                    const isAllowed = allowedTabungs.includes(acc.bankKey);
                     return (
-                      <div key={acc.name} className="space-y-3 group">
+                      <div key={acc.name} className={cn("space-y-3 group", !isAllowed && "opacity-50 grayscale")}>
                         <div
                           className={cn(
-                            "w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 shadow-sm border",
-                            acc.color,
+                            "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm border",
+                            isAllowed ? "group-hover:scale-110" : "cursor-not-allowed",
+                            isAllowed ? acc.color : "bg-gray-100 text-gray-400 border-gray-200",
                           )}
+                          title={isAllowed ? acc.name : "Tidak termasuk dalam pelan ini - Naik taraf untuk akses"}
                         >
                           <acc.icon className="h-5 w-5" />
                         </div>
                         <div>
                           <div className="flex items-center gap-1 mb-1">
-                            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase", acc.color.replace('bg-', 'bg-white/50 '))}>
-                              {acc.percent}
+                            <span className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase",
+                              isAllowed ? acc.color.replace('bg-', 'bg-white/50 ') : "bg-gray-100 text-gray-400 border-gray-200"
+                            )}>
+                              {isAllowed ? acc.percent : "0%"}
                             </span>
+                            {!isAllowed && (
+                              <span className="text-[8px] text-gray-400 font-medium">
+                                <Lock className="w-3 h-3 inline" />
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                          <p className={cn("text-xs font-bold uppercase tracking-wide", isAllowed ? "text-muted-foreground" : "text-gray-400")}>
                             {acc.name}
                           </p>
-                          <p className="text-xl font-bold text-foreground mt-0.5">
+                          <p className={cn("text-xl font-bold mt-0.5", isAllowed ? "text-foreground" : "text-gray-400")}>
                             RM {acc.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                           {/* Show bank name if set */}
-                          {bankName && (
+                          {bankName && isAllowed && (
                             <p className="text-xs text-primary font-medium mt-0.5 break-words max-w-[120px]" title={bankName}>
                               {bankName}
                             </p>
@@ -1617,8 +1629,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           {acc.bankKey === 'operating' && (
                             <p className="text-[10px] text-muted-foreground/80 mt-0.5 font-medium">(Operating Account)</p>
                           )}
-                          <p className="text-[10px] text-muted-foreground/60 italic mt-0.5">
-                            {acc.tag}
+                          <p className={cn("text-[10px] italic mt-0.5", isAllowed ? "text-muted-foreground/60" : "text-gray-400")}>
+                            {isAllowed ? acc.tag : "Naik taraf untuk akses"}
                           </p>
                         </div>
                       </div>

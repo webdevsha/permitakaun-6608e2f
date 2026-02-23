@@ -377,6 +377,8 @@ export function SubscriptionTab() {
               <p className="font-medium">
                 {hasActiveSubscription ? (
                   <span className="text-green-600">Aktif</span>
+                ) : role === 'admin' || role === 'superadmin' ? (
+                  <span className="text-purple-600">Full Access (Admin)</span>
                 ) : (
                   <span className="text-blue-600">Percubaan Percuma</span>
                 )}
