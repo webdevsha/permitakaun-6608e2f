@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
                     status: 'approved',
                     billplz_id: billplzId,
                     receipt_url: receiptUrlStr,
-                    updated_at: new Date().toISOString()
                 })
                 .eq('id', payment.id)
 

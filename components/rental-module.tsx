@@ -26,7 +26,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { initiatePayment } from "@/actions/payment"
+import { initiatePayment, recordRentPaymentsAction } from "@/actions/payment"
 
 export function RentalModule({ initialTenant, initialLocations, initialHistory, initialAvailable, initialLinkedOrganizers }: any) {
   const { user } = useAuth()
@@ -565,6 +565,26 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
           remarks: `Bayaran Manual - ${selectedLoc?.location_name || 'Sewa'}`,
         })
         if (insertError) throw new Error(insertError.message)
+
+        // Create tenant_transactions (expense) + organizer_transactions (income) via server action
+        // (idempotent fallback in case DB trigger missed)
+        try {
+          await recordRentPaymentsAction([{
+            tenantId: tenant.id,
+            profileId: tenant.profile_id || null,
+            organizerId: selectedLoc?.organizer_id || null,
+            locationId: selectedLoc?.location_id || null,
+            amount: finalAmount,
+            paymentDate: payDate,
+            receiptUrl: receiptUrl || null,
+            locationName: selectedLoc?.location_name || null,
+            tenantName: (tenant as any).business_name || tenant.full_name || null,
+            organizerName: selectedLoc?.organizers?.name || null,
+            billplzId: null,
+          }])
+        } catch (e) {
+          console.warn('[Payment] recordRentPaymentsAction failed (trigger may have handled it):', e)
+        }
 
         toast.success("Bayaran manual berjaya direkodkan.")
         setIsProcessing(false)
