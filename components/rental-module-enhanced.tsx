@@ -742,13 +742,17 @@ export function EnhancedRentalModule({
         {/* History Tab */}
         <TabsContent value="history" className="mt-6">
           <Card className="bg-white border-border/50 shadow-sm rounded-[2rem] overflow-hidden">
-            <CardHeader><CardTitle className="text-foreground font-serif">Rekod Pembayaran</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-foreground font-serif">Rekod Pembayaran</CardTitle>
+              <CardDescription>Sejarah bayaran sewa kepada organizer</CardDescription>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader className="bg-secondary/30">
                   <TableRow>
                     <TableHead className="pl-6">Tarikh</TableHead>
                     <TableHead>Lokasi</TableHead>
+                    <TableHead>Organizer</TableHead>
                     <TableHead>Keterangan</TableHead>
                     <TableHead className="text-right">Jumlah</TableHead>
                     <TableHead className="text-center">Status</TableHead>
@@ -772,6 +776,21 @@ export function EnhancedRentalModule({
                           <div className="flex items-center gap-1">
                             <Store className="w-3 h-3 text-muted-foreground" />
                             {pay.location_name}
+                            {pay.program_name && (
+                              <span className="text-xs text-muted-foreground">({pay.program_name})</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {pay.organizer_name ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium text-foreground">{pay.organizer_name}</span>
+                            {pay.organizer_code && (
+                              <span className="text-xs text-muted-foreground">{pay.organizer_code}</span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -779,6 +798,11 @@ export function EnhancedRentalModule({
                       </TableCell>
                       <TableCell>
                         <div className="font-medium text-foreground">{pay.remarks || "Bayaran Sewa"}</div>
+                        {pay.source === 'tenant_transactions' && (
+                          <Badge variant="outline" className="text-[10px] mt-1 bg-blue-50 text-blue-600 border-blue-200">
+                            Dari Akaun
+                          </Badge>
+                        )}
                       </TableCell>
                       {(() => {
                         const display = getTransactionDisplay(pay)
@@ -811,7 +835,7 @@ export function EnhancedRentalModule({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {history.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-6">Tiada rekod.</TableCell></TableRow>}
+                  {history.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-6">Tiada rekod.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>

@@ -6,6 +6,8 @@ import { redirect } from "next/navigation"
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// This page handles ALL tenants (not just tenant_id 44)
+// It fetches the current user's tenant data and displays their payment history
 export default async function RentalsPage() {
     const supabase = await createClient()
 
@@ -15,7 +17,7 @@ export default async function RentalsPage() {
         redirect('/login')
     }
 
-    // Get tenant data for the user
+    // Get tenant data for the CURRENT user (works for ALL tenants)
     const { data: tenantData } = await supabase
         .from('tenants')
         .select('*')
@@ -124,26 +126,148 @@ export default async function RentalsPage() {
         }))
     }
 
-    // Get payment history from tenant_payments table (where rent payments are stored)
+    // Get payment history from BOTH:
+    // 1. tenant_payments table (online/manual payments)
+    // 2. tenant_transactions table (rent expenses recorded in Akaun)
+    // This ensures Sejarah Bayaran tallies with Senarai Transaksi in Akaun
+    // Works for ALL tenants (tenant_id 44 and every other tenant)
     let history: any[] = []
     if (tenantData) {
+        console.log(`[RentalsPage] Fetching payment history for tenant_id: ${tenantData.id}`)
+        // Fetch from tenant_payments
         const { data: paymentData } = await supabase
             .from('tenant_payments')
-            .select('*')
+            .select(`
+                *,
+                locations:location_id (name, program_name),
+                organizers:organizer_id (name, organizer_code)
+            `)
             .eq('tenant_id', tenantData.id)
             .order('payment_date', { ascending: false })
         
-        history = (paymentData || []).map(payment => ({
-            id: payment.id,
+        const paymentHistory = (paymentData || []).map(payment => ({
+            id: `tp_${payment.id}`,
+            source: 'tenant_payments',
             payment_date: payment.payment_date,
             remarks: payment.remarks || `Bayaran sewa - ${payment.payment_method || 'Online'}`,
             amount: payment.amount,
+            type: 'expense', // Cash out
             status: payment.status,
             receipt_url: payment.receipt_url,
             payment_method: payment.payment_method,
             billplz_id: payment.billplz_id,
-            is_sandbox: payment.is_sandbox
+            is_sandbox: payment.is_sandbox,
+            // Location info
+            location_name: payment.locations?.name,
+            program_name: payment.locations?.program_name,
+            // Organizer info
+            organizer_name: payment.organizers?.name,
+            organizer_code: payment.organizers?.organizer_code
         }))
+
+        // Fetch from tenant_transactions (rent-related expenses recorded in Akaun)
+        // Also get location/organizer info from tenant_locations
+        const { data: transactionData } = await supabase
+            .from('tenant_transactions')
+            .select('*')
+            .eq('tenant_id', tenantData.id)
+            .in('category', ['Sewa', 'Bayaran Sewa', 'Rent', 'Rental'])
+            .order('date', { ascending: false })
+        
+        // Get tenant's locations with organizer info for linking
+        // Also get organizer info from locations table if tenant_locations.organizer_id is NULL
+        const { data: tenantLocs } = await supabase
+            .from('tenant_locations')
+            .select(`
+                *,
+                locations:location_id (name, program_name, organizer_id),
+                organizers:organizer_id (name, organizer_code)
+            `)
+            .eq('tenant_id', tenantData.id)
+            .eq('is_active', true)
+        
+        // Also fetch all organizers for this tenant's locations (fallback)
+        const locationIds = tenantLocs?.map((tl: any) => tl.location_id).filter(Boolean) || []
+        let organizersMap = new Map()
+        if (locationIds.length > 0) {
+            const { data: locOrgs } = await supabase
+                .from('locations')
+                .select('id, organizer_id, organizers:organizer_id (name, organizer_code)')
+                .in('id', locationIds)
+            locOrgs?.forEach((loc: any) => {
+                organizersMap.set(loc.id, loc.organizers)
+            })
+        }
+        
+        // Create a lookup map for locations
+        const locationMap = new Map()
+        tenantLocs?.forEach((tl: any) => {
+            // Try to get organizer from tenant_locations first, then from locations table
+            const organizerFromTL = tl.organizers
+            const organizerFromLoc = organizersMap.get(tl.location_id)
+            const organizer = organizerFromTL || organizerFromLoc
+            
+            locationMap.set(tl.location_id, {
+                location_name: tl.locations?.name,
+                program_name: tl.locations?.program_name,
+                organizer_name: organizer?.name,
+                organizer_code: organizer?.organizer_code
+            })
+        })
+        
+        // Default to first location if available
+        const firstLoc = locationMap.values().next().value
+        const defaultLocation = firstLoc || null
+        
+        const transactionHistory = (transactionData || []).map(tx => {
+            // Try to extract location from description or use default
+            // Example: "Bayaran Sewa - Lokasi ABC" or "Sewa Uptown"
+            let matchedLocation = null
+            
+            // Try to match location name in description
+            if (tx.description) {
+                for (const [locId, locInfo] of locationMap) {
+                    if (tx.description.toLowerCase().includes((locInfo.location_name || '').toLowerCase())) {
+                        matchedLocation = locInfo
+                        break
+                    }
+                }
+            }
+            
+            // Use matched location or default
+            const locationInfo = matchedLocation || defaultLocation || {
+                location_name: null,
+                program_name: null,
+                organizer_name: null,
+                organizer_code: null
+            }
+            
+            return {
+                id: `tt_${tx.id}`,
+                source: 'tenant_transactions',
+                payment_date: tx.date,
+                remarks: tx.description || `Bayaran Sewa (${tx.category})`,
+                amount: tx.amount,
+                type: tx.type || 'expense',
+                status: tx.status,
+                receipt_url: tx.receipt_url,
+                payment_method: 'Akaun',
+                billplz_id: null,
+                is_sandbox: false,
+                // Location/organizer info from matching or default
+                location_name: locationInfo.location_name,
+                program_name: locationInfo.program_name,
+                organizer_name: locationInfo.organizer_name,
+                organizer_code: locationInfo.organizer_code
+            }
+        })
+
+        // Combine and sort by date (newest first)
+        history = [...paymentHistory, ...transactionHistory]
+            .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
+            .slice(0, 100) // Limit to 100 records
+        
+        console.log(`[RentalsPage] Tenant ${tenantData.id}: ${paymentHistory.length} payments + ${transactionHistory.length} transactions = ${history.length} total`)
     }
 
     return (
