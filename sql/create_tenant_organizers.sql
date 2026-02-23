@@ -73,7 +73,7 @@ BEGIN
   WHERE organizer_code = p_organizer_code;
 
   IF v_organizer_id IS NULL THEN
-    RAISE EXCEPTION 'Kod Penganjur tidak sah';
+    RAISE EXCEPTION 'ID Penganjur tidak sah';
   END IF;
 
   -- 2. Check if already linked

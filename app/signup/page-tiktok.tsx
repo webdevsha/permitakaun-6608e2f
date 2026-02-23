@@ -170,7 +170,7 @@ export default function SignupPage() {
               </div>
               {role === 'tenant' && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="organizerCode" className="text-sm font-medium">Kod Penganjur (Jika Ada)</Label>
+                  <Label htmlFor="organizerCode" className="text-sm font-medium">ID Penganjur (Jika Ada)</Label>
                   <Input
                     id="organizerCode"
                     className="border-input rounded-xl h-11 bg-white"

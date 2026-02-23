@@ -25,7 +25,9 @@ import { useAuth } from "@/components/providers/auth-provider"
 
 export default function HelpPage() {
   const { role } = useAuth()
-  const [activeTab, setActiveTab] = useState(role || "admin")
+  // Default to user's own role tab, fallback to tenant (visible to all)
+  const defaultTab = role === 'superadmin' ? 'admin' : (role || 'tenant')
+  const [activeTab, setActiveTab] = useState(defaultTab)
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -41,17 +43,35 @@ export default function HelpPage() {
         </div>
       </header>
 
+      {/*
+        VISIBILITY RULES:
+        - Admin: sees Admin, Organizer, Tenant (NOT Staff)
+        - Staff: sees Staff, Organizer, Tenant (NOT Admin)
+        - Superadmin: sees ALL tabs
+        - Organizer: sees Organizer, Tenant (NOT Admin, NOT Staff)
+        - Tenant: sees Tenant only (NOT Admin, NOT Staff, NOT Organizer)
+
+        To unhide a tab for a role, add the role to the condition check.
+        Example: To show Staff tab for Admin, change the staff condition to:
+          {(role === 'superadmin' || role === 'staff' || role === 'admin') && ( ... )}
+      */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-white border border-border/50 p-1 rounded-xl flex-wrap h-auto">
-          <TabsTrigger value="admin" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Shield className="w-4 h-4 mr-2" /> Admin
-          </TabsTrigger>
-          <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Users className="w-4 h-4 mr-2" /> Staf
-          </TabsTrigger>
-          <TabsTrigger value="organizer" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Building className="w-4 h-4 mr-2" /> Penganjur
-          </TabsTrigger>
+          {(role === 'admin' || role === 'superadmin') && (
+            <TabsTrigger value="admin" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Shield className="w-4 h-4 mr-2" /> Admin
+            </TabsTrigger>
+          )}
+          {(role === 'superadmin' || role === 'staff') && (
+            <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" /> Staf
+            </TabsTrigger>
+          )}
+          {(role === 'admin' || role === 'superadmin' || role === 'staff' || role === 'organizer') && (
+            <TabsTrigger value="organizer" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Building className="w-4 h-4 mr-2" /> Penganjur
+            </TabsTrigger>
+          )}
           <TabsTrigger value="tenant" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">
             <Store className="w-4 h-4 mr-2" /> Peniaga
           </TabsTrigger>

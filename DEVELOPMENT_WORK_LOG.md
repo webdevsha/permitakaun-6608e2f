@@ -1088,7 +1088,7 @@ AND (t.organizer_code IS NULL OR t.organizer_code = '');
 **`app/dashboard/organizer/page.tsx`**
 - Added `organizerCode` variable to fetch from profile or organizers data
 - Added display in Welcome Header section:
-  - Shows "Kod Penganjur Anda: ORGXXX" 
+  - Shows "ID Penganjur Anda: ORGXXX" 
   - Styled with primary color badge
   - Only visible if organizer code exists
 
@@ -1100,7 +1100,7 @@ AND (t.organizer_code IS NULL OR t.organizer_code = '');
 
 ---
 
-## Ringkasan Sistem Kod Penganjur (Organizer Code System)
+## Ringkasan Sistem ID Penganjur (Organizer Code System)
 
 ### Flow Pendaftaran:
 ```

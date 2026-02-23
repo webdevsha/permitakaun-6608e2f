@@ -310,7 +310,7 @@ export function OrganizerModule({ initialOrganizers, userRole: propRole }: { ini
                 <Input value={newOrg.name} onChange={e => setNewOrg({ ...newOrg, name: e.target.value })} placeholder="Contoh: Persatuan Peniaga Gombak" />
               </div>
               <div className="space-y-2">
-                <Label>Kod Penganjur (Unik)</Label>
+                <Label>ID Penganjur (Unik)</Label>
                 <Input
                   value={newOrg.code}
                   onChange={e => setNewOrg({ ...newOrg, code: e.target.value })}

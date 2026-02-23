@@ -79,7 +79,10 @@ export default async function RentalsPage() {
             type: l.type,
             display_price: l.rate_monthly || l.rate_khemah || 0,
             google_maps_url: l.google_maps_url,
+            map_url: l.map_url,
             address: l.address,
+            image_url: l.image_url,
+            description: l.description,
             is_assigned: assignedIds.has(l.id)
         }))
 
@@ -105,7 +108,10 @@ export default async function RentalsPage() {
             location_name: item.locations?.name,
             program_name: item.locations?.program_name,
             google_maps_url: item.locations?.google_maps_url,
+            map_url: item.locations?.map_url,
             address: item.locations?.address,
+            image_url: item.locations?.image_url,
+            description: item.locations?.description,
             // Organizer info for pending status
             organizer_name: item.organizers?.name,
             organizer_id: item.organizer_id,

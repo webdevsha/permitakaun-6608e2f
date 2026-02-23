@@ -865,11 +865,20 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
           <h2 className="text-3xl font-serif font-bold text-foreground leading-tight">Tetapan</h2>
           <p className="text-muted-foreground text-lg">Urus profil dan konfigurasi sistem</p>
         </div>
-        <Link href="/dashboard/help">
-          <Button variant="outline" className="rounded-xl">
-            <BookOpen className="w-4 h-4 mr-2" /> Panduan
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          {(role === 'admin' || role === 'superadmin' || role === 'staff' || isAdminExempt) && (
+            <Link href="/dashboard/security">
+              <Button variant="outline" className="rounded-xl">
+                <ShieldAlert className="w-4 h-4 mr-2" /> Keselamatan
+              </Button>
+            </Link>
+          )}
+          <Link href="/dashboard/help">
+            <Button variant="outline" className="rounded-xl">
+              <BookOpen className="w-4 h-4 mr-2" /> Panduan
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
@@ -1009,7 +1018,7 @@ export function SettingsModule({ initialProfile, initialBackups, trialPeriodDays
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {role === 'organizer' && formData.organizerCode && (
                     <div className="space-y-1">
-                      <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Kod Penganjur (Hanya Baca)</label>
+                      <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">ID Penganjur (Hanya Baca)</label>
                       <div className="font-medium text-lg text-primary">{formData.organizerCode}</div>
                       <p className="text-xs text-muted-foreground">Berikan kod ini kepada peniaga/penyewa anda.</p>
                     </div>
