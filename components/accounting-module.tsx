@@ -170,6 +170,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Check if user is in trial mode (no active subscription)
   useEffect(() => {
     const checkTrialStatus = async () => {
+      // If user has an active plan from auth context, they are NOT in trial mode
+      if (activePlan !== null && activePlan !== undefined) {
+        console.log('[TrialCheck] User has activePlan:', activePlan, '- not in trial')
+        setIsTrial(false)
+        return
+      }
+
       if (!user || role !== 'tenant') {
         setIsTrial(false)
         return
@@ -211,7 +218,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     }
 
     checkTrialStatus()
-  }, [user, role, supabase])
+  }, [user, role, supabase, activePlan])
 
   // Refresh data when window gains focus (user returns to tab)
   useEffect(() => {
@@ -414,8 +421,12 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           ? ['operating', 'tax', 'zakat']
           : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
+    console.log('[AutoAdjust] Debug:', { activePlan, isEnterprise, isSdnBhd, allowedTabungs })
+
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
     
+    console.log('[AutoAdjust] currentTotal:', currentTotal, 'percentages:', percentages)
+
     if (currentTotal === 0) {
       toast.error("Sila masukkan nilai peratus terlebih dahulu")
       return
@@ -1147,9 +1158,22 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const isEnterprise = activePlan === 'enterprise' || activePlan === 'premium'
   const isSdnBhd = activePlan === 'sdn-bhd' || activePlan === 'standard'
   const isSdnBhdBerhad = activePlan === 'sdn-bhd-berhad' || activePlan === 'berhad'
-  // Trial mode: only when activePlan is explicitly null (not undefined/loading) OR isTrial state is true
+  // Trial mode: when activePlan is explicitly null OR isTrial state is true
+  // Note: isTrial is now properly managed by the useEffect above
   const isTrialMode = activePlan === null || isTrial
   const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
+
+  // Debug logging
+  console.log('[TieredAccess] Debug:', { 
+    activePlan, 
+    isEnterprise, 
+    isSdnBhd, 
+    isSdnBhdBerhad, 
+    isTrialMode, 
+    isTrial, 
+    isAdminOrStaff, 
+    role 
+  })
 
   // Enterprise = 3 tabungs. Sdn Bhd = 4 tabungs. 
   // SdnBhd/Berhad, Admin, Staff, Trial = 7 tabungs.
@@ -1161,6 +1185,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       : isEnterprise
         ? ['operating', 'tax', 'zakat']
         : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
+
+  console.log('[TieredAccess] allowedTabungs:', allowedTabungs)
 
   // Enterprise cannot download reports, but Sdn Bhd and SdnBhd/Berhad can
   const canDownloadReports = !isEnterprise || isAdminOrStaff
