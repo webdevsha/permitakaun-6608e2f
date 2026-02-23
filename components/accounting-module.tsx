@@ -345,15 +345,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   const handleSaveConfig = async () => {
     // Determine allowed tabungs based on active plan
-    const isEnterprise = activePlan === 'premium'
-    const isSdnBhd = activePlan === 'standard'
-    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
-    const allowedTabungs = isEnterprise
-      ? ['operating', 'tax', 'zakat']
+    // Plan IDs from subscription-plans: enterprise, sdn-bhd, sdn-bhd-berhad
+    const isEnterprise = activePlan === 'enterprise' || activePlan === 'premium'
+    const isSdnBhd = activePlan === 'sdn-bhd' || activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn-bhd-berhad' || activePlan === 'berhad'
+    const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
+    const isLocalTrial = activePlan === null  // Only trial if explicitly null
+    const allowedTabungs = (isSdnBhdBerhad || isAdminOrStaff || isLocalTrial)
+      ? ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : isSdnBhdBerhad
-          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+        : isEnterprise
+          ? ['operating', 'tax', 'zakat']
           : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     // Warn if not exactly 100%, but don't force return block
@@ -382,15 +385,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // Auto-adjust percentages to make total = 100%
   const handleAutoAdjustPercentages = () => {
-    const isEnterprise = activePlan === 'premium'
-    const isSdnBhd = activePlan === 'standard'
-    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
-    const allowedTabungs = isEnterprise
-      ? ['operating', 'tax', 'zakat']
+    // Plan IDs from subscription-plans: enterprise, sdn-bhd, sdn-bhd-berhad
+    const isEnterprise = activePlan === 'enterprise' || activePlan === 'premium'
+    const isSdnBhd = activePlan === 'sdn-bhd' || activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn-bhd-berhad' || activePlan === 'berhad'
+    const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
+    const isLocalTrial = activePlan === null  // Only trial if explicitly null
+    const allowedTabungs = (isSdnBhdBerhad || isAdminOrStaff || isLocalTrial)
+      ? ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : isSdnBhdBerhad
-          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+        : isEnterprise
+          ? ['operating', 'tax', 'zakat']
           : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
@@ -422,15 +428,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // Calculate remaining percentage needed to reach 100%
   const getRemainingPercentage = () => {
-    const isEnterprise = activePlan === 'premium'
-    const isSdnBhd = activePlan === 'standard'
-    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
-    const allowedTabungs = isEnterprise
-      ? ['operating', 'tax', 'zakat']
+    // Plan IDs from subscription-plans: enterprise, sdn-bhd, sdn-bhd-berhad
+    const isEnterprise = activePlan === 'enterprise' || activePlan === 'premium'
+    const isSdnBhd = activePlan === 'sdn-bhd' || activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn-bhd-berhad' || activePlan === 'berhad'
+    const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
+    const isLocalTrial = activePlan === null  // Only trial if explicitly null
+    const allowedTabungs = (isSdnBhdBerhad || isAdminOrStaff || isLocalTrial)
+      ? ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : isSdnBhdBerhad
-          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+        : isEnterprise
+          ? ['operating', 'tax', 'zakat']
           : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
@@ -1078,21 +1087,28 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   }
 
   // --- TIERED ACCESS LOGIC ---
-  const isEnterprise = activePlan === 'premium'
-  const isSdnBhd = activePlan === 'standard'
-  const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
-  const isBasic = activePlan === 'basic' || !activePlan
+  // Plan IDs from subscription-plans: enterprise, sdn-bhd, sdn-bhd-berhad
+  // activePlan: undefined = loading, null = trial/no subscription, string = subscribed
+  const isEnterprise = activePlan === 'enterprise' || activePlan === 'premium'
+  const isSdnBhd = activePlan === 'sdn-bhd' || activePlan === 'standard'
+  const isSdnBhdBerhad = activePlan === 'sdn-bhd-berhad' || activePlan === 'berhad'
+  // Trial mode: only when activePlan is explicitly null (not undefined/loading) OR isTrial state is true
+  const isTrialMode = activePlan === null || isTrial
+  const isAdminOrStaff = role === 'superadmin' || role === 'admin' || role === 'staff'
 
-  // Enterprise = 3. Sdn Bhd = 4. SdnBhd/Berhad = 5. Others (like Ultimate or full access) = 7.
-  const allowedTabungs = isEnterprise
-    ? ['operating', 'tax', 'zakat']
+  // Enterprise = 3 tabungs. Sdn Bhd = 4 tabungs. 
+  // SdnBhd/Berhad, Admin, Staff, Trial = 7 tabungs.
+  // While loading (activePlan === undefined), default to 7 tabungs (will correct after load)
+  const allowedTabungs = (isSdnBhdBerhad || isAdminOrStaff || isTrialMode)
+    ? ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
     : isSdnBhd
       ? ['operating', 'tax', 'zakat', 'investment']
-      : isSdnBhdBerhad
-        ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+      : isEnterprise
+        ? ['operating', 'tax', 'zakat']
         : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
 
-  const canDownloadReports = !isEnterprise
+  // Enterprise cannot download reports, but Sdn Bhd and SdnBhd/Berhad can
+  const canDownloadReports = !isEnterprise || isAdminOrStaff
 
   // Filter accounts for rendering
   const activeAccounts = accounts.filter(acc => allowedTabungs.includes(acc.bankKey))
@@ -1101,9 +1117,10 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // Determine plan display name for consistency with Subscription page
   const getPlanDisplayName = () => {
-    if (isEnterprise) return 'Enterprise'
+    if (isSdnBhdBerhad) return 'SdnBhd/Berhad'
     if (isSdnBhd) return 'Sdn Bhd'
-    if (activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad') return 'SdnBhd/Berhad'
+    if (isEnterprise) return 'Enterprise'
+    if (isTrialMode || activePlan === undefined) return 'Percubaan'
     return 'Percubaan'
   }
 
@@ -1113,7 +1130,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         <div>
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>
           <p className="text-muted-foreground text-lg flex items-center">
-            Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad' ? '5 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
+            Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
             <Badge variant="outline" className={`ml-2 uppercase ${activePlan ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>{getPlanDisplayName()}</Badge>
           </p>
         </div>

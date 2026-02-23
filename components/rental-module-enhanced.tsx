@@ -24,7 +24,8 @@ import {
   ExternalLink,
   ImageIcon,
   Info,
-  X
+  X,
+  Eye
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
@@ -1014,12 +1015,12 @@ function RentalCard({
               {/* View More button - show if there's additional info */}
               {(rental.description || rental.image_url || mapsLink || rental.address) && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="w-full mt-3 text-xs text-muted-foreground hover:text-primary"
+                  className="w-full mt-3 text-xs bg-white hover:bg-primary/5 hover:text-primary hover:border-primary"
                   onClick={() => setShowDetails(true)}
                 >
-                  <Info className="w-3 h-3 mr-1" /> Lihat Maklumat Lanjut
+                  <Eye className="w-3 h-3 mr-1" /> View More
                 </Button>
               )}
             </>
@@ -1463,12 +1464,12 @@ function LocationSelector({
                             {/* View More button - always show since dialog displays program/rate/organizer info */}
                             <div className="px-3 pb-3 pt-0">
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
-                                className="w-full text-xs text-muted-foreground hover:text-primary h-7"
+                                className="w-full text-xs bg-white hover:bg-primary/5 hover:text-primary hover:border-primary h-8"
                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewingLocation(loc) }}
                               >
-                                <Info className="w-3 h-3 mr-1" /> Lihat Maklumat Lanjut
+                                <Eye className="w-3 h-3 mr-1" /> View More
                               </Button>
                             </div>
                           </label>
