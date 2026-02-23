@@ -122,6 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     } else {
                       setActivePlan(null)
                     }
+                  } else if (derivedRole === 'admin' || derivedRole === 'superadmin') {
+                    // Admins always have full access - set to full plan
+                    setActivePlan('sdn-bhd-berhad') // Full 7-tabung access for admins
                   }
 
                   // Global plan mocks based on email (overrides database)

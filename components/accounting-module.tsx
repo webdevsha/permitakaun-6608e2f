@@ -145,7 +145,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           .eq('profile_id', user.id)
           .maybeSingle()
 
-        if (error) throw error
+        // Silently handle errors - config is optional, defaults will be used
+        if (error) {
+          // Only log actual errors, not "no data found" which is expected for new users
+          if (error.code !== 'PGRST116') {
+            console.log('[Accounting] No config found for user, using defaults')
+          }
+          return
+        }
 
         if (data) {
           if (data.percentages) {
@@ -158,7 +165,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           }
         }
       } catch (e) {
-        console.error('[Accounting] Error loading config:', e)
+        // Silently ignore - config is optional
+        console.log('[Accounting] Using default config')
       }
     }
 
@@ -966,11 +974,23 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
       // Determine which table to use based on role
       const isTenant = (userRole === 'tenant' || role === 'tenant')
-      const tableName = isTenant ? 'tenant_transactions' : 'organizer_transactions'
+      const isAdmin = (userRole === 'admin' || userRole === 'superadmin' || role === 'admin' || role === 'superadmin')
+      
+      let tableName: string
+      if (isTenant) {
+        tableName = 'tenant_transactions'
+      } else if (isAdmin) {
+        tableName = 'admin_transactions'
+      } else {
+        tableName = 'organizer_transactions'
+      }
 
-      // Get organizer_id for organizer/staff/admin transactions
+      // Get entity IDs based on role
       let organizerId = null
-      if (!isTenant && user) {
+      let adminId = null
+      
+      if (!isTenant && !isAdmin && user) {
+        // Organizer/Staff - get organizer_id
         const { data: orgData } = await supabase
           .from('organizers')
           .select('id')
@@ -978,6 +998,16 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           .maybeSingle()
         if (orgData) {
           organizerId = orgData.id
+        }
+      } else if (isAdmin && user) {
+        // Admin - get admin_id
+        const { data: adminData } = await supabase
+          .from('admins')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        if (adminData) {
+          adminId = adminData.id
         }
       }
 
@@ -987,9 +1017,9 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
       // - Tenant: approved (it's their own personal Akaun)
       // - Organizer/Staff: pending (may need review)
       let defaultStatus: 'approved' | 'pending' = 'pending'
-      if (userRole === 'admin' || userRole === 'superadmin' || role === 'admin' || role === 'superadmin') {
+      if (isAdmin) {
         defaultStatus = 'approved'
-      } else if (role === 'tenant' || userRole === 'tenant') {
+      } else if (isTenant) {
         defaultStatus = 'approved' // Tenant's own transactions are auto-approved
       }
 
@@ -1015,8 +1045,16 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           setIsSaving(false)
           return
         }
+      } else if (isAdmin) {
+        // Admin transactions - always use profile_id (user.id) for consistency
+        // admin_id may be UUID or different format, but profile_id matches auth.uid()
+        txData.profile_id = user.id
+        txData.admin_id = adminId || user.id // Fallback to profile_id if admin_id not found
+        txData.is_auto_generated = false // Manual entry
+
+        console.log('[Accounting] Saving admin transaction:', { profile_id: user.id, admin_id: txData.admin_id })
       } else {
-        // Organizer/Staff/Admin transactions
+        // Organizer/Staff transactions
         txData.organizer_id = organizerId
         txData.tenant_id = entityId // May be null for non-rent transactions
         txData.is_auto_generated = false // Manual entry
@@ -1457,16 +1495,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               <div className="p-10 border-b border-border/30 bg-secondary/30 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
                   <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-2">
-                    Jumlah Pendapatan Operasi (Revenue)
+                    Lebihan / (Kurangan) Tunai
                   </p>
-                  <h3 className="text-5xl lg:text-6xl font-sans font-black tracking-tighter text-primary">
-                    RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <h3 className={cn(
+                    "text-5xl lg:text-6xl font-sans font-black tracking-tighter",
+                    cashBalance >= 0 ? "text-primary" : "text-red-600"
+                  )}>
+                    {cashBalance >= 0 ? '' : '- '}RM {Math.abs(cashBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </h3>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge className="bg-emerald-100 text-emerald-800 border-none px-2 py-0.5 rounded-md text-xs font-bold">
-                      + RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 0 })} Modal
-                    </Badge>
-                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-muted-foreground text-xs font-bold mb-1">Status Agihan</p>
@@ -1649,21 +1685,6 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </div>
               </div>
               <CardContent className="p-10 bg-white">
-
-                {/* Paid Up Capital Section */}
-                <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-slate-200 rounded-xl flex items-center justify-center text-slate-600">
-                    <Briefcase className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold uppercase text-slate-500">Modal Pusingan (Paid Up Capital)</p>
-                    <p className="text-2xl font-bold text-slate-800">
-                      RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-[10px] text-slate-400">Modal suntikan pemilik & pelabur (Tidak termasuk dalam agihan 7-Tabung)</p>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
                   {accounts.map((acc) => {
                     const bankName = bankNames[acc.bankKey as keyof typeof bankNames];
@@ -1886,8 +1907,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <span className="text-[10px] bg-blue-100 px-1.5 py-0.5 rounded">Awam</span>
                                   </div>
                                 ) : null}
-                                <Badge variant="outline" className="w-fit text-[10px] py-0 h-5 bg-slate-50 text-slate-500 border-slate-200">
+                                <Badge variant="outline" className={cn(
+                                  "w-fit text-[10px] py-0 h-5 border",
+                                  transaction.table_source === 'tenant_payments' 
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                                    : "bg-slate-50 text-slate-500 border-slate-200"
+                                )}>
                                   {transaction.category}
+                                  {transaction.table_source === 'tenant_payments' && " 💰"}
                                 </Badge>
                               </div>
                             </TableCell>
@@ -1929,8 +1956,8 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
                                 )}
-                                {/* Organizer: Can edit/delete their own transactions */}
-                                {(userRole === "organizer" || role === "organizer") && (
+                                {/* Organizer: Can edit/delete their own transactions (but NOT tenant rent payments) */}
+                                {(userRole === "organizer" || role === "organizer") && transaction.table_source !== 'tenant_payments' && (
                                   <>
                                     <Button
                                       size="icon"
