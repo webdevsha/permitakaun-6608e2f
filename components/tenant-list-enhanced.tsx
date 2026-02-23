@@ -38,9 +38,10 @@ interface TenantListEnhancedProps {
    initialTenants?: any[]
    organizerId?: string
    isAdmin?: boolean
+   adminOrganizerCode?: string
 }
 
-export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = false }: TenantListEnhancedProps) {
+export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = false, adminOrganizerCode }: TenantListEnhancedProps) {
    const { role, user } = useAuth()
    const router = useRouter()
    const supabase = createClient()
@@ -652,10 +653,17 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                                     </TableCell>
                                     <TableCell className="text-right">
                                        <div className="flex justify-end gap-1">
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
-                                             <Eye size={16} />
-                                          </Button>
-                                          {role !== 'staff' && (
+                                          {/* Admin can only click/view their own tenants */}
+                                          {(!isAdmin || tenant.is_own || (!adminOrganizerCode && tenant.organizer_code === undefined)) ? (
+                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleViewTenant(tenant)}>
+                                                <Eye size={16} />
+                                             </Button>
+                                          ) : (
+                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/30 cursor-not-allowed" disabled title="Hanya boleh lihat peniaga anda sendiri">
+                                                <Eye size={16} />
+                                             </Button>
+                                          )}
+                                          {role !== 'staff' && !isAdmin && (
                                              <Button
                                                 variant="ghost"
                                                 size="icon"

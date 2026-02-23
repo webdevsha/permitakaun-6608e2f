@@ -17,7 +17,8 @@ export async function initiatePayment(params: {
     transactionId?: string, // For public payments - update existing record
     payerEmail?: string,    // For public payments - use provided email
     payerName?: string,     // For public payments - use provided name
-    locationId?: number     // For rental payments - track which location is being rented
+    locationId?: number,    // For rental payments - track which location is being rented
+    organizerId?: string    // For rental payments - link to organizer directly
 }) {
     const supabase = await createClient()
 
@@ -266,10 +267,22 @@ export async function initiatePayment(params: {
                     .single()
 
                 if (tenant) {
+                    // Resolve organizer_id: use provided param, or look up from location
+                    let resolvedOrganizerId = params.organizerId || null
+                    if (!resolvedOrganizerId && params.locationId) {
+                        const { data: locData } = await supabase
+                            .from('locations')
+                            .select('organizer_id')
+                            .eq('id', params.locationId)
+                            .maybeSingle()
+                        resolvedOrganizerId = locData?.organizer_id || null
+                    }
+
                     const { error: txError } = await supabase.from('tenant_payments').insert({
                         tenant_id: tenant.id,
                         organizer_code: tenant.organizer_code,
-                        location_id: params.locationId || null,  // Track which location is being rented
+                        organizer_id: resolvedOrganizerId,
+                        location_id: params.locationId || null,
                         payment_date: new Date().toISOString(),
                         amount: params.amount,
                         status: 'pending',

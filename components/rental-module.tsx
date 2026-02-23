@@ -555,20 +555,20 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
           const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName)
           receiptUrl = publicUrl
         }
-        billRef = `Bayaran Manual - ${selectedLoc?.location_name || 'Sewa'}`
-
-        const { error: rpcError } = await supabase.rpc('process_rental_payment', {
-          p_tenant_id: tenant.id,
-          p_amount: finalAmount,
-          p_date: payDate,
-          p_receipt_url: receiptUrl || "",
-          p_description: `Sewa - ${selectedLoc?.location_name} (Manual)`,
-          p_category: 'Servis',
-          p_remarks: billRef
+        const { error: insertError } = await supabase.from('tenant_payments').insert({
+          tenant_id: tenant.id,
+          location_id: selectedLoc?.location_id || null,
+          organizer_id: selectedLoc?.organizer_id || null,
+          amount: finalAmount,
+          payment_date: payDate,
+          payment_method: 'manual',
+          status: 'approved',
+          receipt_url: receiptUrl || null,
+          remarks: `Bayaran Manual - ${selectedLoc?.location_name || 'Sewa'}`,
         })
-        if (rpcError) throw new Error(rpcError.message)
+        if (insertError) throw new Error(insertError.message)
 
-        toast.success("Bayaran manual direkodkan! Menunggu semakan.")
+        toast.success("Bayaran manual berjaya direkodkan.")
         setIsProcessing(false)
         setActiveTab("history")
         await fetchHistory(tenant.id)
@@ -577,7 +577,9 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         const result = await initiatePayment({
           amount: finalAmount,
           description: `Bayaran Sewa: ${selectedLoc?.location_name || 'Uptown'}`,
-          redirectPath: '/dashboard?module=rentals&view=history'
+          redirectPath: '/dashboard?module=rentals&view=history',
+          locationId: selectedLoc?.location_id || undefined,
+          organizerId: selectedLoc?.organizer_id || undefined,
         })
 
         if (result.error) throw new Error(result.error)

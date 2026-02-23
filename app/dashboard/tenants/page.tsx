@@ -36,14 +36,26 @@ export default async function TenantsPage() {
         organizerId = orgData?.id
     }
 
+    // For admin: get their organizer_code to determine which tenants they "own"
+    let adminOrganizerCode: string | undefined
+    if (role === 'admin' || role === 'superadmin') {
+        const { data: adminData } = await supabase
+            .from('admins')
+            .select('organizer_code')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+        adminOrganizerCode = adminData?.organizer_code || profile?.organizer_code || undefined
+    }
+
     // Fetch dashboard data which includes tenants
     const data = await fetchDashboardData()
 
     return (
-        <TenantListEnhanced 
+        <TenantListEnhanced
             initialTenants={data.tenants}
             organizerId={organizerId}
             isAdmin={role === 'admin' || role === 'superadmin'}
+            adminOrganizerCode={adminOrganizerCode}
         />
     )
 }

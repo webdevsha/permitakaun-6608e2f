@@ -368,37 +368,38 @@ export function EnhancedRentalModule({
           receiptUrl = publicUrl
         }
 
-        // Process each selected rental
+        // Process each selected rental - auto-approved so organizer sees immediately
         for (const rentalId of selectedIds) {
           const loc = selectedLocs.find((l: any) => l.id === rentalId)
           const amount = parseFloat(selectedRentals[rentalId]?.amount || '0')
-          const billRef = `Bayaran Manual - ${loc?.location_name || 'Sewa'}`
 
-          const { error: rpcError } = await supabase.rpc('process_rental_payment', {
-            p_tenant_id: tenant.id,
-            p_amount: amount,
-            p_date: payDate,
-            p_receipt_url: receiptUrl || "",
-            p_description: `Sewa - ${loc?.location_name} (Manual)`,
-            p_category: 'Servis',
-            p_remarks: billRef
+          const { error: insertError } = await supabase.from('tenant_payments').insert({
+            tenant_id: tenant.id,
+            location_id: loc?.location_id || null,
+            organizer_id: loc?.organizer_id || null,
+            amount: amount,
+            payment_date: payDate,
+            payment_method: 'manual',
+            status: 'approved',
+            receipt_url: receiptUrl || null,
+            remarks: `Bayaran Manual - ${loc?.location_name || 'Sewa'}`,
           })
-          if (rpcError) throw new Error(rpcError.message)
+          if (insertError) throw new Error(insertError.message)
         }
 
-        toast.success(`Bayaran manual untuk ${selectedIds.length} lokasi direkodkan! Menunggu semakan.`)
+        toast.success(`Bayaran manual untuk ${selectedIds.length} lokasi berjaya direkodkan.`)
         setIsProcessing(false)
         setActiveTab("history")
         await fetchHistory(tenant.id)
 
       } else if (paymentMethod === 'billplz') {
-        // For multiple locations, we may need to handle differently or make multiple payments
-        // For now, let's use the first selected location for the description
         const firstLoc = selectedLocs[0]
         const result = await initiatePayment({
           amount: finalAmount,
           description: `Bayaran Sewa: ${selectedIds.length} lokasi (${firstLoc?.location_name || 'Sewa'})`,
-          redirectPath: '/dashboard/rentals'
+          redirectPath: '/dashboard/rentals',
+          locationId: firstLoc?.location_id || undefined,
+          organizerId: firstLoc?.organizer_id || undefined,
         })
 
         if (result.error) throw new Error(result.error)

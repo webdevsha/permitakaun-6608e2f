@@ -648,41 +648,24 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // Total Expenses - Investment Expenses - Zakat Expenses
   const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
 
-  // Calculate actual tabung amounts based on transaction categories
-  // This ensures the tabung cards tally with the transaction list (Senarai Transaksi)
-  
-  // Helper function to calculate net amount for a tabung
-  const calculateTabungAmount = (incomeCategories: string[], expenseCategories: string[]) => {
-    const income = perspectiveTransactions
-      ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && incomeCategories.includes(t.category))
-      .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
-    
-    const expense = perspectiveTransactions
-      ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && expenseCategories.includes(t.category))
-      .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
-    
-    return income - expense
-  }
+  // 7-Tabung allocation: distribute operating revenue across all tabungs by percentage
+  // Each tabung receives (operatingRevenue × percentage / 100) as its allocated share
+  // Operating tabung is the usable balance: capital + allocation - actual expenses
 
-  // Define categories for each tabung
-  // Operating: All income except capital/modal + all expenses except zakat/investment categories
-  const operatingIncomeCategories = ['Sewa', 'Jualan', 'Perkhidmatan', 'Lain-lain', 'Deposit', 'Booking', 'Upfront']
-  const operatingExpenseCategories = [
-    'Elektrik & Air', 'Gaji & Upah', 'Maintenance', 'Belian Stok', 'Lain-lain', 
-    'Perniagaan', 'Perbelanjaan', 'Operating', 'Utiliti', 'Pembaikan'
-  ]
-  
-  // Calculate actual amounts from transactions
-  const operatingAmount = calculateTabungAmount(operatingIncomeCategories, operatingExpenseCategories) + totalCapital
-  const taxAmount = calculateTabungAmount(['Cukai', 'Tax', 'Income Tax'], ['Bayaran Cukai', 'Tax Payment'])
-  const zakatAmount = calculateTabungAmount(['Zakat'], ['Bayaran Zakat', 'Zakat Payment'])
-  const investmentAmount = calculateTabungAmount(
-    ['Pelaburan', 'Investment', 'Dividen'], 
-    ['Kelengkapan Pejabat', 'Aset / Investment', 'Aset / Propaty', 'Bangunan', 'Kenderaan', 'Alatan Mesin', 'Hartanah', 'Saham']
-  )
-  const dividendAmount = calculateTabungAmount(['Dividend', 'Dividen'], ['Dividend Payment', 'Bayaran Dividen'])
-  const savingsAmount = calculateTabungAmount(['Simpanan', 'Savings'], ['Pengeluaran Simpanan', 'Savings Withdrawal'])
-  const emergencyAmount = calculateTabungAmount(['Kecemasan', 'Emergency'], ['Perbelanjaan Kecemasan', 'Emergency Expense'])
+  // Tax tabung: allocated % of revenue (set aside for future tax payments)
+  const taxAmount = operatingRevenue * (percentages.tax / 100)
+  // Zakat tabung: allocated % of revenue minus actual zakat payments made
+  const zakatAmount = operatingRevenue * (percentages.zakat / 100) - zakatExpenses
+  // Investment tabung: allocated % of revenue minus actual investment purchases
+  const investmentAmount = operatingRevenue * (percentages.investment / 100) - investmentExpenses
+  // Dividend tabung: allocated % of revenue
+  const dividendAmount = operatingRevenue * (percentages.dividend / 100)
+  // Savings tabung: allocated % of revenue
+  const savingsAmount = operatingRevenue * (percentages.savings / 100)
+  // Emergency tabung: allocated % of revenue
+  const emergencyAmount = operatingRevenue * (percentages.emergency / 100)
+  // Operating tabung: capital + allocated operating % - all operating expenses (remainder after other allocations)
+  const operatingAmount = totalCapital + operatingRevenue * (percentages.operating / 100) - operatingExpenses
 
   const accounts = [
     {

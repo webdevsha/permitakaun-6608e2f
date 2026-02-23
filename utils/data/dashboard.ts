@@ -66,22 +66,14 @@ async function fetchDashboardDataInternal(
     let userProfile: any = null
 
     try {
-        // --- ADMIN & SUPERADMIN (Own Data Only) ---
-        // Admins can only see their own transactions and Langganan payments to PermitAkaun
+        // --- ADMIN & SUPERADMIN ---
+        // Admin sees their own Akaun transactions, ALL organizers, ALL tenants
+        // (tenants have is_own=true flag for those linked to admin's organizer_code)
         if (role === 'admin' || role === 'superadmin') {
-            const isDeveloperAdmin = email === 'admin@permit.com'
 
-            // Fetch tenants that belong to this admin (if any) - limited view
-            // Admins don't see all tenants, only relevant ones
-            tenants = []
-
-            // Fetch Admin's own transactions only (admin_transactions)
-            // Admin can see their own Akaun transactions
+            // Fetch Admin's own transactions (admin_transactions)
             try {
                 console.log(`[Dashboard] Fetching admin transactions for user ${userId}`)
-
-                // Fetch admin's own transactions using profile_id OR admin_id
-                // Some legacy data may have NULL profile_id, so we check both
                 const { data: adminTx, error: adminError } = await withTimeout(
                     () => supabase
                         .from('admin_transactions')
@@ -92,27 +84,95 @@ async function fetchDashboardDataInternal(
                     5000,
                     'admin transactions query'
                 )
-
-                if (adminError) {
-                    console.error('[Dashboard] Admin transactions error:', adminError)
-                    throw adminError
-                }
-
+                if (adminError) throw adminError
                 transactions = (adminTx || []).map(t => ({
                     ...t,
                     table_source: 'admin_transactions',
                     tenants: null
                 }))
-
                 console.log(`[Dashboard] Loaded ${transactions.length} admin transactions for user ${userId}`)
             } catch (e: any) {
                 console.error('[Dashboard] Error fetching admin transactions:', e.message || e)
                 transactions = []
             }
 
-            // Admins don't see other organizers' data
-            // They only see their own admin data
-            organizers = []
+            // Fetch ALL organizers for admin's Penganjur page
+            try {
+                const { data: allOrgs } = await withTimeout(
+                    () => supabase
+                        .from('organizers')
+                        .select('*, locations(*)')
+                        .order('name'),
+                    5000,
+                    'admin all organizers query'
+                )
+                organizers = allOrgs || []
+                console.log(`[Dashboard] Admin loaded ${organizers.length} organizers`)
+            } catch (e) {
+                console.error('[Dashboard] Error fetching all organizers for admin:', e)
+                organizers = []
+            }
+
+            // Fetch ALL tenants for admin's Peniaga page
+            // Exclude organizer accounts and mark admin's own tenants (is_own=true)
+            try {
+                // Get admin's organizer_id (by organizer_code) to check tenant_organizers
+                let adminOrgId: string | null = null
+                if (organizerCode) {
+                    const { data: adminOrg } = await supabase
+                        .from('organizers')
+                        .select('id')
+                        .eq('organizer_code', organizerCode)
+                        .maybeSingle()
+                    adminOrgId = adminOrg?.id || null
+                }
+
+                // Get tenant_ids linked to admin's organizer via tenant_organizers
+                let ownTenantIds = new Set<number>()
+                if (adminOrgId) {
+                    const { data: links } = await supabase
+                        .from('tenant_organizers')
+                        .select('tenant_id')
+                        .eq('organizer_id', adminOrgId)
+                    ;(links || []).forEach((l: any) => ownTenantIds.add(l.tenant_id))
+                }
+
+                // Get organizer profile_ids to exclude from tenants list
+                const { data: allOrganizersProfiles } = await supabase
+                    .from('organizers')
+                    .select('profile_id')
+                    .not('profile_id', 'is', null)
+                const orgProfileIds = new Set(
+                    (allOrganizersProfiles || []).map((o: any) => o.profile_id).filter(Boolean)
+                )
+
+                const { data: allTenants } = await withTimeout(
+                    () => supabase
+                        .from('tenants')
+                        .select('*, tenant_locations(location_id, status, locations(name))')
+                        .order('full_name'),
+                    5000,
+                    'admin all tenants query'
+                )
+
+                tenants = (allTenants || [])
+                    // Exclude accounts that are organizers (profile_id matches an organizer)
+                    .filter((t: any) => !t.profile_id || !orgProfileIds.has(t.profile_id))
+                    .map((t: any) => ({
+                        ...t,
+                        // is_own: legacy organizer_code match OR linked via tenant_organizers
+                        is_own: (organizerCode && t.organizer_code === organizerCode)
+                            || ownTenantIds.has(t.id),
+                        locations: t.tenant_locations?.map((l: any) => ({
+                            name: l.locations?.name,
+                            status: l.status
+                        })) || []
+                    }))
+                console.log(`[Dashboard] Admin loaded ${tenants.length} tenants (excl. organizer accounts)`)
+            } catch (e) {
+                console.error('[Dashboard] Error fetching all tenants for admin:', e)
+                tenants = []
+            }
         }
         // --- ORGANIZER ROLE (Self) OR STAFF (Mirrored Admin View) ---
         else if (role === 'organizer' || role === 'staff') {
@@ -215,52 +275,66 @@ async function fetchDashboardDataInternal(
                     transactions = []
                 }
 
-                // Also fetch tenant rent payments to this organizer's locations
-                // These are payments made by tenants to the organizer
+                // Fallback: include tenant_payments that have NO matching organizer_transaction
+                // (covers cases where trigger hasn't fired yet or backfill hasn't run)
                 try {
                     const { data: rentPayments } = await withTimeout(
                         () => supabase
                             .from('tenant_payments')
-                            .select(`
-                                *,
-                                tenants(id, full_name, business_name),
-                                locations(name)
-                            `)
+                            .select(`*, tenants(id, full_name, business_name), locations(name)`)
                             .eq('organizer_id', orgId)
                             .eq('status', 'approved')
                             .order('payment_date', { ascending: false })
-                            .limit(50),
+                            .limit(100),
                         5000,
                         'organizer rent payments query'
                     )
 
-                    // Convert tenant_payments to transaction format
-                    const rentPaymentTransactions = (rentPayments || []).map(payment => ({
-                        id: `rent_${payment.id}`, // Prefix to avoid ID collision
-                        date: payment.payment_date || payment.created_at,
-                        description: `Bayaran Sewa - ${payment.tenants?.full_name || 'Penyewa'} (${payment.locations?.name || 'Lokasi'})`,
-                        category: 'Sewa',
-                        amount: payment.amount,
-                        type: 'income',
-                        status: 'approved',
-                        receipt_url: payment.receipt_url,
-                        tenant_id: payment.tenant_id,
-                        table_source: 'tenant_payments',
-                        is_rent_payment: true,
-                        tenants: payment.tenants,
-                        location_name: payment.locations?.name,
-                        payment_reference: payment.billplz_id || payment.id
-                    }))
+                    // Build sets of already-covered references from organizer_transactions
+                    const coveredRefs = new Set(
+                        transactions
+                            .filter((t: any) => t.payment_reference)
+                            .map((t: any) => String(t.payment_reference))
+                    )
+                    const coveredManual = new Set(
+                        transactions
+                            .filter((t: any) => !t.payment_reference && t.tenant_id)
+                            .map((t: any) => `${t.tenant_id}_${t.amount}_${String(t.date).slice(0, 10)}`)
+                    )
 
-                    // Combine organizer transactions with rent payments
-                    transactions = [...transactions, ...rentPaymentTransactions]
+                    const fallbackTransactions = (rentPayments || [])
+                        .filter(payment => {
+                            if (payment.billplz_id && coveredRefs.has(payment.billplz_id)) return false
+                            if (!payment.billplz_id) {
+                                const key = `${payment.tenant_id}_${payment.amount}_${String(payment.payment_date || '').slice(0, 10)}`
+                                if (coveredManual.has(key)) return false
+                            }
+                            return true
+                        })
+                        .map(payment => ({
+                            id: `rent_${payment.id}`,
+                            date: payment.payment_date || payment.created_at,
+                            description: `Bayaran Sewa - ${payment.tenants?.full_name || 'Penyewa'} (${payment.locations?.name || 'Lokasi'})`,
+                            category: 'Sewa',
+                            amount: payment.amount,
+                            type: 'income',
+                            status: 'approved',
+                            receipt_url: payment.receipt_url,
+                            tenant_id: payment.tenant_id,
+                            table_source: 'tenant_payments',
+                            is_rent_payment: true,
+                            tenants: payment.tenants,
+                            location_name: payment.locations?.name,
+                            payment_reference: payment.billplz_id || null
+                        }))
+
+                    transactions = [...transactions, ...fallbackTransactions]
                         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                         .slice(0, 100)
 
-                    console.log(`[Dashboard] Organizer ${orgId}: ${transactions.length} total transactions (${rentPaymentTransactions.length} from rent payments)`)
+                    console.log(`[Dashboard] Organizer ${orgId}: ${transactions.length} total (${fallbackTransactions.length} fallback from tenant_payments)`)
                 } catch (e) {
                     console.error('[Dashboard] Error fetching rent payments:', e)
-                    // Keep existing transactions if rent payment fetch fails
                 }
             }
         }
