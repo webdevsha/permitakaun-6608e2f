@@ -500,7 +500,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
   // 1. Paid Up Capital (Modal)
   // Updated to include new capital terms
-  const capitalCategories = ['Modal', 'Modal Berbayar', 'Modal Pinjaman']
+  const capitalCategories = ['Modal', 'Modal Pinjaman']
   const totalCapital = perspectiveTransactions
     ?.filter((t: any) => t.type === 'income' && statusFilter.includes(t.status) && capitalCategories.includes(t.category))
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
@@ -592,13 +592,13 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     ?.filter((t: any) => t.type === 'expense' && statusFilter.includes(t.status) && zakaatCategories.includes(t.category))
     .reduce((sum: number, t: any) => sum + Number(t.amount), 0) || 0
 
-  // All other expenses go to Operating (Perbelanjaan Syarikat)
+  // All other expenses go to Operating (Perbelanjaan)
   // Total Expenses - Investment Expenses - Zakat Expenses
   const operatingExpenses = totalExpenses - investmentExpenses - zakatExpenses
 
   const accounts = [
     {
-      name: "Perbelanjaan Syarikat",
+      name: "Perbelanjaan",
       percent: `${percentages.operating}%`,
       // Logic: (Revenue * %) + Capital - Operating Expenses
       amount: (operatingRevenue * (percentages.operating / 100)) + totalCapital - operatingExpenses,
@@ -1158,7 +1158,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="income">Cash In</SelectItem>
+                        <SelectItem value="income">Pendapatan</SelectItem>
                         <SelectItem value="expense">Perbelanjaan (-)</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1190,7 +1190,6 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                           <SelectItem value="Jualan">Jualan</SelectItem>
                           <SelectItem value="Servis">Servis</SelectItem>
                           <SelectItem value="Modal">Modal (Capital)</SelectItem>
-                          <SelectItem value="Modal Berbayar">Modal Berbayar</SelectItem>
                           <SelectItem value="Modal Pinjaman">Modal Pinjaman</SelectItem>
                           <SelectItem value="Lain-lain">Lain-lain</SelectItem>
                         </>
@@ -1441,7 +1440,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
 
                         {/* Operating */}
                         <div className="grid grid-cols-12 gap-2 items-center">
-                          <Label className="col-span-3 text-sm">Perbelanjaan Syarikat</Label>
+                          <Label className="col-span-3 text-sm">Perbelanjaan</Label>
                           <Input className="col-span-3 h-9" type="number" value={percentages.operating} onChange={(e) => setPercentages({ ...percentages, operating: Number(e.target.value) })} />
                           <Input className="col-span-6 h-9" type="text" value={bankNames.operating} onChange={(e) => setBankNames({ ...bankNames, operating: e.target.value })} placeholder="Contoh: Maybank Business" />
                         </div>
@@ -2000,7 +1999,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                   <TableBody>
                     {/* Cash Inflow */}
                     <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Aliran Masuk (Cash In)</TableCell>
+                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Aliran Masuk (Pendapatan)</TableCell>
                       <TableCell></TableCell>
                     </TableRow>
                     <TableRow>

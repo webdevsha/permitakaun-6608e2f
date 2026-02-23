@@ -169,7 +169,7 @@ BEGIN
   IF v_organizer_id IS NULL THEN
     RETURN jsonb_build_object(
       'success', FALSE,
-      'error', 'Kod Penganjur tidak sah atau penganjur tidak aktif'
+      'error', 'ID Penganjur tidak sah atau penganjur tidak aktif'
     );
   END IF;
 

@@ -1138,7 +1138,7 @@ export function LocationModule({ initialLocations }: { initialLocations?: any[] 
           <div className="col-span-full py-20 text-center text-muted-foreground bg-secondary/10 rounded-3xl border border-dashed border-border">
             <MapPin className="w-12 h-12 mx-auto mb-4 opacity-20" />
             <p className="text-lg font-bold">Tiada lokasi dijumpai.</p>
-            <p className="text-sm">{role === 'organizer' ? 'Klik "Tambah Lokasi" untuk mula mendaftar tapak perniagaan.' : 'Sila hubungi penganjur anda untuk kod penganjur.'}</p>
+            <p className="text-sm">{role === 'organizer' ? 'Klik "Tambah Lokasi" untuk mula mendaftar tapak perniagaan.' : 'Sila hubungi penganjur anda untuk ID Penganjur.'}</p>
           </div>
         )}
       </div>

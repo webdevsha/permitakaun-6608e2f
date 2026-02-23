@@ -163,7 +163,7 @@ export default function SignupPage() {
             </div>
             {role === 'tenant' && (
               <div className="space-y-2">
-                <Label htmlFor="organizerCode">Kod Penganjur (Jika Ada)</Label>
+                <Label htmlFor="organizerCode">ID Penganjur (Jika Ada)</Label>
                 <Input
                   id="organizerCode"
                   className="border-input rounded-xl h-11"
@@ -179,7 +179,7 @@ export default function SignupPage() {
 
 
 
-            {/* Note: Kod Penganjur removed - can be added later in Tetapan */}
+            {/* Note: ID Penganjur removed - can be added later in Tetapan */}
 
 
             {/* Documents Note - Hidden on signup, can be added later */}

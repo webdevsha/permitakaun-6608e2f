@@ -363,7 +363,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
         .maybeSingle()
 
       if (orgError || !org) {
-        toast.error("Kod Penganjur tidak sah atau tidak dijumpai.")
+        toast.error("ID Penganjur tidak sah atau tidak dijumpai.")
         setIsVerifyingCode(false)
         return
       }
@@ -714,7 +714,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            <Label className="text-[10px] text-muted-foreground">Masukkan Kod Penganjur Baru</Label>
+                            <Label className="text-[10px] text-muted-foreground">Masukkan ID Penganjur Baru</Label>
                             <div className="flex gap-2">
                               <Input
                                 value={organizerCodeInput === " " ? "" : organizerCodeInput}
@@ -906,7 +906,7 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
                   ) : (
                     <div className="p-4 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-500 text-sm">
                       <p className="mb-2 font-medium">Tiada lokasi tersedia.</p>
-                      <p className="text-xs">Sila pastikan anda telah memasukkan <strong>Kod Penganjur</strong> yang betul di atas.</p>
+                      <p className="text-xs">Sila pastikan anda telah memasukkan <strong>ID Penganjur</strong> yang betul di atas.</p>
                     </div>
                   )}
 

@@ -83,7 +83,7 @@ export default async function OrganizerDashboardPage() {
                     </p>
                     {organizerCode && (
                         <div className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-primary/10 rounded-lg">
-                            <span className="text-xs text-muted-foreground">Kod Penganjur Anda:</span>
+                            <span className="text-xs text-muted-foreground">ID Penganjur Anda:</span>
                             <code className="text-sm font-bold text-primary font-mono">{organizerCode}</code>
                         </div>
                     )}

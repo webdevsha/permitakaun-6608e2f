@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { 
-  Loader2, 
+import {
+  Loader2,
   AlertCircle,
   CheckCircle,
   Store,
@@ -21,13 +21,22 @@ import {
   CheckCircle2,
   Trash2,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  ImageIcon,
+  Info,
+  X
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useSearchParams, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { OrganizerValidation } from "./organizer-validation"
 import { initiatePayment } from "@/actions/payment"
 
@@ -149,7 +158,10 @@ export function EnhancedRentalModule({
         type: l.type,
         display_price: l.rate_monthly || l.rate_khemah || 0,
         google_maps_url: l.google_maps_url,
+        map_url: l.map_url,
         address: l.address,
+        image_url: l.image_url,
+        description: l.description,
         is_assigned: assignedIds.has(l.id)
       }))
 
@@ -170,7 +182,10 @@ export function EnhancedRentalModule({
           location_name: item.locations?.name,
           program_name: item.locations?.program_name,
           google_maps_url: item.locations?.google_maps_url,
+          map_url: item.locations?.map_url,
           address: item.locations?.address,
+          image_url: item.locations?.image_url,
+          description: item.locations?.description,
           organizer_name: item.organizers?.name,
           rate_monthly: item.locations?.rate_monthly,
           rate_khemah: item.locations?.rate_khemah,
@@ -817,15 +832,15 @@ export function EnhancedRentalModule({
 
 // Sub-components
 
-function RentalCard({ 
-  rental, 
+function RentalCard({
+  rental,
   selectedCategory,
   setSelectedCategory,
   isUpdatingCategory,
   onUpdateCategory,
   onDeleteLocation,
   isDeleting
-}: { 
+}: {
   rental: any
   selectedCategory: Record<number, string>
   setSelectedCategory: React.Dispatch<React.SetStateAction<Record<number, string>>>
@@ -834,113 +849,132 @@ function RentalCard({
   onDeleteLocation?: (rentalId: number) => void
   isDeleting?: boolean
 }) {
+  const [showImagePopup, setShowImagePopup] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
+
+  const mapsLink = rental.google_maps_url || rental.map_url
+
   return (
-    <Card className={cn(
-      "border-border/50 shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-all",
-      rental.status === 'active' ? "bg-white" : "bg-muted/30"
-    )}>
-      <CardHeader className="pb-4 bg-secondary/30 border-b border-border/30">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            {/* Program Name Badge */}
-            {rental.program_name && (
-              <Badge variant="outline" className="mb-2 text-[10px] bg-primary/5 border-primary/20 text-primary">
-                {rental.program_name}
-              </Badge>
-            )}
-            <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
-            {/* Organizer name for all statuses */}
-            {rental.organizer_name && (
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <Building2 className="w-3 h-3" />
-                {rental.organizer_name}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge className={cn("capitalize border-none",
-              rental.status === 'active' ? "bg-green-100 text-green-700" :
-              rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
-              rental.status === 'pending' ? "bg-amber-100 text-amber-700" : 
-              "bg-gray-100 text-gray-600"
-            )}>
-              {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
-            </Badge>
-            {/* Delete button for approved/pending/active locations */}
-            {onDeleteLocation && (rental.status === 'approved' || rental.status === 'pending' || rental.status === 'active') && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                onClick={() => onDeleteLocation(rental.id)}
-                disabled={isDeleting}
-                title="Padam permohonan tapak"
-              >
-                {isDeleting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-        <CardDescription className="font-mono">
-          {rental.status === 'active' ? (
-            <>No. Petak: <strong className="text-foreground">{rental.stall_number || "Belum Ditentukan"}</strong></>
-          ) : rental.status === 'approved' ? (
-            <span className="italic text-blue-600">Sila pilih kategori sewaan</span>
-          ) : (
-            <span className="italic">
-              Menunggu Kelulusan{rental.organizer_name ? ` dari ${rental.organizer_name}` : ''}
-            </span>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-4">
-        {rental.status === 'approved' ? (
-          <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-200">
-            <div className="flex items-center gap-2 text-blue-700">
-              <CheckCircle2 className="w-5 h-5 shrink-0" />
-              <p className="font-bold text-sm">Permohonan Diluluskan!</p>
+    <>
+      <Card className={cn(
+        "border-border/50 shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-all",
+        rental.status === 'active' ? "bg-white" : "bg-muted/30"
+      )}>
+        {/* Thumbnail Image */}
+        {rental.image_url && (
+          <div
+            className="w-full h-36 overflow-hidden cursor-pointer relative group"
+            onClick={() => setShowImagePopup(true)}
+          >
+            <img
+              src={rental.image_url}
+              alt={rental.location_name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+              <ImageIcon className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Sila pilih kategori sewaan untuk mengaktifkan tapak ini.
-            </p>
-            <select
-              value={selectedCategory[rental.id] || "monthly"}
-              onChange={(e) => setSelectedCategory(prev => ({ ...prev, [rental.id]: e.target.value }))}
-              className="w-full h-10 rounded-lg border border-input bg-white px-3 text-sm"
-            >
-              {/* Only show options with prices > 0 */}
-              {(rental.rate_monthly > 0 || rental.rate_monthly_khemah > 0 || rental.rate_monthly_cbs > 0) && (
-                <option value="monthly">Bulanan</option>
-              )}
-              {(rental.rate_khemah > 0 || rental.rate_monthly_khemah > 0) && (
-                <option value="khemah">Mingguan (Khemah)</option>
-              )}
-              {(rental.rate_cbs > 0 || rental.rate_monthly_cbs > 0) && (
-                <option value="cbs">Mingguan (CBS)</option>
-              )}
-            </select>
-            <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={() => onUpdateCategory(rental.id)}
-              disabled={isUpdatingCategory}
-            >
-              {isUpdatingCategory ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Sempurnakan & Aktifkan
-            </Button>
           </div>
-        ) : (
-          <>
-            {/* Google Maps Link */}
-            {(rental.google_maps_url || rental.address) && (
-              <div className="mb-4">
-                {rental.google_maps_url ? (
-                  <a 
-                    href={rental.google_maps_url} 
-                    target="_blank" 
+        )}
+
+        <CardHeader className="pb-4 bg-secondary/30 border-b border-border/30">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              {rental.program_name && (
+                <Badge variant="outline" className="mb-2 text-[10px] bg-primary/5 border-primary/20 text-primary">
+                  {rental.program_name}
+                </Badge>
+              )}
+              <CardTitle className="text-foreground font-serif text-xl">{rental.location_name}</CardTitle>
+              {rental.organizer_name && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  {rental.organizer_name}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={cn("capitalize border-none",
+                rental.status === 'active' ? "bg-green-100 text-green-700" :
+                rental.status === 'approved' ? "bg-blue-100 text-blue-700" :
+                rental.status === 'pending' ? "bg-amber-100 text-amber-700" :
+                "bg-gray-100 text-gray-600"
+              )}>
+                {rental.status === 'approved' ? 'Tindakan Diperlukan' : rental.status}
+              </Badge>
+              {onDeleteLocation && (rental.status === 'approved' || rental.status === 'pending' || rental.status === 'active') && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                  onClick={() => onDeleteLocation(rental.id)}
+                  disabled={isDeleting}
+                  title="Padam permohonan tapak"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+          <CardDescription className="font-mono">
+            {rental.status === 'active' ? (
+              <>No. Petak: <strong className="text-foreground">{rental.stall_number || "Belum Ditentukan"}</strong></>
+            ) : rental.status === 'approved' ? (
+              <span className="italic text-blue-600">Sila pilih kategori sewaan</span>
+            ) : (
+              <span className="italic">
+                Menunggu Kelulusan{rental.organizer_name ? ` dari ${rental.organizer_name}` : ''}
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {rental.status === 'approved' ? (
+            <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-2 text-blue-700">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <p className="font-bold text-sm">Permohonan Diluluskan!</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sila pilih kategori sewaan untuk mengaktifkan tapak ini.
+              </p>
+              <select
+                value={selectedCategory[rental.id] || "monthly"}
+                onChange={(e) => setSelectedCategory(prev => ({ ...prev, [rental.id]: e.target.value }))}
+                className="w-full h-10 rounded-lg border border-input bg-white px-3 text-sm"
+              >
+                {(rental.rate_monthly > 0 || rental.rate_monthly_khemah > 0 || rental.rate_monthly_cbs > 0) && (
+                  <option value="monthly">Bulanan</option>
+                )}
+                {(rental.rate_khemah > 0 || rental.rate_monthly_khemah > 0) && (
+                  <option value="khemah">Mingguan (Khemah)</option>
+                )}
+                {(rental.rate_cbs > 0 || rental.rate_monthly_cbs > 0) && (
+                  <option value="cbs">Mingguan (CBS)</option>
+                )}
+              </select>
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => onUpdateCategory(rental.id)}
+                disabled={isUpdatingCategory}
+              >
+                {isUpdatingCategory ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Sempurnakan & Aktifkan
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Google Maps Link */}
+              {mapsLink && (
+                <div className="mb-3">
+                  <a
+                    href={mapsLink}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
                   >
@@ -948,30 +982,159 @@ function RentalCard({
                     <span>{rental.address || 'Lihat di Google Maps'}</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                ) : (
-                  <p className="text-sm text-muted-foreground flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    {rental.address}
+                </div>
+              )}
+              {!mapsLink && rental.address && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2 mb-3">
+                  <MapPin className="w-4 h-4" />
+                  {rental.address}
+                </p>
+              )}
+
+              {/* Description snippet */}
+              {rental.description && (
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
+                  {rental.description}
+                </p>
+              )}
+
+              <div className="flex justify-between items-center text-sm mb-2">
+                <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
+                <Badge variant="outline" className="capitalize">
+                  {rental.rate_type === 'khemah' || rental.rate_type === 'cbs'
+                    ? `Mingguan (${rental.rate_type})`
+                    : 'Bulanan'}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground font-medium">Kadar Semasa:</span>
+                <span className="text-2xl font-bold text-primary">RM {rental.display_price}</span>
+              </div>
+
+              {/* View More button - show if there's additional info */}
+              {(rental.description || rental.image_url || mapsLink || rental.address) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-3 text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => setShowDetails(true)}
+                >
+                  <Info className="w-3 h-3 mr-1" /> Lihat Maklumat Lanjut
+                </Button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Image Popup Dialog */}
+      {rental.image_url && (
+        <Dialog open={showImagePopup} onOpenChange={setShowImagePopup}>
+          <DialogContent className="max-w-3xl p-2 bg-white rounded-2xl">
+            <DialogHeader className="px-4 pt-2">
+              <DialogTitle className="font-serif">{rental.location_name}</DialogTitle>
+            </DialogHeader>
+            <div className="w-full max-h-[70vh] overflow-hidden rounded-xl">
+              <img
+                src={rental.image_url}
+                alt={rental.location_name}
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* View More Details Dialog */}
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="max-w-lg bg-white rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">{rental.location_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {rental.image_url && (
+              <div
+                className="w-full h-48 rounded-xl overflow-hidden cursor-pointer"
+                onClick={() => { setShowDetails(false); setShowImagePopup(true) }}
+              >
+                <img
+                  src={rental.image_url}
+                  alt={rental.location_name}
+                  className="w-full h-full object-cover hover:scale-105 transition-transform"
+                />
+              </div>
+            )}
+
+            {rental.program_name && (
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Program</p>
+                <p className="text-sm font-medium">{rental.program_name}</p>
+              </div>
+            )}
+
+            {rental.organizer_name && (
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Penganjur</p>
+                <p className="text-sm font-medium flex items-center gap-1">
+                  <Building2 className="w-3 h-3" /> {rental.organizer_name}
+                </p>
+              </div>
+            )}
+
+            {rental.description && (
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Maklumat</p>
+                <p className="text-sm">{rental.description}</p>
+              </div>
+            )}
+
+            {(mapsLink || rental.address) && (
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Lokasi</p>
+                {rental.address && (
+                  <p className="text-sm flex items-center gap-1 mb-1">
+                    <MapPin className="w-3 h-3 shrink-0" /> {rental.address}
                   </p>
+                )}
+                {mapsLink && (
+                  <a
+                    href={mapsLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                  >
+                    <MapPin className="w-4 h-4" /> Buka di Google Maps
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 )}
               </div>
             )}
-            <div className="flex justify-between items-center text-sm mb-2">
-              <span className="text-muted-foreground font-medium">Jenis Sewa:</span>
-              <Badge variant="outline" className="capitalize">
-                {rental.rate_type === 'khemah' || rental.rate_type === 'cbs' 
-                  ? `Mingguan (${rental.rate_type})` 
-                  : 'Bulanan'}
-              </Badge>
+
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Jenis Sewa</p>
+                <p className="text-sm font-medium capitalize">
+                  {rental.rate_type === 'khemah' || rental.rate_type === 'cbs'
+                    ? `Mingguan (${rental.rate_type})`
+                    : 'Bulanan'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Kadar Semasa</p>
+                <p className="text-lg font-bold text-primary">RM {rental.display_price}</p>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground font-medium">Kadar Semasa:</span>
-              <span className="text-2xl font-bold text-primary">RM {rental.display_price}</span>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+
+            {rental.stall_number && (
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">No. Petak</p>
+                <p className="text-sm font-mono font-medium">{rental.stall_number}</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -999,7 +1162,9 @@ function LocationSelector({
 }) {
   const [selectedLocationIds, setSelectedLocationIds] = useState<number[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
+  const [viewingLocation, setViewingLocation] = useState<any>(null)
+  const [showLocationImage, setShowLocationImage] = useState(false)
+
   // UI Flow: Programs & Jenis Operasi Selection
   const [selectedProgram, setSelectedProgram] = useState<string>("")
   const [selectedJenisOperasi, setSelectedJenisOperasi] = useState<string>("")
@@ -1197,19 +1362,31 @@ function LocationSelector({
                     <div className="grid gap-2 md:grid-cols-2">
                       {filteredLocations.map((loc: any) => {
                         const isAssigned = loc.is_assigned
+                        const locMapsLink = loc.google_maps_url || loc.map_url
                         return (
                           <label
                             key={loc.location_id}
                             className={cn(
-                              "flex flex-col gap-2 p-3 rounded-xl border transition-all",
-                              isAssigned 
+                              "flex flex-col gap-2 rounded-xl border transition-all overflow-hidden",
+                              isAssigned
                                 ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
                                 : selectedLocationIds.includes(loc.location_id)
                                   ? "border-primary bg-primary/5 cursor-pointer"
                                   : "border-border hover:border-primary/50 cursor-pointer"
                             )}
                           >
-                            <div className="flex items-start gap-3">
+                            {/* Location Thumbnail */}
+                            {loc.image_url && (
+                              <div className="w-full h-28 overflow-hidden">
+                                <img
+                                  src={loc.image_url}
+                                  alt={loc.location_name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                />
+                              </div>
+                            )}
+                            <div className="flex items-start gap-3 p-3 pt-2">
                               <input
                                 type="checkbox"
                                 checked={selectedLocationIds.includes(loc.location_id)}
@@ -1219,13 +1396,11 @@ function LocationSelector({
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  {/* Program Name Badge */}
                                   {loc.program_name && (
                                     <Badge variant="outline" className="text-[10px] bg-primary/5">
                                       {loc.program_name}
                                     </Badge>
                                   )}
-                                  {/* Assigned Badge */}
                                   {isAssigned && (
                                     <Badge className="text-[10px] bg-green-100 text-green-700 border-green-200">
                                       <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -1242,6 +1417,12 @@ function LocationSelector({
                                 <p className="text-xs text-muted-foreground">
                                   {loc.operating_days}
                                 </p>
+                                {/* Description snippet */}
+                                {loc.description && (
+                                  <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
+                                    {loc.description}
+                                  </p>
+                                )}
                                 {/* Show available rates */}
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {loc.rate_khemah > 0 && (
@@ -1257,11 +1438,11 @@ function LocationSelector({
                               </div>
                             </div>
                             {/* Google Maps Link */}
-                            {(loc.google_maps_url || loc.address) && (
-                              <div className="pl-7">
-                                {loc.google_maps_url ? (
-                                  <a 
-                                    href={loc.google_maps_url}
+                            {(locMapsLink || loc.address) && (
+                              <div className="px-3 pb-2 pt-0 pl-10">
+                                {locMapsLink ? (
+                                  <a
+                                    href={locMapsLink}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
@@ -1279,6 +1460,17 @@ function LocationSelector({
                                 )}
                               </div>
                             )}
+                            {/* View More button - always show since dialog displays program/rate/organizer info */}
+                            <div className="px-3 pb-3 pt-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full text-xs text-muted-foreground hover:text-primary h-7"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewingLocation(loc) }}
+                              >
+                                <Info className="w-3 h-3 mr-1" /> Lihat Maklumat Lanjut
+                              </Button>
+                            </div>
                           </label>
                         )
                       })}
@@ -1315,6 +1507,117 @@ function LocationSelector({
           </>
         )}
       </CardContent>
+
+      {/* Location Detail Dialog */}
+      <Dialog open={!!viewingLocation} onOpenChange={(open) => { if (!open) setViewingLocation(null) }}>
+        <DialogContent className="max-w-lg bg-white rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">{viewingLocation?.location_name}</DialogTitle>
+          </DialogHeader>
+          {viewingLocation && (
+            <div className="space-y-4">
+              {viewingLocation.image_url && (
+                <div
+                  className="w-full h-48 rounded-xl overflow-hidden cursor-pointer"
+                  onClick={() => { setViewingLocation(null); setShowLocationImage(true) }}
+                >
+                  <img
+                    src={viewingLocation.image_url}
+                    alt={viewingLocation.location_name}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                  />
+                </div>
+              )}
+
+              {viewingLocation.program_name && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Program</p>
+                  <p className="text-sm font-medium">{viewingLocation.program_name}</p>
+                </div>
+              )}
+
+              {viewingLocation.organizer_name && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Penganjur</p>
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> {viewingLocation.organizer_name}
+                  </p>
+                </div>
+              )}
+
+              {viewingLocation.description && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Maklumat</p>
+                  <p className="text-sm">{viewingLocation.description}</p>
+                </div>
+              )}
+
+              {(() => {
+                const link = viewingLocation.google_maps_url || viewingLocation.map_url
+                return (link || viewingLocation.address) ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground font-bold uppercase">Lokasi</p>
+                    {viewingLocation.address && (
+                      <p className="text-sm flex items-center gap-1 mb-1">
+                        <MapPin className="w-3 h-3 shrink-0" /> {viewingLocation.address}
+                      </p>
+                    )}
+                    {link && (
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                      >
+                        <MapPin className="w-4 h-4" /> Buka di Google Maps
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                ) : null
+              })()}
+
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase">Waktu Operasi</p>
+                <p className="text-sm">{viewingLocation.operating_days}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Kadar Sewa</p>
+                <div className="flex flex-wrap gap-2">
+                  {viewingLocation.rate_khemah > 0 && (
+                    <Badge variant="secondary">Khemah RM{viewingLocation.rate_khemah}</Badge>
+                  )}
+                  {viewingLocation.rate_cbs > 0 && (
+                    <Badge variant="secondary">CBS RM{viewingLocation.rate_cbs}</Badge>
+                  )}
+                  {viewingLocation.rate_monthly > 0 && (
+                    <Badge variant="secondary">Bulanan RM{viewingLocation.rate_monthly}</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Image Popup for Location */}
+      {viewingLocation?.image_url && (
+        <Dialog open={showLocationImage} onOpenChange={setShowLocationImage}>
+          <DialogContent className="max-w-3xl p-2 bg-white rounded-2xl">
+            <DialogHeader className="px-4 pt-2">
+              <DialogTitle className="font-serif">{viewingLocation.location_name}</DialogTitle>
+            </DialogHeader>
+            <div className="w-full max-h-[70vh] overflow-hidden rounded-xl">
+              <img
+                src={viewingLocation.image_url}
+                alt={viewingLocation.location_name}
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   )
 }

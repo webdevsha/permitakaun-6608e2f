@@ -73,7 +73,7 @@ export function OrganizerValidation({
 
   const handleValidate = async () => {
     if (!organizerCode.trim()) {
-      toast.error("Sila masukkan Kod Penganjur")
+      toast.error("Sila masukkan ID Penganjur")
       return
     }
 
@@ -339,7 +339,7 @@ export function OrganizerValidation({
                 <Input
                   value={organizerCode}
                   onChange={(e) => setOrganizerCode(e.target.value.toUpperCase())}
-                  placeholder="Masukkan Kod Penganjur (cth: ORG001)"
+                  placeholder="Masukkan ID Penganjur (cth: ORG001)"
                   className="pl-10 uppercase font-mono"
                   onKeyDown={(e) => e.key === 'Enter' && handleValidate()}
                 />
@@ -384,7 +384,7 @@ export function OrganizerValidation({
                   <p className="font-bold text-lg">{pendingOrganizer.name}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Kod Penganjur</Label>
+                  <Label className="text-xs text-muted-foreground">ID Penganjur</Label>
                   <p className="font-mono text-sm bg-white px-2 py-1 rounded inline-block">
                     {pendingOrganizer.organizer_code}
                   </p>

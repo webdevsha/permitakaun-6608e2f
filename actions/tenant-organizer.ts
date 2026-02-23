@@ -21,7 +21,7 @@ export async function validateOrganizerAction(organizerCode: string) {
     if (!data || data.length === 0 || !data[0].organizer_exists) {
       return {
         success: false,
-        error: "Kod Penganjur tidak sah atau tidak dijumpai"
+        error: "ID Penganjur tidak sah atau tidak dijumpai"
       }
     }
 

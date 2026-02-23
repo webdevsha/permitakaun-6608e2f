@@ -257,7 +257,7 @@ export async function submitManualSubscriptionPayment(params: {
 
             if (orgError || !organizer) {
                 console.error("[Server Action] Organizer not found:", orgError)
-                return { success: false, error: "Rekod penganjur tidak dijumpai" }
+                return { success: false, error: "ReID Penganjur tidak dijumpai" }
             }
 
             expenseResult = await supabase
