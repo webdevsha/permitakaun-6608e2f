@@ -96,6 +96,95 @@ async function fetchDashboardDataInternal(
                 transactions = []
             }
 
+            // Fetch organizer income transactions for admin who is also an organizer (e.g. admin@kumim.my = ORG002)
+            if (organizerCode) {
+                try {
+                    const { data: adminOrg } = await supabase
+                        .from('organizers').select('id').eq('organizer_code', organizerCode).maybeSingle()
+                    const adminOrgId = adminOrg?.id || null
+
+                    if (adminOrgId) {
+                        // Source A: organizer_transactions
+                        const { data: orgTx } = await withTimeout(
+                            () => supabase
+                                .from('organizer_transactions')
+                                .select('*, tenants(full_name, business_name)')
+                                .eq('organizer_id', adminOrgId)
+                                .order('date', { ascending: false })
+                                .limit(50),
+                            5000, 'admin organizer_transactions query'
+                        )
+                        const orgTransactions = (orgTx || []).map((t: any) => ({ ...t, table_source: 'organizer_transactions' }))
+
+                        // Source B: tenant_payments fallback
+                        const { data: rentPayments } = await withTimeout(
+                            () => supabase
+                                .from('tenant_payments')
+                                .select('*, tenants(id, full_name, business_name), locations(name)')
+                                .eq('organizer_id', adminOrgId)
+                                .eq('status', 'approved')
+                                .order('payment_date', { ascending: false })
+                                .limit(100),
+                            5000, 'admin rent payments query'
+                        )
+                        const coveredRefs = new Set(orgTransactions.filter((t: any) => t.payment_reference).map((t: any) => String(t.payment_reference)))
+                        const coveredManual = new Set(orgTransactions.filter((t: any) => !t.payment_reference && t.tenant_id).map((t: any) => `${t.tenant_id}_${t.amount}_${String(t.date).slice(0, 10)}`))
+                        const rentFallback = (rentPayments || [])
+                            .filter((p: any) => {
+                                if (p.billplz_id && coveredRefs.has(p.billplz_id)) return false
+                                if (!p.billplz_id) { const k = `${p.tenant_id}_${p.amount}_${String(p.payment_date || '').slice(0, 10)}`; if (coveredManual.has(k)) return false }
+                                return true
+                            })
+                            .map((p: any) => ({
+                                id: `rent_${p.id}`, date: p.payment_date || p.created_at,
+                                description: `Bayaran Sewa - ${p.tenants?.full_name || 'Penyewa'}${p.locations?.name ? ' (' + p.locations.name + ')' : ''}`,
+                                category: 'Sewa', amount: p.amount, type: 'income', status: 'approved',
+                                receipt_url: p.receipt_url, tenant_id: p.tenant_id, table_source: 'tenant_payments',
+                                is_rent_payment: true, tenants: p.tenants, location_name: p.locations?.name,
+                                payment_reference: p.billplz_id || null
+                            }))
+
+                        // Source C: tenant_transactions fallback
+                        const { data: ttForOrg } = await withTimeout(
+                            () => supabase
+                                .from('tenant_transactions')
+                                .select('*, tenants:tenant_id(full_name, business_name), locations:location_id(name)')
+                                .eq('organizer_id', adminOrgId)
+                                .eq('is_rent_payment', true)
+                                .order('date', { ascending: false })
+                                .limit(100),
+                            5000, 'admin tenant_transactions for organizer query'
+                        )
+                        const mergedSoFar = [...orgTransactions, ...rentFallback]
+                        const allRefs = new Set(mergedSoFar.filter((t: any) => t.payment_reference).map((t: any) => String(t.payment_reference)))
+                        const allManual = new Set(mergedSoFar.filter((t: any) => !t.payment_reference && t.tenant_id).map((t: any) => `${t.tenant_id}_${t.amount}_${String(t.date).slice(0, 10)}`))
+                        const ttFallback = (ttForOrg || [])
+                            .filter((tt: any) => {
+                                if (tt.payment_reference && allRefs.has(String(tt.payment_reference))) return false
+                                if (!tt.payment_reference) { const k = `${tt.tenant_id}_${tt.amount}_${String(tt.date).slice(0, 10)}`; if (allManual.has(k)) return false }
+                                return true
+                            })
+                            .map((tt: any) => ({
+                                id: `tt_org_${tt.id}`, date: tt.date || tt.created_at,
+                                description: `Bayaran Sewa - ${tt.tenants?.business_name || tt.tenants?.full_name || 'Penyewa'}${tt.locations?.name ? ' (' + tt.locations.name + ')' : ''}`,
+                                category: 'Sewa', amount: tt.amount, type: 'income', status: tt.status || 'approved',
+                                receipt_url: tt.receipt_url, tenant_id: tt.tenant_id, table_source: 'tenant_transactions',
+                                is_rent_payment: true, tenants: tt.tenants, location_name: tt.locations?.name,
+                                payment_reference: tt.payment_reference || null
+                            }))
+
+                        const orgIncome = [...orgTransactions, ...rentFallback, ...ttFallback]
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        transactions = [...transactions, ...orgIncome]
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .slice(0, 200)
+                        console.log(`[Dashboard] Admin ${organizerCode}: +${orgIncome.length} organizer income transactions`)
+                    }
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching admin organizer transactions:', e)
+                }
+            }
+
             // Fetch ALL organizers for admin's Penganjur page
             try {
                 const { data: allOrgs } = await withTimeout(
@@ -335,6 +424,69 @@ async function fetchDashboardDataInternal(
                     console.log(`[Dashboard] Organizer ${orgId}: ${transactions.length} total (${fallbackTransactions.length} fallback from tenant_payments)`)
                 } catch (e) {
                     console.error('[Dashboard] Error fetching rent payments:', e)
+                }
+
+                // Source 3: tenant_transactions where organizer_id = orgId and is_rent_payment = true
+                // Covers cases where organizer_transactions was never created but tenant_transactions exists
+                try {
+                    const { data: tenantTxForOrg } = await withTimeout(
+                        () => supabase
+                            .from('tenant_transactions')
+                            .select('*, tenants:tenant_id(full_name, business_name), locations:location_id(name)')
+                            .eq('organizer_id', orgId)
+                            .eq('is_rent_payment', true)
+                            .order('date', { ascending: false })
+                            .limit(100),
+                        5000,
+                        'tenant_transactions for organizer query'
+                    )
+
+                    if (tenantTxForOrg && tenantTxForOrg.length > 0) {
+                        const allCoveredRefs = new Set(
+                            transactions
+                                .filter((t: any) => t.payment_reference)
+                                .map((t: any) => String(t.payment_reference))
+                        )
+                        const allCoveredManual = new Set(
+                            transactions
+                                .filter((t: any) => !t.payment_reference && t.tenant_id)
+                                .map((t: any) => `${t.tenant_id}_${t.amount}_${String(t.date).slice(0, 10)}`)
+                        )
+
+                        const tenantTxFallback = (tenantTxForOrg as any[])
+                            .filter((tt: any) => {
+                                if (tt.payment_reference && allCoveredRefs.has(String(tt.payment_reference))) return false
+                                if (!tt.payment_reference) {
+                                    const key = `${tt.tenant_id}_${tt.amount}_${String(tt.date).slice(0, 10)}`
+                                    if (allCoveredManual.has(key)) return false
+                                }
+                                return true
+                            })
+                            .map((tt: any) => ({
+                                id: `tt_org_${tt.id}`,
+                                date: tt.date || tt.created_at,
+                                description: `Bayaran Sewa - ${tt.tenants?.business_name || tt.tenants?.full_name || 'Penyewa'}${tt.locations?.name ? ' (' + tt.locations.name + ')' : ''}`,
+                                category: 'Sewa',
+                                amount: tt.amount,
+                                type: 'income',
+                                status: tt.status || 'approved',
+                                receipt_url: tt.receipt_url,
+                                tenant_id: tt.tenant_id,
+                                table_source: 'tenant_transactions',
+                                is_rent_payment: true,
+                                tenants: tt.tenants,
+                                location_name: tt.locations?.name,
+                                payment_reference: tt.payment_reference || null
+                            }))
+
+                        transactions = [...transactions, ...tenantTxFallback]
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .slice(0, 150)
+
+                        console.log(`[Dashboard] Organizer ${orgId}: +${tenantTxFallback.length} from tenant_transactions (total ${transactions.length})`)
+                    }
+                } catch (e) {
+                    console.error('[Dashboard] Error fetching tenant_transactions for organizer:', e)
                 }
             }
         }

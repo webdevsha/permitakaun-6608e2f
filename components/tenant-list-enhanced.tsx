@@ -285,14 +285,28 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
    const handleApproveLocation = async (rentalId: number) => {
       setIsApprovingLocation(true)
       try {
+         // Auto-determine rate_type from location data so tenant doesn't need to pick
+         const rental = tenantRentals.find((r: any) => r.id === rentalId)
+         const loc = rental?.locations
+         let rate_type = 'monthly'
+         if (loc) {
+            const hasKhemah = (loc.rate_khemah || 0) > 0 || (loc.rate_monthly_khemah || 0) > 0
+            const hasCbs = (loc.rate_cbs || 0) > 0 || (loc.rate_monthly_cbs || 0) > 0
+            const hasMonthly = (loc.rate_monthly || 0) > 0 || (loc.rate_monthly_khemah || 0) > 0 || (loc.rate_monthly_cbs || 0) > 0
+            if (loc.type === 'cbs') rate_type = 'cbs'
+            else if (['daily', 'khemah', 'bazar_ramadhan', 'expo'].includes(loc.type)) rate_type = hasKhemah ? 'khemah' : hasCbs ? 'cbs' : 'monthly'
+            else if (!hasMonthly && hasKhemah) rate_type = 'khemah'
+            else if (!hasMonthly && !hasKhemah && hasCbs) rate_type = 'cbs'
+         }
+
          const { error } = await supabase
             .from('tenant_locations')
-            .update({ status: 'approved' })
+            .update({ status: 'active', rate_type })
             .eq('id', rentalId)
-         
+
          if (error) throw error
-         
-         toast.success("Tapak diluluskan. Peniaga perlu memilih kategori sewaan.")
+
+         toast.success("Tapak berjaya diluluskan dan diaktifkan.")
          
          // Refresh the rentals list
          if (selectedTenant) {

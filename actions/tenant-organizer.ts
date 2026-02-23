@@ -274,6 +274,40 @@ export async function deleteTenantLocationAction(rentalId: number, tenantId: num
 }
 
 /**
+ * Activate a tenant location (approved → active) with rate_type
+ * Uses admin client to bypass RLS since tenants have no UPDATE policy
+ */
+export async function activateTenantLocationAction(rentalId: number, tenantId: number, rateType: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: "Tidak dibenarkan" }
+
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('profile_id', user.id)
+    .eq('id', tenantId)
+    .maybeSingle()
+
+  if (!tenant) return { success: false, error: "Peniaga tidak dijumpai" }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('tenant_locations')
+    .update({ status: 'active', rate_type: rateType })
+    .eq('id', rentalId)
+    .eq('tenant_id', tenantId)
+
+  if (error) {
+    console.error("Error activating tenant location:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/dashboard/rentals')
+  return { success: true }
+}
+
+/**
  * Get tenant's linked organizers with status
  */
 export async function getTenantOrganizersAction(tenantId: number) {

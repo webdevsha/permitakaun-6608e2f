@@ -263,10 +263,22 @@ export function TenantList({ initialTenants }: { initialTenants?: any[] }) {
 
    const handleApproveRental = async (rentalId: number) => {
       try {
-         const { error } = await supabase.from('tenant_locations').update({ status: 'approved' }).eq('id', rentalId)
+         const rental = tenantRentals.find((r: any) => r.id === rentalId)
+         const loc = rental?.locations
+         let rate_type = 'monthly'
+         if (loc) {
+            const hasKhemah = (loc.rate_khemah || 0) > 0 || (loc.rate_monthly_khemah || 0) > 0
+            const hasCbs = (loc.rate_cbs || 0) > 0 || (loc.rate_monthly_cbs || 0) > 0
+            const hasMonthly = (loc.rate_monthly || 0) > 0 || (loc.rate_monthly_khemah || 0) > 0 || (loc.rate_monthly_cbs || 0) > 0
+            if (loc.type === 'cbs') rate_type = 'cbs'
+            else if (['daily', 'khemah', 'bazar_ramadhan', 'expo'].includes(loc.type)) rate_type = hasKhemah ? 'khemah' : hasCbs ? 'cbs' : 'monthly'
+            else if (!hasMonthly && hasKhemah) rate_type = 'khemah'
+            else if (!hasMonthly && !hasKhemah && hasCbs) rate_type = 'cbs'
+         }
+         const { error } = await supabase.from('tenant_locations').update({ status: 'active', rate_type }).eq('id', rentalId)
          if (error) throw error
-         setTenantRentals(prev => prev.map(r => r.id === rentalId ? { ...r, status: 'approved' } : r))
-         toast.success("Tapak diluluskan. Peniaga kini perlu memilih kategori sewaan.")
+         setTenantRentals((prev: any[]) => prev.map(r => r.id === rentalId ? { ...r, status: 'active', rate_type } : r))
+         toast.success("Tapak berjaya diluluskan dan diaktifkan.")
       } catch (e: any) {
          toast.error("Gagal meluluskan: " + e.message)
       }

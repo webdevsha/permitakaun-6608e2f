@@ -1,6 +1,7 @@
 import { fetchDashboardData } from "@/utils/data/dashboard"
 import { EnhancedRentalModule } from "@/components/rental-module-enhanced"
 import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { redirect } from "next/navigation"
 
 export const dynamic = 'force-dynamic'
@@ -10,6 +11,7 @@ export const revalidate = 0
 // It fetches the current user's tenant data and displays their payment history
 export default async function RentalsPage() {
     const supabase = await createClient()
+    const adminSupabase = createAdminClient()
 
     // Verify user is authenticated
     const { data: { user } } = await supabase.auth.getUser()
@@ -39,56 +41,64 @@ export default async function RentalsPage() {
         linkedOrganizers = orgData || []
     }
 
-    // Get all active locations from ALL organizers (system-wide) for "Mohon Program Baru"
+    // Get locations ONLY from organizers this tenant is approved/active with
     let allLocations: any[] = []
     let availableLocations: any[] = []
 
     if (tenantData) {
-        const { data: locData } = await supabase
-            .from('locations')
-            .select('*')
-            .order('program_name')
+        // Only show locations from approved organizers
+        const approvedOrgIds = linkedOrganizers
+            .filter((lo: any) => lo.status === 'approved' || lo.status === 'active')
+            .map((lo: any) => lo.organizer_id)
+            .filter(Boolean)
 
-        // Get all organizer names
-        const orgIds = [...new Set((locData || []).map((l: any) => l.organizer_id).filter(Boolean))]
-        const { data: orgsData } = orgIds.length > 0
-            ? await supabase.from('organizers').select('id, name').in('id', orgIds)
-            : { data: [] }
+        if (approvedOrgIds.length > 0) {
+            const { data: locData } = await supabase
+                .from('locations')
+                .select('*')
+                .in('organizer_id', approvedOrgIds)
+                .eq('status', 'active')
+                .order('program_name')
 
-        const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
+            const orgIds = [...new Set((locData || []).map((l: any) => l.organizer_id).filter(Boolean))]
+            const { data: orgsData } = orgIds.length > 0
+                ? await supabase.from('organizers').select('id, name').in('id', orgIds)
+                : { data: [] }
 
-        // Get already assigned location IDs
-        const { data: assignedLocs } = await supabase
-            .from('tenant_locations')
-            .select('location_id')
-            .eq('tenant_id', tenantData.id)
-            .eq('is_active', true)
+            const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
 
-        const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
+            const { data: assignedLocs } = await supabase
+                .from('tenant_locations')
+                .select('location_id')
+                .eq('tenant_id', tenantData.id)
+                .eq('is_active', true)
 
-        allLocations = (locData || []).map((l: any) => ({
-            location_id: l.id,
-            location_name: l.name,
-            program_name: l.program_name,
-            organizer_id: l.organizer_id,
-            organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
-            rate_khemah: l.rate_khemah,
-            rate_cbs: l.rate_cbs,
-            rate_monthly: l.rate_monthly,
-            rate_monthly_khemah: l.rate_monthly_khemah,
-            rate_monthly_cbs: l.rate_monthly_cbs,
-            operating_days: l.operating_days || 'Setiap Hari',
-            type: l.type,
-            display_price: l.rate_monthly || l.rate_khemah || 0,
-            google_maps_url: l.google_maps_url,
-            map_url: l.map_url,
-            address: l.address,
-            image_url: l.image_url,
-            description: l.description,
-            is_assigned: assignedIds.has(l.id)
-        }))
+            const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
 
-        availableLocations = allLocations.filter((loc: any) => !loc.is_assigned)
+            allLocations = (locData || []).map((l: any) => ({
+                location_id: l.id,
+                location_name: l.name,
+                program_name: l.program_name,
+                organizer_id: l.organizer_id,
+                organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
+                rate_khemah: l.rate_khemah,
+                rate_cbs: l.rate_cbs,
+                rate_monthly: l.rate_monthly,
+                rate_monthly_khemah: l.rate_monthly_khemah,
+                rate_monthly_cbs: l.rate_monthly_cbs,
+                operating_days: l.operating_days || 'Setiap Hari',
+                type: l.type,
+                display_price: l.rate_monthly || l.rate_khemah || 0,
+                google_maps_url: l.google_maps_url,
+                map_url: l.map_url,
+                address: l.address,
+                image_url: l.image_url,
+                description: l.description,
+                is_assigned: assignedIds.has(l.id)
+            }))
+
+            availableLocations = allLocations.filter((loc: any) => !loc.is_assigned)
+        }
     }
 
     // Get my locations with organizer and program details
@@ -134,8 +144,8 @@ export default async function RentalsPage() {
     let history: any[] = []
     if (tenantData) {
         console.log(`[RentalsPage] Fetching payment history for tenant_id: ${tenantData.id}`)
-        // Fetch from tenant_payments
-        const { data: paymentData } = await supabase
+        // Use admin client to bypass RLS on tenant_payments (tenant SELECT policy may not exist)
+        const { data: paymentData } = await adminSupabase
             .from('tenant_payments')
             .select(`
                 *,

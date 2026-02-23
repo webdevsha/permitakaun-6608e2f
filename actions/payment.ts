@@ -310,3 +310,105 @@ export async function initiatePayment(params: {
         return { error: e.message || "Ralat semasa memulakan pembayaran." }
     }
 }
+
+/**
+ * Create tenant_transactions (expense) and organizer_transactions (income) for a rent payment.
+ * Uses admin client to bypass RLS. Idempotent — safe to call even if DB trigger already ran.
+ */
+export async function recordRentPaymentsAction(payments: Array<{
+    tenantId: number
+    profileId: string | null
+    organizerId: string | null
+    locationId: number | null
+    amount: number
+    paymentDate: string        // YYYY-MM-DD
+    receiptUrl: string | null
+    locationName?: string | null
+    tenantName?: string | null
+    organizerName?: string | null
+    billplzId?: string | null
+}>) {
+    const admin = createAdminClient()
+
+    for (const p of payments) {
+        const dateStr = p.paymentDate.slice(0, 10)
+        const locSuffix = p.locationName ? ` - ${p.locationName}` : ''
+        const ref = p.billplzId || 'Manual'
+
+        // --- 1. tenant_transactions (expense for tenant) ---
+        const ttCheck = p.billplzId
+            ? { column: 'payment_reference', value: p.billplzId }
+            : null
+
+        let ttExists = false
+        if (ttCheck) {
+            const { data } = await admin.from('tenant_transactions')
+                .select('id').eq('tenant_id', p.tenantId).eq('is_rent_payment', true)
+                .eq(ttCheck.column, ttCheck.value).maybeSingle()
+            ttExists = !!data
+        } else {
+            const { data } = await admin.from('tenant_transactions')
+                .select('id').eq('tenant_id', p.tenantId).eq('is_rent_payment', true)
+                .eq('amount', p.amount).eq('date', dateStr).maybeSingle()
+            ttExists = !!data
+        }
+
+        if (!ttExists) {
+            await admin.from('tenant_transactions').insert({
+                tenant_id: p.tenantId,
+                profile_id: p.profileId,
+                organizer_id: p.organizerId,
+                location_id: p.locationId,
+                amount: p.amount,
+                type: 'expense',
+                category: 'Sewa',
+                status: 'approved',
+                date: dateStr,
+                description: `Bayaran Sewa/Permit${locSuffix} (Ref: ${ref})`,
+                receipt_url: p.receiptUrl,
+                is_rent_payment: true,
+                is_sandbox: false,
+                payment_reference: p.billplzId || null,
+            })
+        }
+
+        // --- 2. organizer_transactions (income for organizer) ---
+        if (p.organizerId) {
+            let otExists = false
+            if (p.billplzId) {
+                const { data } = await admin.from('organizer_transactions')
+                    .select('id').eq('organizer_id', p.organizerId).eq('tenant_id', p.tenantId)
+                    .eq('category', 'Sewa').eq('payment_reference', p.billplzId).maybeSingle()
+                otExists = !!data
+            } else {
+                const { data } = await admin.from('organizer_transactions')
+                    .select('id').eq('organizer_id', p.organizerId).eq('tenant_id', p.tenantId)
+                    .eq('category', 'Sewa').eq('amount', p.amount).eq('date', dateStr)
+                    .eq('is_auto_generated', true).maybeSingle()
+                otExists = !!data
+            }
+
+            if (!otExists) {
+                const penyewa = p.tenantName || 'Penyewa'
+                const kepada = p.organizerName || 'Organizer'
+                await admin.from('organizer_transactions').insert({
+                    organizer_id: p.organizerId,
+                    tenant_id: p.tenantId,
+                    location_id: p.locationId,
+                    amount: p.amount,
+                    type: 'income',
+                    category: 'Sewa',
+                    status: 'approved',
+                    date: dateStr,
+                    description: `Bayaran Sewa dari: ${penyewa}${locSuffix} (Kepada: ${kepada}) (Ref: ${ref})`,
+                    receipt_url: p.receiptUrl,
+                    is_auto_generated: true,
+                    is_sandbox: false,
+                    payment_reference: p.billplzId || null,
+                })
+            }
+        }
+    }
+
+    return { success: true }
+}

@@ -122,52 +122,63 @@ export function EnhancedRentalModule({
         setLinkedOrganizers(orgData as LinkedOrganizer[])
       }
 
-      // Fetch ALL active locations system-wide (all organizers)
-      const { data: allLocData } = await supabase
-        .from('locations')
-        .select('*')
-        .order('program_name')
+      // Fetch locations ONLY from organizers this tenant is approved/active with
+      const approvedOrgIds = (orgData || [])
+        .filter((o: any) => o.status === 'approved' || o.status === 'active')
+        .map((o: any) => o.organizer_id)
+        .filter(Boolean)
 
-      const locOrgIds = [...new Set((allLocData || []).map((l: any) => l.organizer_id).filter(Boolean))]
-      const { data: orgsData } = locOrgIds.length > 0
-        ? await supabase.from('organizers').select('id, name').in('id', locOrgIds)
-        : { data: [] }
+      if (approvedOrgIds.length > 0) {
+        const { data: allLocData } = await supabase
+          .from('locations')
+          .select('*')
+          .in('organizer_id', approvedOrgIds)
+          .eq('status', 'active')
+          .order('program_name')
 
-      const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
+        const locOrgIds = [...new Set((allLocData || []).map((l: any) => l.organizer_id).filter(Boolean))]
+        const { data: orgsData } = locOrgIds.length > 0
+          ? await supabase.from('organizers').select('id, name').in('id', locOrgIds)
+          : { data: [] }
 
-      // Get assigned location IDs
-      const { data: assignedLocs } = await supabase
-        .from('tenant_locations')
-        .select('location_id')
-        .eq('tenant_id', tenant.id)
-        .eq('is_active', true)
+        const orgMap = new Map((orgsData || []).map((o: any) => [o.id, o.name]))
 
-      const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
+        const { data: assignedLocs } = await supabase
+          .from('tenant_locations')
+          .select('location_id')
+          .eq('tenant_id', tenant.id)
+          .eq('is_active', true)
 
-      const updatedAllLocations = (allLocData || []).map((l: any) => ({
-        location_id: l.id,
-        location_name: l.name,
-        program_name: l.program_name,
-        organizer_id: l.organizer_id,
-        organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
-        rate_khemah: l.rate_khemah,
-        rate_cbs: l.rate_cbs,
-        rate_monthly: l.rate_monthly,
-        rate_monthly_khemah: l.rate_monthly_khemah,
-        rate_monthly_cbs: l.rate_monthly_cbs,
-        operating_days: l.operating_days || 'Setiap Hari',
-        type: l.type,
-        display_price: l.rate_monthly || l.rate_khemah || 0,
-        google_maps_url: l.google_maps_url,
-        map_url: l.map_url,
-        address: l.address,
-        image_url: l.image_url,
-        description: l.description,
-        is_assigned: assignedIds.has(l.id)
-      }))
+        const assignedIds = new Set((assignedLocs || []).map((l: any) => l.location_id))
 
-      setAllLocations(updatedAllLocations)
-      setAvailableLocations(updatedAllLocations.filter((loc: any) => !loc.is_assigned))
+        const updatedAllLocations = (allLocData || []).map((l: any) => ({
+          location_id: l.id,
+          location_name: l.name,
+          program_name: l.program_name,
+          organizer_id: l.organizer_id,
+          organizer_name: orgMap.get(l.organizer_id) || 'Unknown',
+          rate_khemah: l.rate_khemah,
+          rate_cbs: l.rate_cbs,
+          rate_monthly: l.rate_monthly,
+          rate_monthly_khemah: l.rate_monthly_khemah,
+          rate_monthly_cbs: l.rate_monthly_cbs,
+          operating_days: l.operating_days || 'Setiap Hari',
+          type: l.type,
+          display_price: l.rate_monthly || l.rate_khemah || 0,
+          google_maps_url: l.google_maps_url,
+          map_url: l.map_url,
+          address: l.address,
+          image_url: l.image_url,
+          description: l.description,
+          is_assigned: assignedIds.has(l.id)
+        }))
+
+        setAllLocations(updatedAllLocations)
+        setAvailableLocations(updatedAllLocations.filter((loc: any) => !loc.is_assigned))
+      } else {
+        setAllLocations([])
+        setAvailableLocations([])
+      }
 
       // Refresh my locations
       const { data: myLocData } = await supabase
@@ -218,21 +229,27 @@ export function EnhancedRentalModule({
   const fetchHistory = async (tenantId: number) => {
     const { data: paymentData } = await supabase
       .from('tenant_payments')
-      .select('*')
+      .select('*, locations:location_id(name, program_name), organizers:organizer_id(name, organizer_code)')
       .eq('tenant_id', tenantId)
       .order('payment_date', { ascending: false })
 
     if (paymentData) {
-      const mappedHistory = paymentData.map(payment => ({
-        id: payment.id,
+      const mappedHistory = paymentData.map((payment: any) => ({
+        id: `tp_${payment.id}`,
+        source: 'tenant_payments',
         payment_date: payment.payment_date,
         remarks: payment.remarks || `Bayaran sewa - ${payment.payment_method || 'Online'}`,
         amount: payment.amount,
+        type: 'expense',
         status: payment.status,
         receipt_url: payment.receipt_url,
         payment_method: payment.payment_method,
         billplz_id: payment.billplz_id,
-        is_sandbox: payment.is_sandbox
+        is_sandbox: payment.is_sandbox,
+        location_name: payment.locations?.name || null,
+        program_name: payment.locations?.program_name || null,
+        organizer_name: payment.organizers?.name || null,
+        organizer_code: payment.organizers?.organizer_code || null,
       }))
       setHistory(mappedHistory)
     }
@@ -266,15 +283,13 @@ export function EnhancedRentalModule({
     const category = selectedCategory[rentalId] || "monthly"
     setIsUpdatingCategory(true)
     try {
-      const { error } = await supabase.from('tenant_locations').update({
-        rate_type: category,
-        status: 'active'
-      }).eq('id', rentalId)
-      if (error) throw error
-      toast.success('Kategori berjaya dikemas kini, tapak kini aktif!')
+      const { activateTenantLocationAction } = await import("@/actions/tenant-organizer")
+      const result = await activateTenantLocationAction(rentalId, tenant.id, category)
+      if (!result.success) throw new Error(result.error)
+      toast.success('Tapak kini aktif!')
       refreshData()
     } catch (e: any) {
-      toast.error('Gagal kemas kini: ' + e.message)
+      toast.error('Gagal aktifkan: ' + e.message)
     } finally {
       setIsUpdatingCategory(false)
     }
@@ -369,6 +384,7 @@ export function EnhancedRentalModule({
         }
 
         // Process each selected rental - auto-approved so organizer sees immediately
+        const recordPayloads: any[] = []
         for (const rentalId of selectedIds) {
           const loc = selectedLocs.find((l: any) => l.id === rentalId)
           const amount = parseFloat(selectedRentals[rentalId]?.amount || '0')
@@ -385,6 +401,28 @@ export function EnhancedRentalModule({
             remarks: `Bayaran Manual - ${loc?.location_name || 'Sewa'}`,
           })
           if (insertError) throw new Error(insertError.message)
+
+          recordPayloads.push({
+            tenantId: tenant.id,
+            profileId: tenant.profile_id || null,
+            organizerId: loc?.organizer_id || null,
+            locationId: loc?.location_id || null,
+            amount,
+            paymentDate: payDate,
+            receiptUrl: receiptUrl || null,
+            locationName: loc?.location_name || null,
+            tenantName: tenant.business_name || tenant.full_name || null,
+            organizerName: loc?.organizer_name || null,
+            billplzId: null,
+          })
+        }
+
+        // Create tenant_transactions + organizer_transactions (idempotent fallback if trigger missed)
+        try {
+          const { recordRentPaymentsAction } = await import("@/actions/payment")
+          await recordRentPaymentsAction(recordPayloads)
+        } catch (e) {
+          console.warn('[Payment] recordRentPaymentsAction failed (trigger may have handled it):', e)
         }
 
         toast.success(`Bayaran manual untuk ${selectedIds.length} lokasi berjaya direkodkan.`)
@@ -951,7 +989,7 @@ function RentalCard({
             {rental.status === 'active' ? (
               <>No. Petak: <strong className="text-foreground">{rental.stall_number || "Belum Ditentukan"}</strong></>
             ) : rental.status === 'approved' ? (
-              <span className="italic text-blue-600">Sila pilih kategori sewaan</span>
+              <span className="italic text-blue-600">Diluluskan — menunggu pengaktifan</span>
             ) : (
               <span className="italic">
                 Menunggu Kelulusan{rental.organizer_name ? ` dari ${rental.organizer_name}` : ''}
@@ -967,7 +1005,7 @@ function RentalCard({
                 <p className="font-bold text-sm">Permohonan Diluluskan!</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                Sila pilih kategori sewaan untuk mengaktifkan tapak ini.
+                Tapak diluluskan. Tekan butang di bawah untuk mengaktifkan.
               </p>
               <select
                 value={selectedCategory[rental.id] || "monthly"}

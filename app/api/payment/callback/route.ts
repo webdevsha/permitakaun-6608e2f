@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         console.log("[Payment Callback] Checking tenant_payments...")
         const { data: payment } = await supabase
             .from('tenant_payments')
-            .select('*, tenants(full_name, email)')
+            .select('*, tenants(id, full_name, email, profile_id), locations:location_id(name, program_name), organizers:organizer_id(name)')
             .eq('billplz_id', billplzId)
             .maybeSingle()
 
@@ -48,18 +48,41 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ success: true, type: 'tenant_payment', note: 'already_processed' })
             }
 
+            const receiptUrlStr = receipt_url?.toString() || null
+
             // Update to approved
             await supabase
                 .from('tenant_payments')
                 .update({
                     status: 'approved',
                     billplz_id: billplzId,
-                    receipt_url: receipt_url?.toString(),
+                    receipt_url: receiptUrlStr,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', payment.id)
 
             console.log("[Payment Callback] Found and updated tenant_payments record:", payment.id)
+
+            // Create tenant_transactions (expense) and organizer_transactions (income)
+            try {
+                const { recordRentPaymentsAction } = await import("@/actions/payment")
+                await recordRentPaymentsAction([{
+                    tenantId: payment.tenant_id,
+                    profileId: (payment.tenants as any)?.profile_id || null,
+                    organizerId: payment.organizer_id || null,
+                    locationId: payment.location_id || null,
+                    amount: payment.amount,
+                    paymentDate: payment.payment_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+                    receiptUrl: receiptUrlStr,
+                    locationName: (payment.locations as any)?.name || null,
+                    tenantName: (payment.tenants as any)?.full_name || null,
+                    organizerName: (payment.organizers as any)?.name || null,
+                    billplzId: billplzId,
+                }])
+                console.log("[Payment Callback] Created tenant_transactions + organizer_transactions for payment:", payment.id)
+            } catch (recordErr) {
+                console.error("[Payment Callback] Failed to create ledger entries:", recordErr)
+            }
 
             // Send receipt email
             if (payment.tenants?.email) {

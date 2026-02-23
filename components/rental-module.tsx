@@ -92,15 +92,13 @@ export function RentalModule({ initialTenant, initialLocations, initialHistory, 
     const category = selectedCategory[rentalId] || "monthly"
     setIsUpdatingCategory(true)
     try {
-      const { error } = await supabase.from('tenant_locations').update({
-        rate_type: category,
-        status: 'active'
-      }).eq('id', rentalId)
-      if (error) throw error
-      toast.success('Kategori berjaya dikemas kini, tapak kini aktif!')
+      const { activateTenantLocationAction } = await import("@/actions/tenant-organizer")
+      const result = await activateTenantLocationAction(rentalId, tenant.id, category)
+      if (!result.success) throw new Error(result.error)
+      toast.success('Tapak kini aktif!')
       window.location.reload()
     } catch (e: any) {
-      toast.error('Gagal kemas kini: ' + e.message)
+      toast.error('Gagal aktifkan: ' + e.message)
     } finally {
       setIsUpdatingCategory(false)
     }

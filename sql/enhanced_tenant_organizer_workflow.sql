@@ -534,15 +534,35 @@ BEGIN
       AND organizer_id = v_organizer_id
       AND status IN ('approved', 'active')
     ) THEN
-      -- Check if not already exists
-      IF NOT EXISTS (
+      -- If already active, skip
+      IF EXISTS (
         SELECT 1 FROM tenant_locations
         WHERE tenant_id = p_tenant_id
         AND location_id = v_location_id
+        AND is_active = TRUE
       ) THEN
+        v_skipped_count := v_skipped_count + 1;
+
+      -- If inactive record exists, reactivate it
+      ELSIF EXISTS (
+        SELECT 1 FROM tenant_locations
+        WHERE tenant_id = p_tenant_id
+        AND location_id = v_location_id
+        AND is_active = FALSE
+      ) THEN
+        UPDATE tenant_locations
+        SET is_active = TRUE,
+            status = 'pending',
+            organizer_id = v_organizer_id
+        WHERE tenant_id = p_tenant_id
+        AND location_id = v_location_id;
+        v_inserted_count := v_inserted_count + 1;
+
+      -- No record at all, insert fresh
+      ELSE
         INSERT INTO tenant_locations (
-          tenant_id, 
-          location_id, 
+          tenant_id,
+          location_id,
           organizer_id,
           status,
           rate_type,
@@ -556,8 +576,6 @@ BEGIN
           TRUE
         );
         v_inserted_count := v_inserted_count + 1;
-      ELSE
-        v_skipped_count := v_skipped_count + 1;
       END IF;
     ELSE
       v_skipped_count := v_skipped_count + 1;
