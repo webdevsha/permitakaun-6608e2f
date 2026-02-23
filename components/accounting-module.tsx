@@ -54,7 +54,6 @@ import useSWR from "swr"
 import { createClient } from "@/utils/supabase/client"
 import { cn } from "@/lib/utils"
 import { SubscriptionPlans } from "@/components/subscription-plans"
-import { SubscriptionNotification } from "@/components/subscription-notification"
 import { useAuth } from "@/components/providers/auth-provider"
 import { logAction } from "@/utils/logging"
 
@@ -347,11 +346,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
     // Determine allowed tabungs based on active plan
     const isEnterprise = activePlan === 'premium'
     const isSdnBhd = activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
     const allowedTabungs = isEnterprise
       ? ['operating', 'tax', 'zakat']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+        : isSdnBhdBerhad
+          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+          : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     // Warn if not exactly 100%, but don't force return block
     const total = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
@@ -381,11 +383,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const handleAutoAdjustPercentages = () => {
     const isEnterprise = activePlan === 'premium'
     const isSdnBhd = activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
     const allowedTabungs = isEnterprise
       ? ['operating', 'tax', 'zakat']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+        : isSdnBhdBerhad
+          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+          : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
     
@@ -418,11 +423,14 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const getRemainingPercentage = () => {
     const isEnterprise = activePlan === 'premium'
     const isSdnBhd = activePlan === 'standard'
+    const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
     const allowedTabungs = isEnterprise
       ? ['operating', 'tax', 'zakat']
       : isSdnBhd
         ? ['operating', 'tax', 'zakat', 'investment']
-        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
+        : isSdnBhdBerhad
+          ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+          : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency'];
 
     const currentTotal = allowedTabungs.reduce((sum, key) => sum + (percentages[key as keyof typeof percentages] || 0), 0)
     return 100 - currentTotal
@@ -1071,14 +1079,17 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   // --- TIERED ACCESS LOGIC ---
   const isEnterprise = activePlan === 'premium'
   const isSdnBhd = activePlan === 'standard'
+  const isSdnBhdBerhad = activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad'
   const isBasic = activePlan === 'basic' || !activePlan
 
-  // Enterprise = 3. Sdn Bhd = 4. Others (like Ultimate or full access) = 7.
+  // Enterprise = 3. Sdn Bhd = 4. SdnBhd/Berhad = 5. Others (like Ultimate or full access) = 7.
   const allowedTabungs = isEnterprise
     ? ['operating', 'tax', 'zakat']
     : isSdnBhd
       ? ['operating', 'tax', 'zakat', 'investment']
-      : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
+      : isSdnBhdBerhad
+        ? ['operating', 'tax', 'zakat', 'investment', 'dividend']
+        : ['operating', 'tax', 'zakat', 'investment', 'dividend', 'savings', 'emergency']
 
   const canDownloadReports = !isEnterprise
 
@@ -1091,24 +1102,18 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
   const getPlanDisplayName = () => {
     if (isEnterprise) return 'Enterprise'
     if (isSdnBhd) return 'Sdn Bhd'
-    return 'Basic'
+    if (activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad') return 'SdnBhd/Berhad'
+    return 'Percubaan'
   }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Subscription Notification for Organizers and Tenants */}
-      {(role === 'organizer' || role === 'tenant') && <SubscriptionNotification />}
-
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
           <h2 className="text-4xl font-serif font-bold text-foreground leading-tight">Perakaunan</h2>
           <p className="text-muted-foreground text-lg flex items-center">
-            Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
-            {isTrial ? (
-              <Badge variant="outline" className="ml-2 uppercase bg-blue-100 text-blue-800 border-blue-200">Percubaan</Badge>
-            ) : (
-              activePlan && <Badge variant="outline" className="ml-2 uppercase bg-amber-100 text-amber-800 border-amber-200">{getPlanDisplayName()}</Badge>
-            )}
+            Urus {isEnterprise ? '3 Tabung' : isSdnBhd ? '4 Tabung' : activePlan === 'sdn_bhd_berhad' || activePlan === 'berhad' ? '5 Tabung' : '7 Tabung'} Simpanan & Rekod Kewangan
+            <Badge variant="outline" className={`ml-2 uppercase ${activePlan ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>{getPlanDisplayName()}</Badge>
           </p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
