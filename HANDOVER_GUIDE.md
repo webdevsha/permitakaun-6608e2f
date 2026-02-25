@@ -247,9 +247,114 @@ Setelah URL Vercel diketahui, log masuk ke **portal Billplz** dan kemaskini:
 
 ---
 
+## Bahagian F — Transfer Penuh (Cara Paling Selamat)
+
+> ✅ **Ini cara yang disyorkan.** Semua data, pengguna, RLS, storage, dan kod dipindahkan terus — tiada setup semula diperlukan. Sistem terus berfungsi seperti biasa selepas transfer.
+
+**Apa yang dipindahkan:**
+
+- ✅ Semua data (transaksi, penyewa, lokasi)
+- ✅ Semua pengguna (termasuk password — satu-satunya cara)
+- ✅ RLS policies, triggers, functions
+- ✅ Storage buckets + files (resit)
+- ✅ Kod aplikasi (Next.js)
+- ✅ Environment variables Vercel
+
+**Prasyarat klien:**
+
+- Akaun GitHub
+- Akaun Supabase + buat **Organization** (Settings → Organizations → New Org)
+- Akaun Vercel
+
+---
+
+### F1. Transfer GitHub Repository
+
+**Pembangun lakukan:**
+
+1. Pergi ke repository GitHub → **Settings** → scroll ke bawah → **Danger Zone**
+2. Klik **"Transfer"**
+3. Masuk nama repository untuk sahkan → masuk **username GitHub klien**
+4. Klik **"I understand, transfer this repository"**
+
+**Klien:**
+
+- Terima jemputan melalui emel dalam masa 7 hari
+- Repository akan masuk akaun klien dengan semua history git
+
+---
+
+### F2. Transfer Supabase Project
+
+**Pembangun lakukan:**
+
+1. Pergi ke Supabase Dashboard → **Project Settings** → **General**
+2. Scroll ke bahagian **"Transfer project"**
+3. Masuk **nama Organization klien** (klien kena buat org dulu)
+4. Klik **Transfer**
+
+**Klien:**
+
+- Log masuk Supabase → pergi ke organization mereka
+- Terima transfer dalam **Settings → Organization → Pending transfers**
+- ✅ Semua data, RLS, auth users, storage — terus ada tanpa setup semula
+
+> ⚠️ URL Supabase dan API keys **tidak berubah** selepas transfer — environment variables Vercel tidak perlu ditukar.
+
+---
+
+### F3. Transfer Vercel Project
+
+**Pembangun lakukan:**
+
+1. Pergi ke Vercel → pilih project **PermitAkaun** → **Settings** → **General**
+2. Scroll ke **"Transfer Project"**
+3. Masuk akaun/team Vercel klien
+4. Klik **Transfer**
+
+**Klien:**
+
+- Terima jemputan dalam Vercel dashboard
+- ✅ Semua environment variables ikut sekali — app terus live
+
+**Selepas transfer Vercel:**
+
+- Jika domain berubah, kemaskini **Supabase Auth → Settings → Site URL**
+- Kemaskini **Billplz callback URL** ke domain baru
+
+---
+
+### F4. Urutan Yang Betul
+
+```text
+1. Transfer GitHub   →  2. Transfer Supabase  →  3. Transfer Vercel
+      (5 minit)               (5 minit)               (5 minit)
+                                    ↓
+                         4. Klien semak Vercel domain
+                                    ↓
+                    5. Kemaskini Supabase Auth Site URL (jika domain berubah)
+                                    ↓
+                         6. Kemaskini Billplz webhook
+```
+
+> Anggaran downtime: **0** — sistem tidak terputus semasa transfer
+
+---
+
+### F5. Lepas Transfer — Pembangun Remove Akses
+
+Setelah klien sahkan semua berfungsi:
+
+1. **GitHub** — keluarkan diri sebagai collaborator (atau repo sudah dipindahkan)
+2. **Supabase** — tiada akses yang tinggal (project sudah di-transfer)
+3. **Vercel** — tiada akses yang tinggal (project sudah di-transfer)
+
+---
+
 ## Hubungi Pembangun
 
 Sekiranya ada masalah semasa proses handover:
+
 - Dokumen teknikal tambahan ada dalam folder `/sql/` dan `DATABASE_ARCHITECTURE.md`
 - Semua migration SQL boleh dijalankan semula dengan selamat (idempotent)
 
