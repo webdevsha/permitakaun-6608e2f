@@ -1062,8 +1062,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
         // Admin transactions - always use profile_id (user.id) for consistency
         // admin_id may be UUID or different format, but profile_id matches auth.uid()
         txData.profile_id = user.id
-        txData.admin_id = adminId || user.id // Fallback to profile_id if admin_id not found
-        txData.is_auto_generated = false // Manual entry
+        txData.admin_id = user.id // admin_id references auth.users(id), same as profile_id
 
         console.log('[Accounting] Saving admin transaction:', { profile_id: user.id, admin_id: txData.admin_id })
       } else {
