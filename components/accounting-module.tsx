@@ -2242,70 +2242,97 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 </div>
                 <Table>
                   <TableBody>
-                    {/* Cash Inflow */}
+                    {/* AKTIVITI OPERASI */}
                     <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Aliran Masuk (Pendapatan)</TableCell>
-                      <TableCell></TableCell>
+                      <TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Aliran Tunai Dari Aktiviti Operasi</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-10 font-medium text-emerald-700">Untung sebelum cukai</TableCell>
+                      <TableCell className={cn("text-right pr-10 font-bold font-mono", netProfit >= 0 ? "text-emerald-700" : "text-red-500")}>
+                        {netProfit < 0 ? `(RM ${Math.abs(netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0">
+                      <TableCell className="pl-10 text-xs text-muted-foreground py-1">Susut nilai (pelarasan bukan tunai)</TableCell>
+                      <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">RM 0.00</TableCell>
+                    </TableRow>
+                    <TableRow className="border-t border-dashed">
+                      <TableCell className="pl-6 font-semibold text-sm">Untung operasi sebelum perubahan modal kerja</TableCell>
+                      <TableCell className={cn("text-right pr-10 font-semibold font-mono text-sm", netProfit >= 0 ? "text-emerald-700" : "text-red-500")}>
+                        {netProfit < 0 ? `(RM ${Math.abs(netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-14 text-xs text-muted-foreground py-1">(Naik)/Turun penghutang perdagangan</TableCell><TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-14 text-xs text-muted-foreground py-1">(Naik)/Turun bayaran pendahuluan & deposit</TableCell><TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-14 text-xs text-muted-foreground py-1">(Naik)/Turun stok</TableCell><TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0">
+                      <TableCell className="pl-14 text-xs py-1">Naik/(Turun) liabiliti semasa</TableCell>
+                      <TableCell className="text-right pr-10 text-xs py-1 font-mono text-orange-600">RM {totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                    </TableRow>
+
+                    {/* Butiran pendapatan */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                      <TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Butiran Pendapatan Operasi</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="pl-10 font-medium text-emerald-700">Jumlah Jualan & Operasi</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-emerald-700">
-                        {/* Sum of all income categories except Modal */}
-                        RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-emerald-700 font-mono">RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                     </TableRow>
-                    {/* Detailed Income Rows */}
                     {Object.entries(cashInByCategory).map(([cat, amount]: [string, any]) => {
-                      if (cat === 'Modal') return null; // Skip Modal, shown separately
+                      if (cat === 'Modal') return null
                       return (
                         <TableRow key={cat} className="hover:bg-transparent border-0 h-8">
                           <TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell>
-                          <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">
-                            {Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </TableCell>
+                          <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                         </TableRow>
                       )
                     })}
 
-                    <TableRow className="border-t border-dashed">
-                      <TableCell className="pl-10 font-medium">Modal & Pembiayaan</TableCell>
-                      <TableCell className="text-right pr-10 font-mono">
-                        RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow className="border-t-2 border-dashed">
-                      <TableCell className="pl-6 font-bold">Jumlah Tunai Masuk</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-emerald-600">
-                        RM {(operatingRevenue + totalCapital).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Cash Outflow */}
+                    {/* Butiran perbelanjaan */}
                     <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Aliran Keluar (Cash Out)</TableCell>
-                      <TableCell></TableCell>
+                      <TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Butiran Perbelanjaan Operasi</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="pl-10 font-medium text-red-600">Jumlah Perbelanjaan</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-red-500">
-                        (RM {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})
-                      </TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-red-500 font-mono">(RM {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})</TableCell>
                     </TableRow>
-                    {/* Detailed Expense Rows */}
                     {Object.entries(cashOutByCategory).map(([cat, amount]: [string, any]) => (
                       <TableRow key={cat} className="hover:bg-transparent border-0 h-8">
                         <TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell>
-                        <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">
-                          ({Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })})
-                        </TableCell>
+                        <TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">({Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })})</TableCell>
                       </TableRow>
                     ))}
 
-                    {/* Net Flow */}
+                    {/* AKTIVITI PELABURAN */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                      <TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Aliran Tunai Dari Aktiviti Pelaburan</TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-sm py-1">Perbelanjaan modal (Capital Expenditure)</TableCell><TableCell className="text-right pr-10 font-mono text-sm py-1 text-muted-foreground">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-sm py-1 text-muted-foreground">Hasil jualan aset tetap</TableCell><TableCell className="text-right pr-10 font-mono text-sm py-1 text-muted-foreground">RM 0.00</TableCell></TableRow>
+
+                    {/* AKTIVITI PEMBIAYAAN */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
+                      <TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Aliran Tunai Dari Aktiviti Pembiayaan</TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0">
+                      <TableCell className="pl-10 text-sm py-1">Modal Saham (Share Capital)</TableCell>
+                      <TableCell className="text-right pr-10 font-mono text-sm py-1 text-emerald-700">RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-sm py-1 text-muted-foreground">Pinjaman (Loan)</TableCell><TableCell className="text-right pr-10 font-mono text-sm py-1 text-muted-foreground">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-sm py-1 text-muted-foreground">Pengeluaran (Withdrawal)</TableCell><TableCell className="text-right pr-10 font-mono text-sm py-1 text-muted-foreground">RM 0.00</TableCell></TableRow>
+
+                    {/* Net */}
                     <TableRow className="bg-emerald-900 text-white hover:bg-emerald-900/90">
-                      <TableCell className="pl-6 py-6 font-bold text-lg">Lebihan / (Kurangan) Tunai</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-xl font-mono">
-                        RM {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <TableCell className="pl-6 py-4 font-bold">Kenaikan/(Penurunan) Bersih Tunai Dan Setara Tunai</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-lg font-mono">
+                        {cashBalance < 0 ? `(RM ${Math.abs(cashBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-6 text-sm py-2 text-muted-foreground">Tunai & setara tunai awal tempoh</TableCell><TableCell className="text-right pr-10 font-mono text-sm py-2 text-muted-foreground">RM 0.00</TableCell></TableRow>
+                    <TableRow className="border-t-2 bg-emerald-50/30">
+                      <TableCell className="pl-6 py-3 font-bold text-emerald-800">Tunai & setara tunai akhir tempoh</TableCell>
+                      <TableCell className={cn("text-right pr-10 font-bold font-mono py-3", cashBalance >= 0 ? "text-emerald-700" : "text-red-600")}>
+                        {cashBalance < 0 ? `(RM ${Math.abs(cashBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -2329,76 +2356,43 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               <CardContent className="p-0">
                 <Table>
                   <TableBody>
-                    {/* Assets */}
-                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Aset (Assets)</TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="pl-10">Aset Semasa (Tunai di Tangan/Bank)</TableCell>
-                      <TableCell className="text-right pr-10 font-mono">
-                        RM {currentAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="pl-10">Aset Tetap (Fixed Assets)</TableCell>
-                      <TableCell className="text-right pr-10 font-mono">
-                        RM {fixedAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow className="border-t bg-blue-50/30">
-                      <TableCell className="pl-6 font-bold text-blue-900">Jumlah Aset</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-blue-900">
-                        RM {totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
+                    {/* ASET */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10"><TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Aset (Assets)</TableCell></TableRow>
+                    <TableRow className="bg-secondary/5 hover:bg-secondary/5"><TableCell className="pl-6 font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2" colSpan={2}>Aset Tetap Operasi</TableCell></TableRow>
+                    <TableRow><TableCell className="pl-10 text-sm">Harta, Loji & Peralatan</TableCell><TableCell className="text-right pr-10 font-mono text-sm">RM {fixedAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">(-) Nilai aset lepas</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="bg-secondary/5 hover:bg-secondary/5"><TableCell className="pl-6 font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2" colSpan={2}>Aset Semasa</TableCell></TableRow>
+                    <TableRow><TableCell className="pl-10 text-sm">Tunai & baki bank</TableCell><TableCell className="text-right pr-10 font-mono text-sm text-emerald-700">RM {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Penghutang perdagangan</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Bayaran pendahuluan, deposit & prabayar</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Inventori</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">(-) Inventori & tunai lepas</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="border-t bg-blue-50/30"><TableCell className="pl-6 font-bold text-blue-900">Jumlah Aset</TableCell><TableCell className="text-right pr-10 font-bold text-blue-900 font-mono">RM {totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
 
-                    {/* Liabiliti */}
-                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Liabiliti (Liabilities)</TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
+                    {/* EKUITI DAN LIABILITI */}
+                    <TableRow className="bg-secondary/10 hover:bg-secondary/10"><TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Ekuiti Dan Liabiliti</TableCell></TableRow>
+                    <TableRow className="bg-secondary/5 hover:bg-secondary/5"><TableCell className="pl-6 font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2" colSpan={2}>Ekuiti Pemegang Saham</TableCell></TableRow>
+                    <TableRow><TableCell className="pl-10 text-sm">Modal Rakan Kongsi (Partner's Capital)</TableCell><TableCell className="text-right pr-10 font-mono text-sm">RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">(-) Pengeluaran (Withdrawal)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Cukai Belum Bayar (Accrued Tax)</TableCell>
-                      <TableCell className="text-right pr-10 font-mono text-orange-600">
-                        RM {taxPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <TableCell className="pl-10 text-sm">Untung/Rugi Terkumpul (Accumulated P&L)</TableCell>
+                      <TableCell className={cn("text-right pr-10 font-mono text-sm", (calculatedEquity - totalCapital) < 0 ? "text-red-500" : "text-emerald-600")}>
+                        {(calculatedEquity - totalCapital) < 0 ? `(RM ${Math.abs(calculatedEquity - totalCapital).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${(calculatedEquity - totalCapital).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </TableCell>
                     </TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">(+) Untung/Rugi lepas</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="bg-secondary/5 hover:bg-secondary/5"><TableCell className="pl-6 font-semibold text-xs uppercase tracking-wider text-muted-foreground py-2" colSpan={2}>Liabiliti</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs font-medium text-muted-foreground py-1">Liabiliti Bukan Semasa (Non-Current)</TableCell><TableCell></TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-14 text-xs text-muted-foreground py-1">Pinjaman jangka panjang</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-14 text-xs text-muted-foreground py-1">Liabiliti jangka panjang lain</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                    <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs font-medium text-muted-foreground py-1">Liabiliti Semasa (Current)</TableCell><TableCell></TableCell></TableRow>
                     <TableRow>
-                      <TableCell className="pl-10">Zakat Belum Bayar (Accrued Zakat)</TableCell>
-                      <TableCell className="text-right pr-10 font-mono text-orange-600">
-                        RM {zakatPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow className="border-t bg-orange-50/30">
-                      <TableCell className="pl-6 font-bold text-orange-900">Jumlah Liabiliti</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-orange-900">
-                        RM {totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Equity */}
-                    <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                      <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Ekuiti Pemilik (Owner's Equity)</TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="pl-10">Modal Pusingan</TableCell>
-                      <TableCell className="text-right pr-10 font-mono">
-                        RM {totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="pl-10">Untung Bersih Terkumpul (Retained Earnings)</TableCell>
-                      <TableCell className={cn("text-right pr-10 font-mono", (calculatedEquity - totalCapital) < 0 ? "text-red-500" : "text-emerald-600")}>
-                        RM {(calculatedEquity - totalCapital).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
+                      <TableCell className="pl-14 text-sm">Pemiutang, akruan & liabiliti lain (Cukai & Zakat)</TableCell>
+                      <TableCell className="text-right pr-10 font-mono text-sm text-orange-600">RM {totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                     </TableRow>
                     <TableRow className="bg-slate-900 text-white hover:bg-slate-900/90 print:bg-black/90">
-                      <TableCell className="pl-6 py-6 font-bold text-lg">Jumlah Ekuiti & Liabiliti</TableCell>
-                      <TableCell className="text-right pr-10 font-bold text-xl font-mono">
-                        RM {(totalLiabilities + calculatedEquity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
+                      <TableCell className="pl-6 py-5 font-bold text-lg">Jumlah Ekuiti & Liabiliti</TableCell>
+                      <TableCell className="text-right pr-10 font-bold text-xl font-mono">RM {(totalLiabilities + calculatedEquity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -2422,26 +2416,49 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 <CardContent className="p-0">
                   <Table>
                     <TableBody>
-                      <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                        <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Pendapatan (Revenue)</TableCell>
-                        <TableCell></TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="pl-10 font-medium">Jumlah Pendapatan Operasi</TableCell>
-                        <TableCell className="text-right pr-10 font-mono text-emerald-600">
-                          RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {/* JUALAN */}
+                      <TableRow className="bg-secondary/10 hover:bg-secondary/10"><TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Jualan (Sales)</TableCell></TableRow>
+                      <TableRow><TableCell className="pl-10 font-medium text-emerald-700">Jumlah Jualan</TableCell><TableCell className="text-right pr-10 font-bold font-mono text-emerald-700">RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                      {Object.entries(cashInByCategory).map(([cat, amount]: [string, any]) => {
+                        if (cat === 'Modal') return null
+                        return (<TableRow key={cat} className="hover:bg-transparent border-0 h-8"><TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell><TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>)
+                      })}
+
+                      {/* KOS LANGSUNG */}
+                      <TableRow className="bg-secondary/10 hover:bg-secondary/10"><TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Kos Langsung (Direct Cost)</TableCell></TableRow>
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Stok Awal (Opening Stock)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Belian (Purchase)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Kos Jualan (Cost of Sales)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Stok Akhir (Closing Stock)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="border-t"><TableCell className="pl-6 font-bold text-sm">Kos Barangan Dijual (COGS)</TableCell><TableCell className="text-right pr-10 font-bold font-mono text-sm">RM 0.00</TableCell></TableRow>
+
+                      {/* UNTUNG KASAR */}
+                      <TableRow className="bg-emerald-50/50 border-t-2"><TableCell className="pl-6 font-bold text-emerald-800">Untung Kasar (Gross Profit)</TableCell><TableCell className="text-right pr-10 font-bold font-mono text-emerald-700">RM {operatingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell></TableRow>
+
+                      {/* BELANJA OPERASI */}
+                      <TableRow className="bg-secondary/10 hover:bg-secondary/10"><TableCell className="font-bold py-3 pl-6 text-muted-foreground uppercase text-xs tracking-wider" colSpan={2}>Belanja Operasi (Operating Expenses)</TableCell></TableRow>
+                      <TableRow><TableCell className="pl-10 font-medium text-red-600">Belanja Pentadbiran (Administrative Expenses)</TableCell><TableCell className="text-right pr-10 font-bold font-mono text-red-500">{totalExpenses > 0 ? `(RM ${totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})` : 'RM 0.00'}</TableCell></TableRow>
+                      {Object.entries(cashOutByCategory).map(([cat, amount]: [string, any]) => (
+                        <TableRow key={cat} className="hover:bg-transparent border-0 h-8"><TableCell className="pl-16 text-xs text-muted-foreground py-1">• {cat}</TableCell><TableCell className="text-right pr-10 text-xs text-muted-foreground py-1 font-mono">({Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })})</TableCell></TableRow>
+                      ))}
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Belanja Jualan & Penghantaran</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="h-8 border-0"><TableCell className="pl-10 text-xs text-muted-foreground py-1">Caj Kewangan (Financial Charges)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+
+                      {/* UNTUNG OPERASI */}
+                      <TableRow className="bg-blue-50/50 border-t-2">
+                        <TableCell className="pl-6 font-bold text-blue-800">Untung Operasi (Operating Profit)</TableCell>
+                        <TableCell className={cn("text-right pr-10 font-bold font-mono", netProfit >= 0 ? "text-blue-700" : "text-red-600")}>
+                          {netProfit < 0 ? `(RM ${Math.abs(netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                         </TableCell>
                       </TableRow>
-                      <TableRow className="bg-secondary/10 hover:bg-secondary/10">
-                        <TableCell className="font-bold py-4 pl-6 text-muted-foreground uppercase text-xs tracking-wider">Perbelanjaan (Expenses)</TableCell>
-                        <TableCell></TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="pl-10 font-medium text-red-600">Jumlah Kos Operasi & Lain-lain</TableCell>
-                        <TableCell className="text-right pr-10 font-mono text-red-500">
-                          (RM {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                      <TableRow className="h-8 border-0"><TableCell className="pl-6 text-xs text-muted-foreground py-1">Pendapatan Lain-lain (Miscellaneous Income)</TableCell><TableCell className="text-right pr-10 font-mono text-xs text-muted-foreground py-1">RM 0.00</TableCell></TableRow>
+                      <TableRow className="border-t bg-slate-50/50">
+                        <TableCell className="pl-6 font-bold text-sm">Untung/(Rugi) Bersih Sebelum Cukai & Zakat</TableCell>
+                        <TableCell className={cn("text-right pr-10 font-bold font-mono text-sm", netProfit >= 0 ? "text-slate-800" : "text-red-600")}>
+                          {netProfit < 0 ? `(RM ${Math.abs(netProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })})` : `RM ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                         </TableCell>
                       </TableRow>
+
                       <TableRow className={cn("text-white hover:text-white/90 print:text-black print:bg-slate-100", netProfit >= 0 ? "bg-amber-600 hover:bg-amber-600/90" : "bg-red-600 hover:bg-red-600/90")}>
                         <TableCell className="pl-6 py-6 font-bold text-lg">Untung / (Rugi) Bersih</TableCell>
                         <TableCell className="text-right pr-10 font-bold text-xl font-mono">

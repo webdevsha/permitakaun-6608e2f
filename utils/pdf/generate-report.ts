@@ -108,61 +108,47 @@ export function generateFinancialReport(data: ReportData) {
   // =============================================
   let startY = drawHeader('Penyata Aliran Tunai', 'Ringkasan kemasukan dan perbelanjaan tunai')
 
-  // Build cash flow table data
   const cashFlowBody: any[][] = []
 
-  // Section: Cash Inflow
-  cashFlowBody.push([
-    { content: 'ALIRAN MASUK (CASH IN)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
+  // AKTIVITI OPERASI
+  cashFlowBody.push([{ content: 'ALIRAN TUNAI DARI AKTIVITI OPERASI', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push([{ content: '  Untung sebelum cukai', styles: { fontStyle: 'bold', textColor: data.netProfit >= 0 ? emerald : red } }, { content: data.netProfit < 0 ? fmtBracket(Math.abs(data.netProfit)) : fmt(data.netProfit), styles: { halign: 'right', fontStyle: 'bold', textColor: data.netProfit >= 0 ? emerald : red } }])
+  cashFlowBody.push([{ content: '  Susut nilai (pelarasan bukan tunai)', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push([{ content: 'Untung operasi sebelum perubahan modal kerja', styles: { fontStyle: 'bold' } }, { content: data.netProfit < 0 ? fmtBracket(Math.abs(data.netProfit)) : fmt(data.netProfit), styles: { halign: 'right', fontStyle: 'bold' } }])
+  cashFlowBody.push([{ content: '  Perubahan modal kerja:', colSpan: 2, styles: { fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push([{ content: '    (Naik)/Turun penghutang perdagangan', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push([{ content: '    (Naik)/Turun bayaran pendahuluan & deposit', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push([{ content: '    (Naik)/Turun stok', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push(['    Naik/(Turun) liabiliti semasa', { content: fmt(data.totalLiabilities), styles: { halign: 'right', textColor: [194, 65, 12] } }])
 
-  cashFlowBody.push([
-    { content: '  Jumlah Jualan & Operasi', styles: { fontStyle: 'bold', textColor: emerald } },
-    { content: fmt(data.operatingRevenue), styles: { halign: 'right', fontStyle: 'bold', textColor: emerald } }
-  ])
-
-  // Category breakdown for income (exclude Modal)
+  // Butiran pendapatan & perbelanjaan
+  cashFlowBody.push([{ content: '  Butiran Pendapatan Operasi', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push([{ content: '    Jumlah Jualan & Operasi', styles: { fontStyle: 'bold', textColor: emerald } }, { content: fmt(data.operatingRevenue), styles: { halign: 'right', fontStyle: 'bold', textColor: emerald } }])
   for (const [cat, amount] of Object.entries(data.cashInByCategory)) {
     if (cat === 'Modal') continue
-    cashFlowBody.push([
-      { content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } },
-      { content: (amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 }), styles: { halign: 'right', fontSize: 8, textColor: gray } }
-    ])
+    cashFlowBody.push([{ content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } }, { content: (amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 }), styles: { halign: 'right', fontSize: 8, textColor: gray } }])
   }
-
-  cashFlowBody.push([
-    { content: '  Modal & Pembiayaan', styles: {} },
-    { content: fmt(data.totalCapital), styles: { halign: 'right' } }
-  ])
-
-  cashFlowBody.push([
-    { content: 'Jumlah Tunai Masuk', styles: { fontStyle: 'bold' } },
-    { content: fmt(data.operatingRevenue + data.totalCapital), styles: { halign: 'right', fontStyle: 'bold', textColor: emerald } }
-  ])
-
-  // Section: Cash Outflow
-  cashFlowBody.push([
-    { content: 'ALIRAN KELUAR (CASH OUT)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-
-  cashFlowBody.push([
-    { content: '  Jumlah Perbelanjaan', styles: { fontStyle: 'bold', textColor: red } },
-    { content: fmtBracket(data.totalExpenses), styles: { halign: 'right', fontStyle: 'bold', textColor: red } }
-  ])
-
-  // Category breakdown for expenses
+  cashFlowBody.push([{ content: '  Butiran Perbelanjaan Operasi', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push([{ content: '    Jumlah Perbelanjaan', styles: { fontStyle: 'bold', textColor: red } }, { content: fmtBracket(data.totalExpenses), styles: { halign: 'right', fontStyle: 'bold', textColor: red } }])
   for (const [cat, amount] of Object.entries(data.cashOutByCategory)) {
-    cashFlowBody.push([
-      { content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } },
-      { content: `(${(amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 })})`, styles: { halign: 'right', fontSize: 8, textColor: gray } }
-    ])
+    cashFlowBody.push([{ content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } }, { content: `(${(amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 })})`, styles: { halign: 'right', fontSize: 8, textColor: gray } }])
   }
 
-  // Net flow (dark background row)
-  cashFlowBody.push([
-    { content: 'Lebihan / (Kurangan) Tunai', styles: { fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } },
-    { content: fmt(data.cashBalance), styles: { halign: 'right', fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }
-  ])
+  // AKTIVITI PELABURAN
+  cashFlowBody.push([{ content: 'ALIRAN TUNAI DARI AKTIVITI PELABURAN', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push(['  Perbelanjaan modal (Capital Expenditure)', { content: data.fixedAssets > 0 ? fmtBracket(data.fixedAssets) : fmt(0), styles: { halign: 'right', textColor: data.fixedAssets > 0 ? red : gray } }])
+  cashFlowBody.push([{ content: '  Hasil jualan aset tetap', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+
+  // AKTIVITI PEMBIAYAAN
+  cashFlowBody.push([{ content: 'ALIRAN TUNAI DARI AKTIVITI PEMBIAYAAN', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  cashFlowBody.push(['  Modal Saham (Share Capital)', { content: fmt(data.totalCapital), styles: { halign: 'right', textColor: emerald } }])
+  cashFlowBody.push([{ content: '  Pinjaman (Loan)', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push([{ content: '  Pengeluaran (Withdrawal)', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+
+  // Net + awal/akhir
+  cashFlowBody.push([{ content: 'KENAIKAN/(PENURUNAN) BERSIH TUNAI DAN SETARA TUNAI', styles: { fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }, { content: fmt(data.cashBalance), styles: { halign: 'right', fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }])
+  cashFlowBody.push([{ content: 'Tunai & setara tunai awal tempoh', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  cashFlowBody.push([{ content: 'Tunai & setara tunai akhir tempoh', styles: { fontStyle: 'bold' } }, { content: fmt(data.cashBalance), styles: { halign: 'right', fontStyle: 'bold', textColor: data.cashBalance >= 0 ? emerald : red } }])
 
   autoTable(doc, {
     startY,
@@ -196,59 +182,34 @@ export function generateFinancialReport(data: ReportData) {
 
   const balanceBody: any[][] = []
 
-  // Assets
-  balanceBody.push([
-    { content: 'ASET (ASSETS)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-  balanceBody.push([
-    '  Aset Semasa (Tunai di Tangan/Bank)',
-    { content: fmt(data.currentAssets), styles: { halign: 'right' } }
-  ])
-  balanceBody.push([
-    '  Aset Tetap (Fixed Assets)',
-    { content: fmt(data.fixedAssets), styles: { halign: 'right' } }
-  ])
-  balanceBody.push([
-    { content: 'Jumlah Aset', styles: { fontStyle: 'bold', fillColor: blueLight, textColor: blue } },
-    { content: fmt(data.totalAssets), styles: { halign: 'right', fontStyle: 'bold', fillColor: blueLight, textColor: blue } }
-  ])
+  // ASET
+  balanceBody.push([{ content: 'ASET (ASSETS)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  balanceBody.push([{ content: '  Aset Tetap Operasi', colSpan: 2, styles: { fontStyle: 'bold', fontSize: 8 } }])
+  balanceBody.push(['    Harta, Loji & Peralatan', { content: fmt(data.fixedAssets), styles: { halign: 'right' } }])
+  balanceBody.push([{ content: '    (-) Nilai aset lepas', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '  Aset Semasa', colSpan: 2, styles: { fontStyle: 'bold', fontSize: 8 } }])
+  balanceBody.push(['    Tunai & baki bank', { content: fmt(data.cashBalance), styles: { halign: 'right', textColor: emerald } }])
+  balanceBody.push([{ content: '    Penghutang perdagangan', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '    Bayaran pendahuluan, deposit & prabayar', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '    Inventori', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '    (-) Inventori & tunai lepas', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: 'Jumlah Aset', styles: { fontStyle: 'bold', fillColor: blueLight, textColor: blue } }, { content: fmt(data.totalAssets), styles: { halign: 'right', fontStyle: 'bold', fillColor: blueLight, textColor: blue } }])
 
-  // Liabilities
-  balanceBody.push([
-    { content: 'LIABILITI (LIABILITIES)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-  balanceBody.push([
-    '  Cukai Belum Bayar (Accrued Tax)',
-    { content: fmt(data.taxPayable), styles: { halign: 'right', textColor: [194, 65, 12] } }
-  ])
-  balanceBody.push([
-    '  Zakat Belum Bayar (Accrued Zakat)',
-    { content: fmt(data.zakatPayable), styles: { halign: 'right', textColor: [194, 65, 12] } }
-  ])
-  balanceBody.push([
-    { content: 'Jumlah Liabiliti', styles: { fontStyle: 'bold', fillColor: [255, 247, 237], textColor: [124, 45, 18] } },
-    { content: fmt(data.totalLiabilities), styles: { halign: 'right', fontStyle: 'bold', fillColor: [255, 247, 237], textColor: [124, 45, 18] } }
-  ])
-
-  // Equity
-  balanceBody.push([
-    { content: "EKUITI PEMILIK (OWNER'S EQUITY)", colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-  balanceBody.push([
-    '  Modal Pusingan',
-    { content: fmt(data.totalCapital), styles: { halign: 'right' } }
-  ])
+  // EKUITI DAN LIABILITI
+  balanceBody.push([{ content: 'EKUITI DAN LIABILITI', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  balanceBody.push([{ content: "  Ekuiti Pemegang Saham (Shareholder's Equity)", colSpan: 2, styles: { fontStyle: 'bold', fontSize: 8 } }])
+  balanceBody.push(["    Modal Rakan Kongsi (Partner's Capital)", { content: fmt(data.totalCapital), styles: { halign: 'right' } }])
+  balanceBody.push([{ content: '    (-) Pengeluaran (Withdrawal)', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
   const retainedEarnings = data.calculatedEquity - data.totalCapital
-  balanceBody.push([
-    '  Untung Bersih Terkumpul (Retained Earnings)',
-    { content: fmt(retainedEarnings), styles: { halign: 'right', textColor: retainedEarnings < 0 ? red : emerald } }
-  ])
-
-  // Total Equity + Liabilities
-  balanceBody.push([
-    { content: 'Jumlah Ekuiti & Liabiliti', styles: { fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } },
-    { content: fmt(data.totalLiabilities + data.calculatedEquity), styles: { halign: 'right', fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }
-  ])
+  balanceBody.push(['    Untung/Rugi Terkumpul (Accumulated P&L)', { content: retainedEarnings < 0 ? fmtBracket(Math.abs(retainedEarnings)) : fmt(retainedEarnings), styles: { halign: 'right', textColor: retainedEarnings < 0 ? red : emerald } }])
+  balanceBody.push([{ content: '    (+) Untung/Rugi lepas', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '  Liabiliti', colSpan: 2, styles: { fontStyle: 'bold', fontSize: 8 } }])
+  balanceBody.push([{ content: '    Liabiliti Bukan Semasa (Non-Current)', colSpan: 2, styles: { fontSize: 8, textColor: gray } }])
+  balanceBody.push([{ content: '      Pinjaman jangka panjang', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '      Liabiliti jangka panjang lain', styles: { textColor: gray } }, { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  balanceBody.push([{ content: '    Liabiliti Semasa (Current)', colSpan: 2, styles: { fontSize: 8, textColor: gray } }])
+  balanceBody.push(['      Pemiutang, akruan & liabiliti lain (Cukai & Zakat)', { content: fmt(data.totalLiabilities), styles: { halign: 'right', textColor: [194, 65, 12] } }])
+  balanceBody.push([{ content: 'Jumlah Ekuiti & Liabiliti', styles: { fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }, { content: fmt(data.totalLiabilities + data.calculatedEquity), styles: { halign: 'right', fontStyle: 'bold', fillColor: darkBg, textColor: [255, 255, 255], fontSize: 11 } }])
 
   autoTable(doc, {
     startY,
@@ -281,48 +242,45 @@ export function generateFinancialReport(data: ReportData) {
 
   const plBody: any[][] = []
 
-  // Revenue
-  plBody.push([
-    { content: 'PENDAPATAN (REVENUE)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-  plBody.push([
-    { content: '  Jumlah Pendapatan Operasi', styles: { fontStyle: 'bold' } },
-    { content: fmt(data.operatingRevenue), styles: { halign: 'right', textColor: emerald } }
-  ])
-
-  // Revenue breakdown by category
+  // JUALAN
+  plBody.push([{ content: 'JUALAN (SALES)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  plBody.push([{ content: '  Jumlah Jualan', styles: { fontStyle: 'bold' } }, { content: fmt(data.operatingRevenue), styles: { halign: 'right', textColor: emerald } }])
   for (const [cat, amount] of Object.entries(data.cashInByCategory)) {
     if (cat === 'Modal') continue
-    plBody.push([
-      { content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } },
-      { content: (amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 }), styles: { halign: 'right', fontSize: 8, textColor: gray } }
-    ])
+    plBody.push([{ content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } }, { content: (amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 }), styles: { halign: 'right', fontSize: 8, textColor: gray } }])
   }
 
-  // Expenses
-  plBody.push([
-    { content: 'PERBELANJAAN (EXPENSES)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }
-  ])
-  plBody.push([
-    { content: '  Jumlah Kos Operasi & Lain-lain', styles: { fontStyle: 'bold', textColor: red } },
-    { content: fmtBracket(data.totalExpenses), styles: { halign: 'right', textColor: red } }
-  ])
+  // KOS LANGSUNG
+  plBody.push([{ content: 'KOS LANGSUNG (DIRECT COST)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  plBody.push(['  Stok Awal (Opening Stock)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push(['  Belian (Purchase)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push(['  Kos Jualan (Cost of Sales)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push(['  Stok Akhir (Closing Stock)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push([{ content: 'KOS BARANGAN DIJUAL (COGS)', styles: { fontStyle: 'bold' } }, { content: fmt(0), styles: { halign: 'right', fontStyle: 'bold' } }])
 
-  // Expense breakdown by category
+  // UNTUNG KASAR
+  plBody.push([{ content: 'UNTUNG KASAR (GROSS PROFIT)', styles: { fontStyle: 'bold', fillColor: emeraldLight, textColor: emerald } }, { content: fmt(data.operatingRevenue), styles: { halign: 'right', fontStyle: 'bold', fillColor: emeraldLight, textColor: emerald } }])
+
+  // BELANJA OPERASI
+  plBody.push([{ content: 'BELANJA OPERASI (OPERATING EXPENSES)', colSpan: 2, styles: { fillColor: sectionBg, fontStyle: 'bold', fontSize: 8, textColor: [80, 80, 80] } }])
+  plBody.push([{ content: '  Belanja Pentadbiran (Administrative Expenses)', styles: { textColor: red } }, { content: data.totalExpenses > 0 ? fmtBracket(data.totalExpenses) : fmt(0), styles: { halign: 'right', textColor: red } }])
   for (const [cat, amount] of Object.entries(data.cashOutByCategory)) {
-    plBody.push([
-      { content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } },
-      { content: `(${(amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 })})`, styles: { halign: 'right', fontSize: 8, textColor: gray } }
-    ])
+    plBody.push([{ content: `      • ${cat}`, styles: { fontSize: 8, textColor: gray } }, { content: `(${(amount as number).toLocaleString('en-MY', { minimumFractionDigits: 2 })})`, styles: { halign: 'right', fontSize: 8, textColor: gray } }])
   }
+  plBody.push(['  Belanja Jualan & Penghantaran', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push(['  Caj Kewangan (Financial Charges)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
 
-  // Net Profit/Loss
-  const netColor = data.netProfit >= 0 ? [146, 64, 14] as [number, number, number] : red
+  // UNTUNG OPERASI
+  const opProfit = data.netProfit
+  const opBg2 = opProfit >= 0 ? blueLight : [255, 235, 235] as [number, number, number]
+  const opColor2 = opProfit >= 0 ? blue : red
+  plBody.push([{ content: 'UNTUNG OPERASI (OPERATING PROFIT)', styles: { fontStyle: 'bold', fillColor: opBg2, textColor: opColor2 } }, { content: opProfit < 0 ? fmtBracket(Math.abs(opProfit)) : fmt(opProfit), styles: { halign: 'right', fontStyle: 'bold', fillColor: opBg2, textColor: opColor2 } }])
+  plBody.push(['PENDAPATAN LAIN-LAIN (MISCELLANEOUS INCOME)', { content: fmt(0), styles: { halign: 'right', textColor: gray } }])
+  plBody.push([{ content: 'UNTUNG/(RUGI) BERSIH SEBELUM CUKAI & ZAKAT', styles: { fontStyle: 'bold' } }, { content: opProfit < 0 ? fmtBracket(Math.abs(opProfit)) : fmt(opProfit), styles: { halign: 'right', fontStyle: 'bold' } }])
+
+  // UNTUNG/(RUGI) BERSIH
   const netBg = data.netProfit >= 0 ? [146, 64, 14] as [number, number, number] : red
-  plBody.push([
-    { content: 'Untung / (Rugi) Bersih', styles: { fontStyle: 'bold', fillColor: netBg, textColor: [255, 255, 255], fontSize: 11 } },
-    { content: fmt(data.netProfit), styles: { halign: 'right', fontStyle: 'bold', fillColor: netBg, textColor: [255, 255, 255], fontSize: 11 } }
-  ])
+  plBody.push([{ content: 'UNTUNG / (RUGI) BERSIH', styles: { fontStyle: 'bold', fillColor: netBg, textColor: [255, 255, 255], fontSize: 11 } }, { content: data.netProfit < 0 ? fmtBracket(Math.abs(data.netProfit)) : fmt(data.netProfit), styles: { halign: 'right', fontStyle: 'bold', fillColor: netBg, textColor: [255, 255, 255], fontSize: 11 } }])
 
   autoTable(doc, {
     startY,
