@@ -93,7 +93,7 @@ export function SubscriptionPlans() {
     }
   ]
 
-  const handleSubscribe = async (planName: string, price: string) => {
+  const handleSubscribe = async (planId: string, planName: string, price: string) => {
     setLoadingPlan(planName)
     try {
       const result = await initiatePayment({
@@ -101,7 +101,7 @@ export function SubscriptionPlans() {
         description: `Langganan Pelan ${planName}`,
         redirectPath: '/dashboard',
         metadata: {
-          planType: planName.toLowerCase().includes('premium') ? 'premium' : planName.toLowerCase().includes('standard') ? 'standard' : 'basic',
+          planType: planId,
           isSubscription: true
         }
       })
@@ -124,7 +124,7 @@ export function SubscriptionPlans() {
     }
 
     // Direct FPX Payment Trigger
-    await handleSubscribe(plan.name, plan.price)
+    await handleSubscribe(plan.id, plan.name, plan.price)
   }
 
 

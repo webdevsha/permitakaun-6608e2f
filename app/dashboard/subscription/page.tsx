@@ -17,22 +17,54 @@ async function checkAccessServer(user: any, role: string) {
     if (role === 'organizer') {
         const { data: organizer } = await supabase
             .from('organizers')
-            .select('accounting_status')
+            .select('id, accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
 
         if (organizer?.accounting_status === 'active') {
             return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
         }
+
+        if (organizer?.id) {
+            const { data: activeSub } = await supabase
+                .from('subscriptions')
+                .select('id')
+                .eq('profile_id', user.id)
+                .eq('status', 'active')
+                .gt('end_date', new Date().toISOString())
+                .limit(1)
+                .maybeSingle()
+
+            if (activeSub) {
+                await supabase.from('organizers').update({ accounting_status: 'active' }).eq('id', organizer.id)
+                return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+            }
+        }
     } else if (role === 'tenant') {
         const { data: tenant } = await supabase
             .from('tenants')
-            .select('accounting_status')
+            .select('id, accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
 
         if (tenant?.accounting_status === 'active') {
             return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+        }
+
+        if (tenant?.id) {
+            const { data: activeSub } = await supabase
+                .from('subscriptions')
+                .select('id')
+                .eq('tenant_id', tenant.id)
+                .eq('status', 'active')
+                .gt('end_date', new Date().toISOString())
+                .limit(1)
+                .maybeSingle()
+
+            if (activeSub) {
+                await supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+                return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+            }
         }
     }
 

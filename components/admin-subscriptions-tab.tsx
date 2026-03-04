@@ -330,7 +330,8 @@ export function AdminSubscriptionsTab() {
           if (tenant) {
             await supabase.from('subscriptions').insert({
               tenant_id: tenant.id,
-              plan_type: metadata.plan_type || 'basic',
+              profile_id: userId,
+              plan_type: metadata.plan_type || 'enterprise',
               status: 'active',
               start_date: now.toISOString(),
               end_date: endDate.toISOString(),
@@ -363,7 +364,8 @@ export function AdminSubscriptionsTab() {
             // Also insert into subscriptions table so it appears in Langganan Aktif
             await supabase.from('subscriptions').insert({
               tenant_id: null,
-              plan_type: metadata.plan_type || 'basic',
+              profile_id: userId,
+              plan_type: metadata.plan_type || 'enterprise',
               status: 'active',
               start_date: now.toISOString(),
               end_date: endDate.toISOString(),
@@ -473,9 +475,12 @@ export function AdminSubscriptionsTab() {
 
   const getPlanLabel = (plan: string) => {
     const labels: Record<string, string> = {
-      'basic': 'Asas',
-      'premium': 'Premium', 
       'enterprise': 'Enterprise',
+      'sdn-bhd': 'Sdn Bhd',
+      'sdn-bhd-berhad': 'SdnBhd/Berhad',
+      'basic': 'Enterprise',
+      'standard': 'Sdn Bhd',
+      'premium': 'SdnBhd/Berhad',
       'trial': 'Percubaan'
     }
     return labels[plan.toLowerCase()] || plan

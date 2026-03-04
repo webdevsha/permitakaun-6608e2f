@@ -118,20 +118,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     const { data: tenantData } = await supabase.from('tenants').select('id, accounting_status').eq('profile_id', initialSession.user.id).single()
                     if (tenantData?.accounting_status === 'active') {
                       const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('tenant_id', tenantData.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
-                      setActivePlan(subData?.plan_type || 'basic')
+                      setActivePlan(subData?.plan_type || null)
+                    } else {
+                      setActivePlan(null)
+                    }
+                  } else if (derivedRole === 'organizer') {
+                    const { data: orgData } = await supabase.from('organizers').select('id, accounting_status').eq('profile_id', initialSession.user.id).single()
+                    if (orgData?.accounting_status === 'active') {
+                      const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('profile_id', initialSession.user.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
+                      setActivePlan(subData?.plan_type || null)
                     } else {
                       setActivePlan(null)
                     }
                   } else if (derivedRole === 'admin' || derivedRole === 'superadmin') {
                     // Admins always have full access - set to full plan
                     setActivePlan('sdn-bhd-berhad') // Full 7-tabung access for admins
-                  }
-
-                  // Global plan mocks based on email (overrides database)
-                  if (initialSession.user.email === 'nshfnoh@proton.me') {
-                    setActivePlan('premium')
-                  } else if (initialSession.user.email === 'hai@shafiranoh.com') {
-                    setActivePlan('standard')
                   }
                 }
               } catch (err) {
@@ -216,17 +217,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data: tenantData } = await supabase.from('tenants').select('id, accounting_status').eq('profile_id', currentSession.user.id).single()
             if (tenantData?.accounting_status === 'active') {
               const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('tenant_id', tenantData.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
-              setActivePlan(subData?.plan_type || 'basic')
+              setActivePlan(subData?.plan_type || null)
             } else {
               setActivePlan(null)
             }
-          }
-
-          // Global plan mocks based on email (overrides database)
-          if (currentSession.user.email === 'nshfnoh@proton.me') {
-            setActivePlan('premium')
-          } else if (currentSession.user.email === 'hai@shafiranoh.com') {
-            setActivePlan('standard')
+          } else if (derivedRole === 'organizer') {
+            const { data: orgData } = await supabase.from('organizers').select('id, accounting_status').eq('profile_id', currentSession.user.id).single()
+            if (orgData?.accounting_status === 'active') {
+              const { data: subData } = await supabase.from('subscriptions').select('plan_type').eq('profile_id', currentSession.user.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle()
+              setActivePlan(subData?.plan_type || null)
+            } else {
+              setActivePlan(null)
+            }
+          } else if (derivedRole === 'admin' || derivedRole === 'superadmin') {
+            setActivePlan('sdn-bhd-berhad')
           }
         }
       } else {

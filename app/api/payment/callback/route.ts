@@ -305,6 +305,7 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                 // Insert or update subscription
                 await supabase.from('subscriptions').insert({
                     tenant_id: tenant.id,
+                    profile_id: userId,
                     plan_type: planType,
                     status: 'active',
                     start_date: now.toISOString(),
@@ -333,6 +334,7 @@ async function updateUserSubscription(supabase: any, userId: string, amount: str
                 // Insert into subscriptions table so it appears in Langganan Aktif
                 await supabase.from('subscriptions').insert({
                     tenant_id: null,
+                    profile_id: userId,
                     plan_type: planType,
                     status: 'active',
                     start_date: now.toISOString(),

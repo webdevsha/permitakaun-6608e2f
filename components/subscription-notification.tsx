@@ -53,20 +53,44 @@ export function SubscriptionNotification() {
         }
 
         if (tenant) {
-          const { data: payments } = await supabase
-            .from('tenant_transactions')
-            .select('date, status')
-            .eq('tenant_id', tenant.id)
-            .eq('category', 'Langganan')
-            .eq('type', 'expense')
-            .eq('status', 'approved')
-            .order('date', { ascending: false })
-            .limit(1)
+          // Check subscriptions table directly (more reliable source of truth)
+          if (!hasSubscription) {
+            const { data: activeSub } = await supabase
+              .from('subscriptions')
+              .select('id, start_date, end_date')
+              .eq('tenant_id', tenant.id)
+              .eq('status', 'active')
+              .gt('end_date', new Date().toISOString())
+              .order('end_date', { ascending: false })
+              .limit(1)
+              .maybeSingle()
 
-          if (payments && payments.length > 0) {
-            hasSubscription = true
-            latestPaymentDate = payments[0].date
-            setAccountStatus('active')
+            if (activeSub) {
+              hasSubscription = true
+              latestPaymentDate = activeSub.start_date?.split('T')[0] || null
+              setAccountStatus('active')
+              // Sync accounting_status so future page loads skip this fallback
+              supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+            }
+          }
+
+          // Also check tenant_transactions as another fallback
+          if (!hasSubscription) {
+            const { data: payments } = await supabase
+              .from('tenant_transactions')
+              .select('date, status')
+              .eq('tenant_id', tenant.id)
+              .eq('category', 'Langganan')
+              .eq('type', 'expense')
+              .eq('status', 'approved')
+              .order('date', { ascending: false })
+              .limit(1)
+
+            if (payments && payments.length > 0) {
+              hasSubscription = true
+              latestPaymentDate = payments[0].date
+              setAccountStatus('active')
+            }
           }
         }
       } else if (role === 'organizer') {

@@ -342,11 +342,64 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
           }
 
         } else if (role === 'tenant') {
-          // Tenants always get access to their own Akaun
-          console.log('[Accounting] Tenant access granted')
-          setAccessDeniedStatus(null)
-          setIsModuleVerified(true)
-          setIsLoading(false)
+          try {
+            const [tenantResult, profileResult] = await Promise.all([
+              supabase.from('tenants').select('id, accounting_status').eq('profile_id', user.id).maybeSingle(),
+              supabase.from('profiles').select('created_at').eq('id', user.id).maybeSingle()
+            ])
+
+            // Active accounting_status → full access
+            if (tenantResult.data?.accounting_status === 'active') {
+              console.log('[Accounting] Tenant with active subscription')
+              setAccessDeniedStatus(null)
+              setIsModuleVerified(true)
+              setIsLoading(false)
+              return
+            }
+
+            // Fallback: check subscriptions table directly
+            if (tenantResult.data?.id) {
+              const { data: activeSub } = await supabase
+                .from('subscriptions')
+                .select('id')
+                .eq('tenant_id', tenantResult.data.id)
+                .eq('status', 'active')
+                .gt('end_date', new Date().toISOString())
+                .limit(1)
+                .maybeSingle()
+
+              if (activeSub) {
+                console.log('[Accounting] Tenant has active subscription (subscriptions table)')
+                supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenantResult.data.id)
+                setAccessDeniedStatus(null)
+                setIsModuleVerified(true)
+                setIsLoading(false)
+                return
+              }
+            }
+
+            // No subscription — check trial period (14 days)
+            if (profileResult.data) {
+              const daysRemaining = 14 - Math.floor((Date.now() - new Date(profileResult.data.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              console.log('[Accounting] Tenant trial days remaining:', daysRemaining)
+
+              if (daysRemaining > 0) {
+                setAccessDeniedStatus(null)
+                setIsModuleVerified(true)
+                setIsLoading(false)
+                return
+              }
+            }
+
+            // Trial expired, no active subscription
+            console.log('[Accounting] Tenant trial expired, no subscription')
+            setAccessDeniedStatus('trial_expired')
+            setIsModuleVerified(false)
+          } catch (e) {
+            console.error('[Accounting] Error checking tenant access:', e)
+            setIsModuleVerified(true)
+            setIsLoading(false)
+          }
         } else {
           // Unknown role - allow access
           setIsModuleVerified(true)
