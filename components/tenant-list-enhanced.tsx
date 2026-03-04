@@ -138,7 +138,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
 
    const inactiveCount = initialTenants?.filter(t => {
       const status = t.link_status || t.status
-      return status === 'inactive' || status === 'rejected'
+      return status === 'inactive' || status === 'rejected' || status === 'pending'
    }).length || 0
 
    const tenants = useMemo(() => {
@@ -449,7 +449,7 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
 
    const inactiveTenants = tenants.filter((t: any) => {
       const status = t.link_status || t.status
-      return status === 'inactive' || status === 'rejected'
+      return status === 'inactive' || status === 'rejected' || status === 'pending'
    })
 
    return (
@@ -843,9 +843,11 @@ export function TenantListEnhanced({ initialTenants, organizerId, isAdmin = fals
                                           <TableCell>
                                              <Badge variant="secondary" className={cn(
                                                 "text-[10px] uppercase",
-                                                tenant.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"
+                                                tenant.status === 'rejected' ? "bg-red-100 text-red-700" :
+                                                tenant.status === 'pending' ? "bg-amber-100 text-amber-700" :
+                                                "bg-gray-100 text-gray-600"
                                              )}>
-                                                {tenant.status === 'rejected' ? 'Ditolak' : 'Tidak Aktif'}
+                                                {tenant.status === 'rejected' ? 'Ditolak' : tenant.status === 'pending' ? 'Menunggu' : 'Tidak Aktif'}
                                              </Badge>
                                           </TableCell>
                                           <TableCell className="text-right">

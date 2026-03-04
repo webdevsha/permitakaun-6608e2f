@@ -226,15 +226,6 @@ async function fetchDashboardDataInternal(
                         ; (links || []).forEach((l: any) => ownTenantIds.add(l.tenant_id))
                 }
 
-                // Get organizer profile_ids to exclude from tenants list
-                const { data: allOrganizersProfiles } = await supabase
-                    .from('organizers')
-                    .select('profile_id')
-                    .not('profile_id', 'is', null)
-                const orgProfileIds = new Set(
-                    (allOrganizersProfiles || []).map((o: any) => o.profile_id).filter(Boolean)
-                )
-
                 const { data: allTenants } = await withTimeout(
                     () => supabase
                         .from('tenants')
@@ -245,8 +236,6 @@ async function fetchDashboardDataInternal(
                 )
 
                 tenants = (allTenants || [])
-                    // Exclude accounts that are organizers (profile_id matches an organizer)
-                    .filter((t: any) => !t.profile_id || !orgProfileIds.has(t.profile_id))
                     .map((t: any) => ({
                         ...t,
                         // is_own: legacy organizer_code match OR linked via tenant_organizers
