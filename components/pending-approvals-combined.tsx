@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { recordRentPaymentsAction } from "@/actions/payment"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -280,10 +281,11 @@ export function PendingApprovalsCombined({
               tenant_phone: item.tenants?.phone_number,
               tenant_email: item.tenants?.email,
               tenant_image: item.tenants?.profile_image_url,
-              organizer_id: orgId,
+              // Use values from payment record first (most accurate), fallback to lookup
+              organizer_id: item.organizer_id || orgId,
               organizer_name: orgName,
               organizer_code: orgCode,
-              location_id: locId,
+              location_id: item.location_id || locId,
               location_name: locName,
               location_type: locType,
             }
@@ -391,62 +393,34 @@ export function PendingApprovalsCombined({
 
       } else if (request.type === 'rental_payment') {
         console.log('[Approve] Rental payment request:', request)
-        
-        // Ensure we have organizer_id - refetch if missing
-        let organizerId = request.organizer_id
-        if (!organizerId && request.tenant_id) {
-          console.log('[Approve] Organizer ID missing, fetching from tenant_organizers...')
-          const { data: tenantOrg } = await supabase
-            .from('tenant_organizers')
-            .select('organizer_id')
-            .eq('tenant_id', request.tenant_id)
-            .eq('status', 'approved')
-            .maybeSingle()
-          
-          if (tenantOrg?.organizer_id) {
-            organizerId = tenantOrg.organizer_id
-            console.log('[Approve] Found organizer_id:', organizerId)
-          }
-        }
-        
-        if (!organizerId) {
+
+        if (!request.organizer_id) {
           throw new Error('Organizer ID not found for this payment')
         }
 
         // Update payment status to approved
         const { error: paymentError } = await supabase
           .from('tenant_payments')
-          .update({ 
-            status: 'approved'
-          })
+          .update({ status: 'approved' })
           .eq('id', request.id)
 
         if (paymentError) throw paymentError
 
-        // Create organizer transaction record so it shows in their Senarai Transaksi
-        console.log('[Approve] Creating organizer transaction:', { organizerId, amount: request.amount })
-        const { error: txnError } = await supabase
-          .from('organizer_transactions')
-          .insert({
-            organizer_id: organizerId,
-            amount: request.amount,
-            type: 'income',
-            category: 'Sewa',
-            description: `Bayaran sewa dari ${request.tenant_name || 'Peniaga'}`,
-            date: new Date().toISOString().split('T')[0],
-            status: 'approved',
-            metadata: {
-              tenant_id: request.tenant_id,
-              tenant_name: request.tenant_name,
-              payment_id: request.payment_id,
-              billplz_id: request.billplz_id
-            }
-          })
-        
-        if (txnError) {
-          console.error('Error creating organizer transaction:', txnError)
-          // Don't throw - payment is approved even if transaction creation fails
-        }
+        // Use recordRentPaymentsAction so BOTH tenant_transactions (expense) and
+        // organizer_transactions (income) are created correctly and idempotently
+        await recordRentPaymentsAction([{
+          tenantId: request.tenant_id!,
+          profileId: null,
+          organizerId: request.organizer_id,
+          locationId: request.location_id || null,
+          amount: request.amount!,
+          paymentDate: new Date().toISOString().slice(0, 10),
+          receiptUrl: request.receipt_url || null,
+          locationName: request.location_name || null,
+          tenantName: request.tenant_name || null,
+          organizerName: request.organizer_name || null,
+          billplzId: request.billplz_id || null,
+        }])
 
         toast.success(`Pembayaran sewa diluluskan - RM${request.amount}`)
       }
@@ -768,14 +742,19 @@ export function PendingApprovalsCombined({
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
-                        className="bg-green-600 hover:bg-green-700 text-white"
+                        className={request.type === 'rental_payment' && request.payment_method === 'billplz'
+                          ? "bg-amber-600 hover:bg-amber-700 text-white"
+                          : "bg-green-600 hover:bg-green-700 text-white"}
                         onClick={() => handleApprove(request)}
                         disabled={isProcessing}
+                        title={request.type === 'rental_payment' && request.payment_method === 'billplz'
+                          ? "Luluskan secara manual (guna jika bayaran Billplz berjaya tapi tidak disahkan automatik)"
+                          : undefined}
                       >
                         <CheckCircle className="w-4 h-4 mr-1.5" />
-                        Luluskan
+                        {request.type === 'rental_payment' && request.payment_method === 'billplz' ? 'Lulus Manual' : 'Luluskan'}
                       </Button>
-                      
+
                       <Button
                         size="sm"
                         variant="outline"

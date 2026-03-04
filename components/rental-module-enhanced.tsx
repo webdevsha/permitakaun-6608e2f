@@ -861,12 +861,14 @@ export function EnhancedRentalModule({
                           <Badge
                             variant="outline"
                             className={cn(
-                              pay.status === "approved" || pay.status === "pending"
+                              pay.status === "approved"
                                 ? "bg-green-100 text-green-700 border-green-200"
-                                : "bg-red-50 text-red-600 border-red-100",
+                                : pay.status === "pending"
+                                  ? "bg-amber-100 text-amber-700 border-amber-200"
+                                  : "bg-red-50 text-red-600 border-red-100",
                             )}
                           >
-                            {pay.status === 'approved' || pay.status === 'pending' ? 'Berjaya' : 'Ditolak'}
+                            {pay.status === 'approved' ? 'Berjaya' : pay.status === 'pending' ? 'Sedang Diproses' : 'Ditolak'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
@@ -920,12 +922,14 @@ export function EnhancedRentalModule({
                           variant="outline"
                           className={cn(
                             "mt-1 text-[10px] uppercase font-bold",
-                            pay.status === "approved" || pay.status === "pending"
+                            pay.status === "approved"
                               ? "bg-green-100 text-green-700 border-green-200"
-                              : "bg-red-50 text-red-600 border-red-100",
+                              : pay.status === "pending"
+                                ? "bg-amber-100 text-amber-700 border-amber-200"
+                                : "bg-red-50 text-red-600 border-red-100",
                           )}
                         >
-                          {pay.status === 'approved' || pay.status === 'pending' ? 'Berjaya' : 'Ditolak'}
+                          {pay.status === 'approved' ? 'Berjaya' : pay.status === 'pending' ? 'Sedang Diproses' : 'Ditolak'}
                         </Badge>
                       </div>
                     </div>

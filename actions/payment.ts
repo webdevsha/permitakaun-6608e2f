@@ -114,7 +114,13 @@ export async function initiatePayment(params: {
         if (params.metadata.isSubscription) metadataQuery += `&isSubscription=true`
     }
 
-    const callbackUrl = `${baseUrl}/api/payment/callback`
+    // For the callback URL, prefer NEXT_PUBLIC_APP_URL on production so Billplz always
+    // reaches the correct public domain (headers-detected URL may be an internal Vercel URL)
+    const callbackBase = (!detectedHost?.includes('localhost') && process.env.NEXT_PUBLIC_APP_URL)
+        ? process.env.NEXT_PUBLIC_APP_URL
+        : baseUrl
+    const callbackUrl = `${callbackBase}/api/payment/callback`
+    console.log(`[Payment] Callback URL: ${callbackUrl}`)
 
     let result;
 
@@ -187,7 +193,7 @@ export async function initiatePayment(params: {
                     type: 'income',
                     category: 'Langganan',
                     date: new Date().toISOString().split('T')[0],
-                    status: 'approved',
+                    status: 'pending',
                     receipt_url: result.url,
                     is_sandbox: mode === 'sandbox'
                 }
@@ -247,7 +253,7 @@ export async function initiatePayment(params: {
                                 type: 'expense',
                                 category: 'Langganan',
                                 date: new Date().toISOString().split('T')[0],
-                                status: 'approved',
+                                status: 'pending',
                                 payment_reference: result.id,
                                 receipt_url: result.url,
                                 is_sandbox: mode === 'sandbox'
@@ -277,7 +283,7 @@ export async function initiatePayment(params: {
                                 type: 'expense',
                                 category: 'Langganan',
                                 date: new Date().toISOString().split('T')[0],
-                                status: 'approved',
+                                status: 'pending',
                                 payment_reference: result.id,
                                 receipt_url: result.url,
                                 is_sandbox: mode === 'sandbox'
@@ -315,7 +321,7 @@ export async function initiatePayment(params: {
                         location_id: params.locationId || null,
                         payment_date: new Date().toISOString(),
                         amount: params.amount,
-                        status: 'approved',
+                        status: 'pending',
                         payment_method: 'billplz',
                         billplz_id: result.id,
                         receipt_url: result.url,
@@ -325,30 +331,7 @@ export async function initiatePayment(params: {
                     if (txError) {
                         console.error("[Payment] Failed to record pending payment:", txError)
                     } else {
-                        console.log("[Payment] Recorded payment to tenant_payments.")
-
-                        // IMMEIDATE SYNC: Record in ledger (tenant_transactions & organizer_transactions)
-                        try {
-                            const { data: location } = await supabase.from('locations').select('name').eq('id', params.locationId).maybeSingle()
-                            const { data: organizer } = await supabase.from('organizers').select('name').eq('id', resolvedOrganizerId).maybeSingle()
-
-                            await recordRentPaymentsAction([{
-                                tenantId: tenant.id,
-                                profileId: (await supabase.auth.getUser()).data.user?.id || null,
-                                organizerId: resolvedOrganizerId,
-                                locationId: params.locationId || null,
-                                amount: params.amount,
-                                paymentDate: new Date().toISOString().split('T')[0],
-                                receiptUrl: result.url,
-                                locationName: location?.name || null,
-                                tenantName: name || 'Penyewa',
-                                organizerName: organizer?.name || null,
-                                billplzId: result.id,
-                            }])
-                            console.log("[Payment] Immediate ledger sync successful.")
-                        } catch (syncError) {
-                            console.error("[Payment] Immediate ledger sync failed:", syncError)
-                        }
+                        console.log("[Payment] Recorded pending payment to tenant_payments. Ledger entries will be created by payment callback after confirmation.")
                     }
                 }
             }

@@ -114,23 +114,6 @@ export async function POST(req: NextRequest) {
             .eq('payment_reference', billplzId)
             .maybeSingle()
 
-        // If not found, try to find recent pending transaction
-        if (!orgTx) {
-            console.log("[Payment Callback] Not found by payment_reference, looking for recent pending...")
-            const { data: pendingTxs } = await supabase
-                .from('organizer_transactions')
-                .select('*, organizers(name)')
-                .eq('status', 'pending')
-                .gte('created_at', new Date(Date.now() - 600000).toISOString()) // Last 10 minutes
-                .order('created_at', { ascending: false })
-                .limit(1)
-
-            if (pendingTxs && pendingTxs.length > 0) {
-                orgTx = pendingTxs[0]
-                console.log("[Payment Callback] Found recent pending transaction:", orgTx.id)
-            }
-        }
-
         if (orgTx) {
             // Skip if already approved (idempotency - callback may fire multiple times)
             if (orgTx.status === 'approved') {
