@@ -97,9 +97,12 @@ export function AdminSubscriptionsTab() {
   // Subscriptions table data
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([])
   const [subStats, setSubStats] = useState({ total: 0, active: 0, expired: 0, cancelled: 0 })
+  // Stuck/pending payments (Billplz initiated but callback not yet received)
+  const [pendingPayments, setPendingPayments] = useState<SubscriptionPayment[]>([])
 
   useEffect(() => {
     fetchSubscriptionPayments()
+    fetchPendingSubscriptionPayments()
     fetchSubscriptions()
   }, [])
 
@@ -211,15 +214,43 @@ export function AdminSubscriptionsTab() {
     }
   }
 
+  const fetchPendingSubscriptionPayments = async () => {
+    try {
+      const { data } = await supabase
+        .from('admin_transactions')
+        .select('*')
+        .eq('category', 'Langganan')
+        .eq('type', 'income')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      const formatted: SubscriptionPayment[] = (data || []).map((tx: any) => {
+        const metadata = tx.metadata || {}
+        return {
+          id: tx.id, amount: tx.amount, description: tx.description, date: tx.date,
+          status: tx.status, payment_method: tx.payment_method || 'billplz',
+          payment_reference: tx.payment_reference || '', receipt_url: tx.receipt_url,
+          metadata, notes: tx.notes, created_at: tx.created_at,
+          payer_email: metadata.payer_email, payer_name: metadata.payer_name,
+          user_role: metadata.user_role
+        }
+      })
+      setPendingPayments(formatted)
+    } catch (error) {
+      console.error('Error fetching pending subscriptions:', error)
+    }
+  }
+
   const fetchSubscriptionPayments = async () => {
     setLoading(true)
     try {
-      // Fetch from admin_transactions where category is Langganan
+      // Only fetch confirmed (approved) payments — pending ones are shown separately
       const { data, error } = await supabase
         .from('admin_transactions')
         .select('*')
         .eq('category', 'Langganan')
         .eq('type', 'income')
+        .eq('status', 'approved')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -250,13 +281,11 @@ export function AdminSubscriptionsTab() {
 
       setPayments(formattedPayments)
 
-      // Calculate stats
-      const pending = formattedPayments.filter(p => p.status === 'pending').length
-      const approved = formattedPayments.filter(p => p.status === 'approved').length
-      const rejected = formattedPayments.filter(p => p.status === 'rejected').length
-      const totalAmount = formattedPayments
-        .filter(p => p.status === 'approved')
-        .reduce((sum, p) => sum + p.amount, 0)
+      // Calculate stats — all fetched records are approved
+      const pending = 0
+      const approved = formattedPayments.length
+      const rejected = 0
+      const totalAmount = formattedPayments.reduce((sum, p) => sum + p.amount, 0)
 
       setStats({
         total: formattedPayments.length,
@@ -380,6 +409,7 @@ export function AdminSubscriptionsTab() {
       toast.success('Langganan telah diluluskan dan diaktifkan')
       setApproveDialogOpen(false)
       fetchSubscriptionPayments()
+      fetchPendingSubscriptionPayments()
 
       // 3. Sync status to user's transaction record
       // This ensures the user sees "Approved" in their history
@@ -424,6 +454,7 @@ export function AdminSubscriptionsTab() {
       toast.success('Pembayaran telah ditolak')
       setRejectDialogOpen(false)
       fetchSubscriptionPayments()
+      fetchPendingSubscriptionPayments()
     } catch (error: any) {
       console.error('Error rejecting:', error)
       toast.error('Gagal menolak: ' + error.message)
@@ -501,7 +532,12 @@ export function AdminSubscriptionsTab() {
         <TabsList className="mb-6">
           <TabsTrigger value="payments" className="flex items-center gap-2">
             <Banknote className="w-4 h-4" />
-            Pembayaran ({stats.total})
+            Pembayaran ({stats.approved})
+            {pendingPayments.length > 0 && (
+              <span className="ml-1 bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5">
+                {pendingPayments.length}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="subscriptions" className="flex items-center gap-2">
             <Package className="w-4 h-4" />
@@ -511,25 +547,21 @@ export function AdminSubscriptionsTab() {
 
         <TabsContent value="payments" className="space-y-6">
           {/* Payment Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Jumlah Bayaran</CardDescription>
-                <CardTitle className="text-2xl">{stats.total}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card className="bg-yellow-50 border-yellow-100">
-              <CardHeader className="pb-2">
-                <CardDescription className="text-yellow-700">Menunggu</CardDescription>
-                <CardTitle className="text-2xl text-yellow-800">{stats.pending}</CardTitle>
-              </CardHeader>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-green-50 border-green-100">
               <CardHeader className="pb-2">
-                <CardDescription className="text-green-700">Diluluskan</CardDescription>
+                <CardDescription className="text-green-700">Bayaran Berjaya</CardDescription>
                 <CardTitle className="text-2xl text-green-800">{stats.approved}</CardTitle>
               </CardHeader>
             </Card>
+            {pendingPayments.length > 0 && (
+              <Card className="bg-amber-50 border-amber-200">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-amber-700">Tertangguh (Perlu Semak)</CardDescription>
+                  <CardTitle className="text-2xl text-amber-800">{pendingPayments.length}</CardTitle>
+                </CardHeader>
+              </Card>
+            )}
             <Card className="bg-primary/5 border-primary/20">
               <CardHeader className="pb-2">
                 <CardDescription className="text-primary">Jumlah Kutipan</CardDescription>
@@ -551,19 +583,7 @@ export function AdminSubscriptionsTab() {
                 className="pl-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="pending">Menunggu</SelectItem>
-                <SelectItem value="completed">Selesai</SelectItem>
-                <SelectItem value="rejected">Ditolak</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={fetchSubscriptionPayments}>
+            <Button variant="outline" onClick={() => { fetchSubscriptionPayments(); fetchPendingSubscriptionPayments() }}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
@@ -579,7 +599,7 @@ export function AdminSubscriptionsTab() {
             Senarai Pembayaran Langganan
           </CardTitle>
           <CardDescription>
-            Sahkan pembayaran langganan untuk mengaktifkan akses Akaun pengguna
+            Senarai pembayaran langganan yang telah berjaya disahkan oleh Billplz
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -627,47 +647,13 @@ export function AdminSubscriptionsTab() {
                     <TableCell>{formatDate(payment.date)}</TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {payment.receipt_url && (
-                          <a
-                            href={payment.receipt_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Button variant="ghost" size="icon" title="Lihat Resit">
-                              <ExternalLink className="w-4 h-4" />
-                            </Button>
-                          </a>
-                        )}
-                        {payment.status === 'pending' && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={() => {
-                                setSelectedPayment(payment)
-                                setApproveDialogOpen(true)
-                              }}
-                              title="Luluskan"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => {
-                                setSelectedPayment(payment)
-                                setRejectDialogOpen(true)
-                              }}
-                              title="Tolak"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                      {payment.receipt_url && (
+                        <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="icon" title="Lihat Resit">
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -677,13 +663,88 @@ export function AdminSubscriptionsTab() {
         </CardContent>
       </Card>
 
+      {/* Stuck/Pending Payments Section — only shown if callback failed */}
+      {pendingPayments.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-serif flex items-center gap-2 text-amber-800">
+              <RefreshCw className="w-4 h-4" />
+              Bayaran Tertangguh ({pendingPayments.length})
+            </CardTitle>
+            <CardDescription className="text-amber-700">
+              Bayaran ini dimulakan tetapi pengesahan Billplz belum diterima. Klik "Lulus Manual" jika pembayaran telah berjaya di bank.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pembayar</TableHead>
+                  <TableHead>Pelan</TableHead>
+                  <TableHead>Jumlah</TableHead>
+                  <TableHead>ID Billplz</TableHead>
+                  <TableHead>Tarikh</TableHead>
+                  <TableHead className="text-right">Tindakan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingPayments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{payment.payer_name || '-'}</p>
+                        <p className="text-sm text-muted-foreground">{payment.payer_email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {payment.description.replace('Langganan Pelan ', '').replace('Bayaran Langganan - ', '')}
+                    </TableCell>
+                    <TableCell className="font-bold">{formatAmount(payment.amount)}</TableCell>
+                    <TableCell>
+                      <code className="text-xs bg-white px-2 py-1 rounded border">
+                        {payment.payment_reference || '-'}
+                      </code>
+                    </TableCell>
+                    <TableCell>{formatDate(payment.date)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 text-white"
+                          onClick={() => { setSelectedPayment(payment); setApproveDialogOpen(true) }}
+                          disabled={processing}
+                          title="Lulus Manual — gunakan hanya jika bayaran telah berjaya di bank"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Lulus Manual
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-200 text-red-600 hover:bg-red-50"
+                          onClick={() => { setSelectedPayment(payment); setRejectDialogOpen(true) }}
+                          disabled={processing}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Batalkan
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Approve Dialog */}
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Luluskan Pembayaran Langganan</DialogTitle>
+            <DialogTitle>Lulus Manual Bayaran Langganan</DialogTitle>
             <DialogDescription>
-              Adakah anda pasti untuk meluluskan pembayaran ini? Akses Akaun pengguna akan diaktifkan.
+              Gunakan hanya jika bayaran Billplz telah berjaya di bank tetapi pengesahan automatik tidak diterima. Akses Akaun pengguna akan diaktifkan.
             </DialogDescription>
           </DialogHeader>
           {selectedPayment && (
@@ -708,7 +769,7 @@ export function AdminSubscriptionsTab() {
             </Button>
             <Button onClick={handleApprove} disabled={processing} className="bg-green-600 hover:bg-green-700">
               {processing ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-              Luluskan & Aktifkan
+              Lulus & Aktifkan
             </Button>
           </DialogFooter>
         </DialogContent>
