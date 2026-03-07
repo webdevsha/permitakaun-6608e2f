@@ -13,17 +13,13 @@ async function checkAccessServer(user: any, role: string) {
 
     const supabase = await createClient()
 
-    // For organizers: check accounting_status first
+    // Always verify end_date — never trust accounting_status alone
     if (role === 'organizer') {
         const { data: organizer } = await supabase
             .from('organizers')
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
-
-        if (organizer?.accounting_status === 'active') {
-            return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
-        }
 
         if (organizer?.id) {
             const { data: activeSub } = await supabase
@@ -36,8 +32,14 @@ async function checkAccessServer(user: any, role: string) {
                 .maybeSingle()
 
             if (activeSub) {
-                await supabase.from('organizers').update({ accounting_status: 'active' }).eq('id', organizer.id)
+                if (organizer.accounting_status !== 'active') {
+                    await supabase.from('organizers').update({ accounting_status: 'active' }).eq('id', organizer.id)
+                }
                 return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+            }
+
+            if (organizer.accounting_status === 'active') {
+                await supabase.from('organizers').update({ accounting_status: 'inactive' }).eq('id', organizer.id)
             }
         }
     } else if (role === 'tenant') {
@@ -46,10 +48,6 @@ async function checkAccessServer(user: any, role: string) {
             .select('id, accounting_status')
             .eq('profile_id', user.id)
             .maybeSingle()
-
-        if (tenant?.accounting_status === 'active') {
-            return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
-        }
 
         if (tenant?.id) {
             const { data: activeSub } = await supabase
@@ -62,8 +60,14 @@ async function checkAccessServer(user: any, role: string) {
                 .maybeSingle()
 
             if (activeSub) {
-                await supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+                if (tenant.accounting_status !== 'active') {
+                    await supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+                }
                 return { hasAccess: true, reason: 'subscription_active', daysRemaining: 0 }
+            }
+
+            if (tenant.accounting_status === 'active') {
+                await supabase.from('tenants').update({ accounting_status: 'inactive' }).eq('id', tenant.id)
             }
         }
     }

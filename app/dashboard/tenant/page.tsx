@@ -19,7 +19,7 @@ async function checkAccessServer(user: any, role: string) {
 
     const supabase = await createClient()
 
-    // Check for active subscription (Tenant)
+    // Check for active subscription — always verify end_date, never trust accounting_status alone
     if (role === 'tenant') {
         const { data: tenant } = await supabase
             .from('tenants')
@@ -27,11 +27,6 @@ async function checkAccessServer(user: any, role: string) {
             .eq('profile_id', user.id)
             .maybeSingle()
 
-        if (tenant?.accounting_status === 'active') {
-            return { hasAccess: true, reason: 'active', daysRemaining: 30 }
-        }
-
-        // Fallback: check subscriptions table directly (accounting_status may not be synced)
         if (tenant?.id) {
             const { data: activeSub } = await supabase
                 .from('subscriptions')
@@ -43,9 +38,15 @@ async function checkAccessServer(user: any, role: string) {
                 .maybeSingle()
 
             if (activeSub) {
-                // Auto-sync accounting_status so future checks won't need fallback
-                await supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+                if (tenant.accounting_status !== 'active') {
+                    await supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenant.id)
+                }
                 return { hasAccess: true, reason: 'active', daysRemaining: 30 }
+            }
+
+            // No valid subscription — if accounting_status was 'active', reset it (subscription expired)
+            if (tenant.accounting_status === 'active') {
+                await supabase.from('tenants').update({ accounting_status: 'inactive' }).eq('id', tenant.id)
             }
         }
     } else if (role === 'organizer') {
@@ -55,11 +56,6 @@ async function checkAccessServer(user: any, role: string) {
             .eq('profile_id', user.id)
             .maybeSingle()
 
-        if (organizer?.accounting_status === 'active') {
-            return { hasAccess: true, reason: 'active', daysRemaining: 30 }
-        }
-
-        // Fallback: check subscriptions table directly
         if (organizer?.id) {
             const { data: activeSub } = await supabase
                 .from('subscriptions')
@@ -71,8 +67,15 @@ async function checkAccessServer(user: any, role: string) {
                 .maybeSingle()
 
             if (activeSub) {
-                await supabase.from('organizers').update({ accounting_status: 'active' }).eq('id', organizer.id)
+                if (organizer.accounting_status !== 'active') {
+                    await supabase.from('organizers').update({ accounting_status: 'active' }).eq('id', organizer.id)
+                }
                 return { hasAccess: true, reason: 'active', daysRemaining: 30 }
+            }
+
+            // No valid subscription — reset if stale
+            if (organizer.accounting_status === 'active') {
+                await supabase.from('organizers').update({ accounting_status: 'inactive' }).eq('id', organizer.id)
             }
         }
     }

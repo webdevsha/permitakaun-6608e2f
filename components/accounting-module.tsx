@@ -300,13 +300,31 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               supabase.from('profiles').select('created_at').eq('id', user.id).maybeSingle()
             ])
 
-            // Grant access if accounting is active
-            if (orgResult.data?.accounting_status === 'active') {
-              console.log('[Accounting] Organizer with active accounting')
+            // Check subscription with end_date (always verify, never trust accounting_status alone)
+            const orgId = orgResult.data ? null : null // placeholder; use profile_id for organizer subs
+            const { data: orgActiveSub } = await supabase
+              .from('subscriptions')
+              .select('id')
+              .eq('profile_id', user.id)
+              .eq('status', 'active')
+              .gt('end_date', new Date().toISOString())
+              .limit(1)
+              .maybeSingle()
+
+            if (orgActiveSub) {
+              console.log('[Accounting] Organizer has valid subscription')
+              if (orgResult.data?.accounting_status !== 'active') {
+                supabase.from('organizers').update({ accounting_status: 'active' }).eq('profile_id', user.id)
+              }
               setAccessDeniedStatus(null)
               setIsModuleVerified(true)
               setIsLoading(false)
               return
+            }
+
+            // No valid subscription — reset stale accounting_status
+            if (orgResult.data?.accounting_status === 'active') {
+              supabase.from('organizers').update({ accounting_status: 'inactive' }).eq('profile_id', user.id)
             }
 
             // FALLBACK: If they are also a TENANT, allow access
@@ -348,16 +366,7 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
               supabase.from('profiles').select('created_at').eq('id', user.id).maybeSingle()
             ])
 
-            // Active accounting_status → full access
-            if (tenantResult.data?.accounting_status === 'active') {
-              console.log('[Accounting] Tenant with active subscription')
-              setAccessDeniedStatus(null)
-              setIsModuleVerified(true)
-              setIsLoading(false)
-              return
-            }
-
-            // Fallback: check subscriptions table directly
+            // Always verify end_date — never trust accounting_status alone
             if (tenantResult.data?.id) {
               const { data: activeSub } = await supabase
                 .from('subscriptions')
@@ -369,12 +378,20 @@ export function AccountingModule({ initialTransactions, tenants }: { initialTran
                 .maybeSingle()
 
               if (activeSub) {
-                console.log('[Accounting] Tenant has active subscription (subscriptions table)')
-                supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenantResult.data.id)
+                console.log('[Accounting] Tenant has valid subscription')
+                if (tenantResult.data.accounting_status !== 'active') {
+                  supabase.from('tenants').update({ accounting_status: 'active' }).eq('id', tenantResult.data.id)
+                }
                 setAccessDeniedStatus(null)
                 setIsModuleVerified(true)
                 setIsLoading(false)
                 return
+              }
+
+              // No valid subscription — reset stale accounting_status
+              if (tenantResult.data.accounting_status === 'active') {
+                console.log('[Accounting] Tenant subscription expired — resetting accounting_status')
+                supabase.from('tenants').update({ accounting_status: 'inactive' }).eq('id', tenantResult.data.id)
               }
             }
 
