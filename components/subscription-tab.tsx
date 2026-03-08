@@ -65,6 +65,7 @@ export function SubscriptionTab() {
             .eq('tenant_id', tenant.id)
             .eq('category', 'Langganan')
             .eq('type', 'expense')
+            .eq('status', 'approved')
             .order('date', { ascending: false })
 
           if (tenantTxns) {
@@ -85,6 +86,7 @@ export function SubscriptionTab() {
             .eq('organizer_id', organizer.id)
             .eq('category', 'Langganan')
             .eq('type', 'expense')
+            .eq('status', 'approved')
             .order('date', { ascending: false })
 
           if (orgTxns) {
@@ -155,7 +157,7 @@ export function SubscriptionTab() {
         const hasCompletedPayment = userPayments.some((p: any) =>
           p.status === 'approved'
         )
-        setHasActiveSubscription(hasCompletedPayment || latestPayment.status === 'pending')
+        setHasActiveSubscription(hasCompletedPayment)
       } else {
         // Check for active subscription in subscriptions table (for tenants)
         if (role === 'tenant') {
@@ -322,10 +324,17 @@ export function SubscriptionTab() {
                       RM {sub.amount.toFixed(2)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Selesai
-                      </Badge>
+                      {sub.status === 'approved' ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Selesai
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Sedang Diproses
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {sub.receipt_url ? (
